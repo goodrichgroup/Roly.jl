@@ -51,6 +51,8 @@ function Base.show(io::Core.IO, p::Polyform{D,T,F}) where {D,T,F}
     print(io, "Polyform{$D,$T,$F}[n=$(size(p))]")
 end
 Base.show(io::Core.IO, ::Type{Polyform{D,T,F}}) where {D,T,F} = print(io, "Polyform{$D,$T,$F}")
+dimension(::Polyform{D}) where {D} = D
+dimension(::Type{Polyform{D,T,F,R}}) where {D,T,F,R} = D
 
 function canonize!(p::Polyform{D,T}) where {D,T}
     canonperm, autg = nauty(p.anatomy; canonize=false)
