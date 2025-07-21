@@ -15,10 +15,10 @@ function open_bond(p::Polyform, assembly_system::AssemblySystem, j::Integer)
     return 0, 0
 end
 
-function get_sitepos(p::Polyform, geometries, v)
+function get_sitepos(p::Polyform, assembly_system, v)
     particle, side = vertex2particle(p, assembly_system, v)
     spc = species(p)[particle]
-    geom = geometries[spc]
+    geom = assembly_system.geometries[spc]
     return p.xs[particle] + rotate(geom.xs[side], p.ψs[particle])
 end
 
@@ -101,9 +101,14 @@ function find_bonds(p1::Polyform, p2::Polyform, assembly_system::AssemblySystem;
 
             vs_i = particle2multivertex(p1, assembly_system, i, si)
             vs_j = particle2multivertex(p2, assembly_system, j, sj)
-            label_i = p1.anatomy.labels[first(vs_i)]
-            label_j = p2.anatomy.labels[first(vs_j)]
 
+            # label_i = p1.anatomy.labels[first(vs_i)]
+            # label_j = p2.anatomy.labels[first(vs_j)]
+            # TODO: the above causes errors if the color label is different from the site site idx
+            # i.e. when some sites have the same label
+            label_i = vertex2label(p1, assembly_system, first(vs_i))
+            label_j = vertex2label(p2, assembly_system, first(vs_j))
+            
             # Return if a disallowed bond is found
             !intmat[label_i, label_j] && return false, new_edges
 
