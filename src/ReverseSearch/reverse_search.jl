@@ -1,6 +1,25 @@
 @enum RejectValue NOREJECT = 0 REJECT = 1 BREAK = 2
 @enum RSStatus COMPLETE = 0 MAXVERTREACHED = 1 MAXDEPTHREACHED = 2 BREAKTRIGGERED = 3
 
+
+"""
+    RSSystem(ls, adj, compare=Base.:(==))
+
+An RSSystem defines a reverse-search enumeration procedure by providing the local search function `ls(v)`, the
+adjacency oracle `adj(v, j, aux)`, and a comparator function (defaults to `Base.:(==)`).
+
+These functions are expected to adhere to the following interfaces:
+
+- `u = ls(v)` maps an object `v` to its parent `u`, such that `adj(u, j, aux) == v` for some `j`.
+    An in-place version of the form `u = ls!(u, v)` is also supported (this version must also return `u`).
+- `u, Δj = adj(v, j, aux)` maps an object `v` onto its `j`th neighbor `u`, optionally making use and/or modifying the
+    auxilary information stored in `aux`. In many applications, not all values for `j` will lead to a valid object, which
+    means that `adj` has to internally increase `j` until the next valid neighbor is found. `adj` must therefore also
+    return the index jump `Δj`; the search for the next valid neighbor will then begin at index `j + Δj`. An in-place version
+    of the form `u, Δj = adj!(u, v, j, aux)` is also supported (this version must also return `u, Δj`).
+
+Note that `ls` and `adj` need to either both be in-place, or both be out-of-place.
+"""
 struct RSSystem{isinplace,LS,ADJ,COM}
     ls::LS              # local search, ls(v), returns v_prev
     adj::ADJ            # adjacency oracle, adj(v, j, aux) return v_next(j), Δj. May modify aux.
@@ -138,6 +157,13 @@ popvertex!(counter::CachedAuxNeighborCounter, args...) = (pop!(counter.js); pop!
 auxvalue(counter::CachedAuxNeighborCounter) = counter.aux[end]
 hasaux(::CachedAuxNeighborCounter) = true
 
+
+"""
+    rs(f, rsys::RSSystem, state::RSState; fargs=())
+
+Low-level reverse-search function that should rarely be called directly.
+See `reversesearch` or `RSIterator` for user-friendly alternatives.
+"""
 function rs(f, rsys::RSSystem, state::RSState; fargs=())
     break_flag = false
 
@@ -162,10 +188,43 @@ function rs(f, rsys::RSSystem, state::RSState; fargs=())
     return break_flag
 end
 
+"""
+    prs(f, rsys::RSSystem, state::RSState; depth_per_task, verts_per_task, nthreads=Threads.nthreads(), fargs=())
+
+Low-level, parallel implementation of reverse-search. This function should rarely be called directly.
+See `reversesearch` or `RSIterator` for user-friendly alternatives.
+"""
+function prs(f, rsys::RSSystem, state::RSState; depth_per_task, verts_per_task, nthreads=Threads.nthreads(), fargs=())
+    input_queue = Channel{Union{Nothing,Tuple{typeof(state.v),Int}}}(Inf)
+
+    nworkers = min(Threads.nthreads(), nthreads) - 1
+    work_tokens = Channel{Bool}(nworkers)
+    break_flag = Threads.Atomic{Bool}(false)
+
+    put!(input_queue, (copy(state.v), state.depth))
+
+    tasks = [@spawn _rsworker(f, rsys, input_queue, work_tokens, break_flag; depth_per_task, verts_per_task, fargs) for _ in 1:nworkers]
+
+    while true
+        sleep(0.01)
+
+        if break_flag[] || (isempty(work_tokens) && isempty(input_queue))
+            # Terminate workers
+            for _ in 1:nworkers
+                put!(input_queue, nothing)
+            end
+            break
+        end
+    end
+
+    foreach(wait, tasks)
+    return break_flag[] # TODO: make sure this always returns the same value as the corresponding rs() call
+end
+
 function _rsworker(f, rsys::RSSystem, input_queue, work_tokens, break_flag; depth_per_task, verts_per_task, fargs=())
     hasf = !isnothing(f)
 
-    function callback(v, task_depth, start_depth, task_nv, args...)
+    function fwrap(v, task_depth, start_depth, task_nv, args...)
         # If another worker already broke, also break immedetely.
         break_flag[] && return BREAK
 
@@ -197,7 +256,7 @@ function _rsworker(f, rsys::RSSystem, input_queue, work_tokens, break_flag; dept
         put!(work_tokens, true)
 
         state = RSState(v; depth=0) # TODO pull out of this loop, then copy to it \\ add kwargs
-        rs(callback, rsys, state; fargs=(start_depth, task_nv, fargs...))
+        rs(fwrap, rsys, state; fargs=(start_depth, task_nv, fargs...))
 
         take!(work_tokens)
 
@@ -206,33 +265,6 @@ function _rsworker(f, rsys::RSSystem, input_queue, work_tokens, break_flag; dept
         end
     end
     return
-end
-
-function prs(f, rsys::RSSystem, state::RSState; depth_per_task, verts_per_task, nthreads=Threads.nthreads(), fargs=())
-    input_queue = Channel{Union{Nothing,Tuple{typeof(state.v),Int}}}(Inf)
-
-    nworkers = min(Threads.nthreads(), nthreads) - 1
-    work_tokens = Channel{Bool}(nworkers)
-    break_flag = Threads.Atomic{Bool}(false)
-
-    put!(input_queue, (copy(state.v), state.depth))
-
-    tasks = [@spawn _rsworker(f, rsys, input_queue, work_tokens, break_flag; depth_per_task, verts_per_task, fargs) for _ in 1:nworkers]
-
-    while true
-        sleep(0.01)
-
-        if break_flag[] || (isempty(work_tokens) && isempty(input_queue))
-            # Terminate workers
-            for _ in 1:nworkers
-                put!(input_queue, nothing)
-            end
-            break
-        end
-    end
-
-    foreach(wait, tasks)
-    return break_flag[] # TODO: make sure this always returns the same value as the corresponding rs() call
 end
 
 struct RSIterator{RSYS<:RSSystem,VTY,A}
@@ -266,12 +298,51 @@ function Base.iterate(iter::RSIterator)
     return (copy(state.v), state.depth), state
 end
 
+
+"""
+    reversesearch([f], rsys::RSSystem, v₀; threaded=false, cached=true, aux=nothing, maxdepth=Inf, maxverts=Inf, fargs=(), kwargs...)
+
+Given a starting object `v₀`, perform reverse-search enumeration using the adjacency oracle, local search, and comparator defined in `rsys`.
+During the enumeration, evaluate `f(v, depth)` on each object `v` generated at a certain `depth`. Stop the enumeration if a depth of 
+`maxdepth` is reached, if `maxverts` objects have been generated, or if `f(v, depth)` returns the `BREAK` signal (see below).
+
+If `threaded=true`, the enumeration is performed in parallel and the following additional keyword arguments become available:
+
+- `nthreads`: the number of threads to use (defaults to `Threads.nthreads()`).
+- `depth_per_task`: the maximal depth a single task can explore before terminating.
+- `verts_per_task`: the maximal number of objects a single task can generate before terminating.
+
+The optimal values for `depth_per_task` and `verts_per_task` are highly problem-specific, there are no default values and some tuning is usually required 
+to achieve good performance.
+
+The `cached` keyword argument determines whether information along the current branch in the search tree should be cached, or if it needs to be 
+regenerated at each forward traverse. This should usually be left as `true`, unless you are dealing with large enumerations that reach very low depths or 
+run into memory issues.
+
+In some enumeration problems, especially when dealing with isomorphism-free generation, it can be convenient to pass additional information to the 
+adjacency oracle, for example to avoid generating isomorphic neighbors. If the adjacency oracle is defined with this in mind, `aux` can be used to pass
+the initial value of this auxilary data. If `aux` is defined, then at every object `v`, a new copy of `aux` is created and passed to the oracle as 
+`adj(v, 1, copy(aux))`. This copy can then be used and/or modified by `adj` while generating the neighbors of `v`.
+
+The (optional) function `f` can be used to both process the generated objects and to steer the enumeration procedure.
+`f(v, depth, args...)` must take as inputs an object `v`, the `depth` at which `v` was found, and any number of optional arguments, which will be passed 
+through via the `fargs` keyword argument. `f` must return one of three signals:
+
+- `NOREJECT`: reverse-search continues as normal.
+- `REJECT`: the children of the current object will not be generated and the enumeration continues from the parent of the current object.
+- `BREAK`: the enumeration terminates immediately.
+
+!!! warning "Warning"
+
+    If `threaded=true`, `f` will be called from different threads. It is your responsibility to ensure that `f` is thread-safe.
+
+The return value contains the final status of the enumeration, the number of generated vertices, and the lowest depth reached.
+"""
 function reversesearch(f, rsys::RSSystem, v₀; threaded=false, cached=true, aux=nothing, kwargs...)
     state = RSState(v₀; cached, aux)
     return _reversesearch(f, rsys, state, Val(threaded); kwargs...)
 end
 reversesearch(rsys::RSSystem, v₀; kwargs...) = reversesearch(nothing, rsys, v₀; kwargs...)
-
 
 function _reversesearch(f, rsys::RSSystem, state::RSState, ::Val{threaded}; maxdepth=Inf, maxverts=Inf, fargs=(), kwargs...) where {threaded}
     hasf = !isnothing(f)
@@ -282,7 +353,7 @@ function _reversesearch(f, rsys::RSSystem, state::RSState, ::Val{threaded}; maxd
     nv = threaded ? Threads.Atomic{Int}(1) : Ref(1)
     lowest_depth = threaded ? Threads.Atomic{Int}(1) : Ref(1)
 
-    function callback(v, depth, args...)
+    function fwrap(v, depth, args...)
         if threaded
             Threads.atomic_or!(maxvert_flag, nv[] >= maxverts)
         else
@@ -313,7 +384,7 @@ function _reversesearch(f, rsys::RSSystem, state::RSState, ::Val{threaded}; maxd
     end
 
     rs_fn = threaded ? prs : rs
-    break_flag = rs_fn(callback, rsys, state; fargs, kwargs...)
+    break_flag = rs_fn(fwrap, rsys, state; fargs, kwargs...)
 
     if maxvert_flag[]
         result = MAXVERTREACHED 
