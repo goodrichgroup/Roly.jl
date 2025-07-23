@@ -4,6 +4,9 @@ using LinearAlgebra, StaticArrays, SparseArrays
 using Base.Iterators, DataStructures
 using Graphs, NautyGraphs
 
+include("ReverseSearch/ReverseSearch.jl")
+using .ReverseSearch
+
 export polyenum, polygen
 export AssemblySystem, Polyform, rhash, composition, compositions
 export PolygonGeometry, UnitTriangleGeometry, UnitSquareGeometry, UnitPentagonGeometry, UnitHexagonGeometry, UnitCubeGeometry
