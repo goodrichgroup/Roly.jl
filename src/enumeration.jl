@@ -31,7 +31,7 @@ function adj!(u::Polyform{T,F}, v::Polyform{T,F}, j::Integer, hashes::Vector{Has
     return success ? u : nothing, j_new - j
 end
 
-function polymap(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf) where {D,T,F}
+function polyenum(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf, cached=true) where {D,T,F}
     ls(u, v) = f!(u, v, assembly_system)
     adj(u, v, j, aux) = adj!(u, v, j, aux, assembly_system)
 
@@ -39,14 +39,13 @@ function polymap(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs
     v₀ = Polyform{D,T,F}()
     aux = HashType[]
 
-    _, nv, maxdepth = reversesearch(f, rsys, v₀; cached=true, aux, maxdepth=maxsize, maxverts=maxstrs+1)
+    _, nv, maxdepth = reversesearch(f, rsys, v₀; cached, aux, maxdepth=maxsize, maxverts=maxstrs+1)
     return nv-1, maxdepth
 end
-polyenum(assembly_system::AssemblySystem; kwargs...) = polymap(nothing, assembly_system; kwargs...)
+polyenum(assembly_system::AssemblySystem; kwargs...) = polyenum(nothing, assembly_system; kwargs...)
 
 
-function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G};
-                      maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
+function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
     bblocks = buildingblocks(assembly_system)
 
     values = [f(bblock) for bblock in bblocks]
