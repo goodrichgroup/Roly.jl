@@ -5,38 +5,47 @@
 """
     RSSystem(ls, adj, compare=Base.:(==))
 
-An RSSystem defines a reverse-search enumeration procedure by providing the local search function `ls(v)`, the
-adjacency oracle `adj(v, j, aux)`, and a comparator function (defaults to `Base.:(==)`).
+An RSSystem defines a reverse-search enumeration procedure by specifying the local search function `ls(v)`, the
+adjacency oracle `adj(v, j, aux)`, a comparator function (defaults to `Base.:(==)`), and a starting vertex `v₀`.
+The enumeration can be carried out by calling `reversesearch(::RSSystem)`, or by iterating over an `RSIterator(::RSSystem)`.
 
-These functions are expected to adhere to the following interfaces:
+The local search and adjacency functions are expected to adhere to the following interfaces:
 
 - `u = ls(v)` maps an object `v` to its parent `u`, such that `adj(u, j, aux) == v` for some `j`.
     An in-place version of the form `u = ls!(u, v)` is also supported (this version must also return `u`).
 - `u, Δj = adj(v, j, aux)` maps an object `v` onto its `j`th neighbor `u`, optionally making use and/or modifying the
-    auxilary information stored in `aux`. In many applications, not all values for `j` will lead to a valid object, which
-    means that `adj` has to internally increase `j` until the next valid neighbor is found. `adj` must therefore also
-    return the index jump `Δj`; the search for the next valid neighbor will then begin at index `j + Δj`. An in-place version
-    of the form `u, Δj = adj!(u, v, j, aux)` is also supported (this version must also return `u, Δj`).
+    auxilary information stored in `aux`. In many applications, not all values for `j` will lead to a valid object, in which cases
+    it is convenient to allow `adj` to internally increase `j` until the next valid neighbor is found. `adj` must therefore also
+    return the index jump `Δj`; at the subsequent reverse-search step, the search for the next valid neighbor will thus begin at index `j + Δj`. 
+    An in-place version of the form `u, Δj = adj!(u, v, j, aux)` is also supported (this version must also return `u, Δj`).
 
 Note that `ls` and `adj` need to either both be in-place, or both be out-of-place.
+
+In some enumeration problems, especially when dealing with isomorphism-free generation, it can be convenient to pass additional information to the 
+adjacency oracle, for example to avoid generating isomorphic neighbors. If the adjacency oracle is defined with this in mind, `aux` can be used to pass
+the initial value of this auxilary data. If `aux` is defined, then at every object `v`, a new copy of `aux` is created and passed to the oracle as 
+`adj(v, 1, copy(aux))`. This copy can then be used and/or modified by `adj` while generating the neighbors of `v`.
 """
-struct RSSystem{isinplace,LS,ADJ,COM}
+struct RSSystem{isinplace,LS,ADJ,COM,VTY,ATY}
     ls::LS              # local search, ls(v), returns v_prev
     adj::ADJ            # adjacency oracle, adj(v, j, aux) return v_next(j), Δj. May modify aux.
     compare::COM        # comparator between vertices v, v' (default Base.:(==))
-    RSSystem{isinplace}(ls, adj, compare) where {isinplace} = 
-        new{isinplace, typeof(ls), typeof(adj), typeof(compare)}(ls, adj, compare)
+    v₀::VTY             # starting vertex
+    aux::ATY            # (optional) auxilary data
+    function RSSystem{isinplace}(ls, adj, v₀; compare=Base.:(==), aux=nothing) where {isinplace}
+        return new{isinplace, typeof(ls), typeof(adj), typeof(compare), typeof(v₀), typeof(aux)}(ls, adj, compare, v₀, aux)
+    end
 end
 isinplace(::RSSystem{iip}) where {iip} = iip
 
-function RSSystem(ls, adj, compare=Base.:(==))
+function RSSystem(ls, adj, args...; kwargs...)
     ls_iip = SciMLBase.isinplace(ls, 2, "ls")
     adj_iip = SciMLBase.isinplace(adj, 4, "adj")
 
     if ls_iip != adj_iip
         error("Local search and adjacency function have incompatible call signatures. The functions need to either both be in place, or both be out of place.")
     end
-    return RSSystem{ls_iip}(ls, adj, compare)
+    return RSSystem{ls_iip}(ls, adj, args...; kwargs...)
 end
 
 mutable struct RSState{VTY,NCT}
@@ -170,13 +179,13 @@ function rs(f, rsys::RSSystem, state::RSState; fargs=())
     while true
         success = reverse_traverse!(state, rsys)
         if success
-            reject_val = f(state.v, state.depth, fargs...)
+            signal = f(state.v, state.depth, fargs...)
 
-            if reject_val == BREAK
+            if signal == BREAK
                 break_flag = true
                 break
             end
-            if reject_val == REJECT
+            if signal == REJECT
                 forward_traverse!(state, rsys)
                 continue
             end
@@ -230,12 +239,12 @@ function _rsworker(f, rsys::RSSystem, input_queue, work_tokens, break_flag; dept
 
         total_depth = task_depth + start_depth
 
-        reject_val = hasf ? f(v, total_depth, args...) : NOREJECT
+        signal = hasf ? f(v, total_depth, args...) : NOREJECT
 
-        if reject_val == BREAK
+        if signal == BREAK
             Threads.atomic_or!(break_flag, true)
-        elseif reject_val == NOREJECT && (task_nv[] >= verts_per_task || task_depth == depth_per_task)
-            reject_val = REJECT
+        elseif signal == NOREJECT && (task_nv[] >= verts_per_task || task_depth == depth_per_task)
+            signal = REJECT
 
             if isinplace(rsys)
                 put!(input_queue, (copy(v), total_depth))
@@ -243,7 +252,7 @@ function _rsworker(f, rsys::RSSystem, input_queue, work_tokens, break_flag; dept
                 put!(input_queue, (v, total_depth))
             end
         end
-        return reject_val
+        return signal
     end
 
     while true
@@ -267,20 +276,29 @@ function _rsworker(f, rsys::RSSystem, input_queue, work_tokens, break_flag; dept
     return
 end
 
-struct RSIterator{RSYS<:RSSystem,VTY,A}
+"""
+    RSIterator(rsys::RSSystem; cached=true, maxdepth=Inf)
+
+Create an iterable from the RSSystem `rsys` that makes it convienent to iterate
+over the objects generated by reverse-search, e.g. via
+
+```
+for (v, depth) in RSIterator(rsys)
+    # do something with v and depth
+end
+```
+
+The iterator will enumerate all objects up to a depth of `maxdepth`. For more fine-grained
+control over the enumeration process, use `reversesearch`.
+"""
+struct RSIterator{RSYS<:RSSystem}
     rsys::RSYS
-    v₀::VTY
     cached::Bool
-    aux::A
     maxdepth::Union{Int,Float64}
+function RSIterator(rsys::RSSystem; cached=true, maxdepth=Inf)
+        return RSIterator{typeof(rsys)}(rsys, cached, maxdepth)
+    end 
 end
-function RSIterator(ls, adj, v₀; compare=Base.:(==), cached=true, aux=nothing, maxdepth=Inf)
-    rsys = RSSystem(ls, adj, compare)
-    return RSIterator(rsys, v₀, cached, aux, maxdepth)
-end
-function RSIterator(rsys::RSSystem, v₀; cached=true, aux=nothing, maxdepth=Inf)
-    return RSIterator(rsys, v₀, cached, aux, maxdepth)
-end 
 
 function Base.iterate(iter::RSIterator, state::RSState)
     if state.depth == iter.maxdepth
@@ -294,15 +312,15 @@ function Base.iterate(iter::RSIterator, state::RSState)
     end
 end
 function Base.iterate(iter::RSIterator)
-    state = RSState(iter.v₀; cached=iter.cached, aux=iter.aux)
+    state = RSState(iter.rsys.v₀; cached=iter.cached, aux=iter.rsys.aux)
     return (copy(state.v), state.depth), state
 end
 
 
 """
-    reversesearch([f], rsys::RSSystem, v₀; threaded=false, cached=true, aux=nothing, maxdepth=Inf, maxverts=Inf, fargs=(), kwargs...)
+    reversesearch([f], rsys::RSSystem; threaded=false, cached=true, maxdepth=Inf, maxverts=Inf, fargs=(), kwargs...)
 
-Given a starting object `v₀`, perform reverse-search enumeration using the adjacency oracle, local search, and comparator defined in `rsys`.
+Perform reverse-search enumeration using the adjacency oracle, local search, comparator, and starting vertex defined in `rsys`.
 During the enumeration, evaluate `f(v, depth)` on each object `v` generated at a certain `depth`. Stop the enumeration if a depth of 
 `maxdepth` is reached, if `maxverts` objects have been generated, or if `f(v, depth)` returns the `BREAK` signal (see below).
 
@@ -319,11 +337,6 @@ The `cached` keyword argument determines whether information along the current b
 regenerated at each forward traverse. This should usually be left as `true`, unless you are dealing with large enumerations that reach very low depths or 
 run into memory issues.
 
-In some enumeration problems, especially when dealing with isomorphism-free generation, it can be convenient to pass additional information to the 
-adjacency oracle, for example to avoid generating isomorphic neighbors. If the adjacency oracle is defined with this in mind, `aux` can be used to pass
-the initial value of this auxilary data. If `aux` is defined, then at every object `v`, a new copy of `aux` is created and passed to the oracle as 
-`adj(v, 1, copy(aux))`. This copy can then be used and/or modified by `adj` while generating the neighbors of `v`.
-
 The (optional) function `f` can be used to both process the generated objects and to steer the enumeration procedure.
 `f(v, depth, args...)` must take as inputs an object `v`, the `depth` at which `v` was found, and any number of optional arguments, which will be passed 
 through via the `fargs` keyword argument. `f` must return one of three signals:
@@ -338,11 +351,11 @@ through via the `fargs` keyword argument. `f` must return one of three signals:
 
 The return value contains the final status of the enumeration, the number of generated vertices, and the lowest depth reached.
 """
-function reversesearch(f, rsys::RSSystem, v₀; threaded=false, cached=true, aux=nothing, kwargs...)
-    state = RSState(v₀; cached, aux)
+function reversesearch(f, rsys::RSSystem; threaded=false, cached=true, kwargs...)
+    state = RSState(rsys.v₀; cached, aux=rsys.aux)
     return _reversesearch(f, rsys, state, Val(threaded); kwargs...)
 end
-reversesearch(rsys::RSSystem, v₀; kwargs...) = reversesearch(nothing, rsys, v₀; kwargs...)
+reversesearch(rsys::RSSystem; kwargs...) = reversesearch(nothing, rsys; kwargs...)
 
 function _reversesearch(f, rsys::RSSystem, state::RSState, ::Val{threaded}; maxdepth=Inf, maxverts=Inf, fargs=(), kwargs...) where {threaded}
     hasf = !isnothing(f)
@@ -361,12 +374,12 @@ function _reversesearch(f, rsys::RSSystem, state::RSState, ::Val{threaded}; maxd
         end
        
         if !maxvert_flag[]
-            reject_val = hasf ? f(v, depth, args...) : NOREJECT
+            signal = hasf ? f(v, depth, args...) : NOREJECT
         else
-            reject_val = BREAK
+            signal = BREAK
         end
 
-        if reject_val == NOREJECT
+        if signal == NOREJECT
             if threaded
                 Threads.atomic_add!(nv, 1)
                 Threads.atomic_max!(lowest_depth, depth)
@@ -375,12 +388,12 @@ function _reversesearch(f, rsys::RSSystem, state::RSState, ::Val{threaded}; maxd
                 lowest_depth[] = max(lowest_depth[], depth)
             end
             if depth == maxdepth
-                reject_val = REJECT
+                signal = REJECT
                 maxdepth_flag[] = true
             end
         end
 
-        return reject_val
+        return signal
     end
 
     rs_fn = threaded ? prs : rs

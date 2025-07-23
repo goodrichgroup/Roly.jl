@@ -35,33 +35,31 @@ function polyenum(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstr
     ls(u, v) = f!(u, v, assembly_system)
     adj(u, v, j, aux) = adj!(u, v, j, aux, assembly_system)
 
-    rsys = RSSystem(ls, adj, ≃)
     v₀ = Polyform{D,T,F}()
     aux = HashType[]
+    rsys = RSSystem(ls, adj, v₀; compare=is_isomorphic, aux)
 
-    _, nv, maxdepth = reversesearch(f, rsys, v₀; cached, aux, maxdepth=maxsize, maxverts=maxstrs+1)
+    _, nv, maxdepth = reversesearch(f, rsys; cached, maxdepth=maxsize, maxverts=maxstrs+1)
     return nv-1, maxdepth
 end
 polyenum(assembly_system::AssemblySystem; kwargs...) = polyenum(nothing, assembly_system; kwargs...)
 
 
 function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
-    bblocks = buildingblocks(assembly_system)
-
-    values = [f(bblock) for bblock in bblocks]
+    strs = [bblock for bblock in buildingblocks(assembly_system) if f(bblock, 1) == ReverseSearch.NOREJECT]
     hashes = Set{HashType}()
     queue = Queue{Polyform{D,T,F}}()
 
-    for bblock in bblocks
+    for bblock in strs
         hashval = rhash(bblock)
         enqueue!(queue, bblock)
         push!(hashes, hashval)
     end
 
     u = Polyform{D,T,F}()
-    n_strs = length(bblocks)
+    nstrs = length(bblocks)
 
-    while !isempty(queue) && n_strs < maxstrs
+    while !isempty(queue) && nstrs < maxstrs
         v = dequeue!(queue)
         n = size(v)
         if n >= maxsize
@@ -77,14 +75,19 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
             hashval = rhash(u)
 
             if success && (hashval ∉ hashes)
-                next = copy(u)
-            
-                push!(values, f(next))
                 push!(hashes, hashval)
-                enqueue!(queue, next)
-                
-                n_strs += 1
-                n_strs == maxstrs && break
+                next = copy(u)
+                depth = size(next)
+
+                signal = f(next, depth)
+                if signal == ReverseSearch.NOREJECT
+                    push!(strs, next)
+                    enqueue!(queue, next)
+                    nstrs += 1
+                end
+                if signal == ReverseSearch.BREAK || nstrs == maxstrs
+                    break
+                end
             end
 
             j += 1
@@ -92,8 +95,8 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
         end
     end
 
-    return values
+    return strs
 end
 function polygen(assembly_system::AssemblySystem; kwargs...)
-    return polygen(identity, assembly_system; kwargs...)
+    return polygen((_, _)->ReverseSearch.NOREJECT, assembly_system; kwargs...)
 end
