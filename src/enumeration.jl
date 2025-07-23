@@ -11,24 +11,25 @@ function adj!(u::Polyform{T,F}, v::Polyform{T,F}, j::Integer, hashes::Vector{Has
     if size(v) == 0
         bblocks = buildingblocks(assembly_system)
         if j > length(bblocks)
-            return nothing, 1
+            return nothing
         end
 
         copy!(u, bblocks[j])
         push!(hashes, rhash(u))
-        return u, 1
+        return u
     end
 
     copy!(u, v)
-    success, j_new = raise!(u, j, assembly_system)
+    success, _ = raise!(u, j, assembly_system)
+    !success && return nothing
 
-    while success && rhash(u) ∈ hashes
-        copy!(u, v)
-        success, j_new = raise!(u, j_new + 1, assembly_system)
+    h = rhash(u)
+    if h ∉ hashes
+        push!(hashes, h)
+        return u
+    else
+        return missing
     end
-
-    success && push!(hashes, rhash(u))
-    return success ? u : nothing, j_new - j
 end
 
 """

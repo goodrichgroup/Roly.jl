@@ -16,11 +16,10 @@ The local search and adjacency functions are expected to adhere to the following
 
 - `u = ls(v)` maps an object `v` to its parent `u`, such that `adj(u, j, aux) == v` for some `j`.
     An in-place version of the form `u = ls!(u, v)` is also supported (this version must also return `u`).
-- `u, Δj = adj(v, j, aux)` maps an object `v` onto its `j`th neighbor `u`, optionally making use and/or modifying the
-    auxilary information stored in `aux`. In many applications, not all values for `j` will lead to a valid object, in which cases
-    it is convenient to allow `adj` to internally increase `j` until the next valid neighbor is found. `adj` must therefore also
-    return the index jump `Δj`; at the subsequent reverse-search step, the search for the next valid neighbor will thus begin at index `j + Δj`. 
-    An in-place version of the form `u, Δj = adj!(u, v, j, aux)` is also supported (this version must also return `u, Δj`).
+- `u = adj(v, j, aux)` maps an object `v` onto its `j`th neighbor `u`, optionally making use and/or modifying the
+    auxilary information stored in `aux`. In many applications, not all values for `j` will lead to a valid object, in which case 
+    `missing` should be returned. If all neighbors are exhausted, `nothing` must be returned. An in-place version of the form 
+    `u, Δj = adj!(u, v, j, aux)` is also supported (this version must also return `u`).
 
 Note that `ls` and `adj` need to either both be in-place, or both be out-of-place.
 
@@ -53,8 +52,8 @@ end
 
 mutable struct RSState{VTY,NCT}
     v::VTY
-    _temp1::Union{VTY,Nothing} # Only used for inplace assignments
-    _temp2::Union{VTY,Nothing} # Only used for inplace assignments
+    _temp1::Union{VTY,Nothing,Missing} # Only used for inplace assignments
+    _temp2::Union{VTY,Nothing,Missing} # Only used for inplace assignments
     counter::NCT
     depth::Int
 end
@@ -87,16 +86,13 @@ end
 function reverse_traverse!(state::RSState, rsys::RSSystem{isinplace}) where {isinplace}
     while true
         if isinplace
-            next, Δj = rsys.adj(state._temp1, state.v, countervalue(state.counter), auxvalue(state.counter))
+            next = rsys.adj(state._temp1, state.v, countervalue(state.counter), auxvalue(state.counter))
         else
-            next, Δj = rsys.adj(state.v, countervalue(state.counter), auxvalue(state.counter))
+            next = rsys.adj(state.v, countervalue(state.counter), auxvalue(state.counter))
         end
         isnothing(next) && return false
-        increment!(state.counter, Δj)
-
-        # TODO: let adj return missing if the neighbor is invalid, but more could be generated
-        # then add this line
-        # ismissing(next) && continue
+        increment!(state.counter, 1)
+        ismissing(next) && continue
 
         if isinplace
             rsys.ls(state._temp2, next)
@@ -129,11 +125,11 @@ function popvertex!(counter::AbstractSimpleNeighborCounter, rsys::RSSystem{isinp
 
     while true
         if isinplace
-            next, Δj = rsys.adj(temp, prev, countervalue(counter), auxvalue(counter))
+            next = rsys.adj(temp, prev, countervalue(counter), auxvalue(counter))
         else
-            next, Δj = rsys.adj(prev, countervalue(counter), auxvalue(counter))
+            next = rsys.adj(prev, countervalue(counter), auxvalue(counter))
         end
-        counter.j += Δj
+        increment!(counter, 1)
         rsys.compare(next, v) && break
     end
     return
