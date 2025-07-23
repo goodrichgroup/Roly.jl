@@ -76,8 +76,8 @@ constraints that the allowed structures must satisfy.
 
 `f(s)` must take as inputs a structure `s` and must return one of three signals:
 
-- `ACCEPT`: enumeration continues as normal.
-- `REJECT`: the children of the current structure will not be generated.
+- `ACCEPT` (or `true`): enumeration continues as normal.
+- `REJECT` (or `false`): the children of the current structure will not be generated.
 - `BREAK`: the enumeration terminates immediately.
 
 To ensure well-defined behavior, the function `f` may not accept offspring of structures that it rejects.

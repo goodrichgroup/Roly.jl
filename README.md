@@ -33,12 +33,19 @@ Once you have defined an assembly system, you can use `polyenum` to enumerate al
 ```
 n_strs, largest_strsize = polyenum(asys; maxsize=20, maxstrs=100_000)
 ```
-The simple system we have chosen here only allows 16 different structures to form. In general however, the number of structures might be unbounded and it is advisable to always impose either a maximal structure size (`maxsize`), or maximal number of structures (`maxstrs`) to be enumerated. In addition, `polyenum` allows the user to pass a callback function for processing, selectively storing, or rejecting structures.
+The simple system we have chosen here only allows 16 different structures to form. In general however, the number of structures might be unbounded and it is advisable to always impose either a maximal structure size (`maxsize`), or maximal number of structures (`maxstrs`) to be enumerated. In addition, `polyenum` allows the user to pass a function for processing and selectively rejecting structures.
 
 ### Generation of Structures
 If you want to store all possible structures in memory for further processing, it is often more convenient to use `polygen`, which simply returns a list of structures:
 ```
 strs = polygen(asys; maxsize=20, maxstrs=100_000)
+```
+
+### Incorporating constraints
+It is often desirable to impose additional constraints that the generated structures should satisfy. For example, say we only want to generate structures with at most one particle of species 4:
+```
+constraint(s) = composition(s, asys)[4] <= 1
+filtered_strs = polygen(constraint, asys) # polyenum works similarly
 ```
 
 ### Visualization

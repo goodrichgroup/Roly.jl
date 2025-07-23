@@ -9,7 +9,7 @@ using .ReverseSearch
 
 export ACCEPT, REJECT, BREAK
 export polyenum, polygen
-export AssemblySystem, Polyform, rhash, composition, compositions
+export AssemblySystem, Polyform, rhash, composition, compositions, interactionmatrix
 export PolygonGeometry, UnitTriangleGeometry, UnitSquareGeometry, UnitPentagonGeometry, UnitHexagonGeometry, UnitCubeGeometry
 
 include("utils.jl")
