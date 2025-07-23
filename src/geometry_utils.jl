@@ -45,7 +45,7 @@ Base.:/(q::Quaternion, α::Real) = inv(α) * q
 normalized(q::Quaternion) = inv(norm(q)) * q
 
 function rotate(x::Point{2,F}, ϕ::Angle{F}) where {F}
-    c, s = cospi(ϕ.θ), sinpi(ϕ.θ) #TODO: maybe refactor this into a method
+    s, c = sincospi(ϕ.θ)
     return Point{2,F}(c * x[1] - s * x[2], s * x[1] + c * x[2])
 end
 function rotate(x::Point{3,F}, ϕ::Quaternion{F}) where {F}
@@ -55,7 +55,7 @@ function rotate(x::Point{3,F}, ϕ::Quaternion{F}) where {F}
 end
 
 function rotate!(xs::AbstractVector{<:Point{2,F}}, ϕ::Angle{F}) where {F}
-    c, s = cospi(ϕ.θ), sinpi(ϕ.θ)
+    s, c = sincospi(ϕ.θ)
     for i in eachindex(xs)
         x, y = xs[i]
         xs[i] = Point{2,F}(c * x - s * y, s * x + c * y)
