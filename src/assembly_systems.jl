@@ -1,3 +1,19 @@
+"""
+    AssemblySystem(bindingrules::AbstractMatrix, geometries::Vector{<:AbstractGeometry{T,F}}, face_labels=nothing) where {T,F}
+
+Defines an _assembly system_, consisting of a list of building blocks, their geometries, and their binding rules. The structures (polyforms)
+that satify the binding rules without any particle overlaps are the _allowed structures_ of an assembly system, and can be enumerated or 
+iterated over using `polygen` or `polyenum`, respectively.
+
+The binding rules are specified by the matrix `bindingrules`, where every row of the matrix defines a valid bond between particle species.
+A bonds is specified in the format `[species1 site1 species2 site2]`. For example, if binding site 3 of particle species 1 binds to site 4 of
+particle species 2, the corresponding bond would read `[1 3 2 4;]`. The ordering of binding sites depends on the particle geometry, for 
+polygonal geometries, sites are numbered in clockwise order.
+
+Even without enumerating the allowed structures, it is possible to determine whether two assembly systems lead to the same set of allowed structures.
+If this is the case, then the two systems are identical up a relabeling and/or rotating the building blocks -- they are isomorphic.
+This can be checked by comparing the `rhash`es of different assembly systems; if the hashes are equal, the systems are isomorphic. 
+"""
 struct AssemblySystem{D, T<:Integer, F<:AbstractFloat, G<:AbstractGeometry{T,F}}
     intmat::BitMatrix
     buildingblocks::Vector{Polyform{D,T,F}}
@@ -6,14 +22,13 @@ struct AssemblySystem{D, T<:Integer, F<:AbstractFloat, G<:AbstractGeometry{T,F}}
     n_edges::Integer
     _sites_sum::Vector{T}
 end
-interaction_matrix(sys::AssemblySystem) = sys.intmat
-intmat(sys::AssemblySystem) = interaction_matrix(sys)
+interactionmatrix(sys::AssemblySystem) = sys.intmat
 buildingblocks(sys::AssemblySystem) = sys.buildingblocks
 geometries(sys::AssemblySystem) = sys.geometries
 Base.size(sys::AssemblySystem) = sys.n_species, sys.n_edges
 Base.show(io::Core.IO, A::AssemblySystem{D,T,F}) where {D,T,F} = print(io, "AssemblySytem{$D,$T,$F}[n=$(A.n_species), k=$(A.n_edges)]")
 
-function AssemblySystem(interactions::AbstractMatrix, geometries::Vector{<:AbstractGeometry{T,F}}, face_labels=nothing) where {T,F}
+function AssemblySystem(bindingrules::AbstractMatrix, geometries::Vector{<:AbstractGeometry{T,F}}, face_labels=nothing) where {T,F}
     ds = [dimension(g) for g in geometries]
     D = first(ds)
     @assert all(ds .== D)
@@ -37,7 +52,7 @@ function AssemblySystem(interactions::AbstractMatrix, geometries::Vector{<:Abstr
         last_label = fl[end]
     end
 
-    interaction_matrix = instantiate_interactionmatrix(interactions, sites)
+    interaction_matrix = instantiate_interactionmatrix(bindingrules, sites)
     n_edges = sum(triu(interaction_matrix))
     return AssemblySystem{D,T,F,eltype(geometries)}(interaction_matrix, monomers, geometries, n_species, n_edges, sites_sum)
 end
@@ -73,7 +88,7 @@ function instantiate_interactionmatrix(interactions::BitMatrix, args...)
 end
 
 function anatomy(asys::AssemblySystem)
-    imat = interaction_matrix(asys)
+    imat = interactionmatrix(asys)
     n_sites = size(imat, 1)
     n_edges = sum(triu(imat))
 
@@ -111,6 +126,13 @@ function rhash(asys::AssemblySystem)
     return hash(sort([ghash(a), ghash(a_prime)]))
 end
 
+
+"""
+    composition(p::Polyform, assembly_system::AssemblySystem)
+
+Return the composition of the polyform `p`, a vector containing the counts of every particle species in p
+and every bond of p.
+"""
 function composition(p::Polyform, assembly_system::AssemblySystem)
     n, k = size(assembly_system)
     m = zeros(Int, n + k)
@@ -129,7 +151,7 @@ function composition(p::Polyform, assembly_system::AssemblySystem)
         end
     end
 
-    bondlist = findall(Roly.intmat(assembly_system))
+    bondlist = findall(Roly.interactionmatrix(assembly_system))
     filter!(x->x[1] <= x[2], bondlist)
     sort!(bondlist)
     
@@ -141,4 +163,11 @@ function composition(p::Polyform, assembly_system::AssemblySystem)
 
     return m
 end
+
+
+"""
+    compositions(ps::AbstractVector{<:Polyform}, sys::AssemblySystem)
+
+Return the compositions of all polyforms in `ps`, stacked into a matrix M, with `size(M) = (length(ps), sum(size(sys)))`.
+"""
 compositions(ps::AbstractVector{<:Polyform}, sys::AssemblySystem) = reduce(vcat, composition.(ps, Ref(sys))')

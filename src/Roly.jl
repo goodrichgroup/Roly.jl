@@ -7,6 +7,7 @@ using Graphs, NautyGraphs
 include("ReverseSearch/ReverseSearch.jl")
 using .ReverseSearch
 
+export ACCEPT, REJECT, BREAK
 export polyenum, polygen
 export AssemblySystem, Polyform, rhash, composition, compositions
 export PolygonGeometry, UnitTriangleGeometry, UnitSquareGeometry, UnitPentagonGeometry, UnitHexagonGeometry, UnitCubeGeometry

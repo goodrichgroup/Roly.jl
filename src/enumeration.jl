@@ -31,7 +31,26 @@ function adj!(u::Polyform{T,F}, v::Polyform{T,F}, j::Integer, hashes::Vector{Has
     return success ? u : nothing, j_new - j
 end
 
-function polyenum(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf, cached=true) where {D,T,F}
+"""
+    polyenum([f], assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf, kwargs...) where {D,T,F}
+
+Iterate over all structures (polyforms) allowed by `assembly_system` using _reverse-search_. Structures are generated up to size `maxsize`, 
+and the enumeration terminates after `maxstr` structures have been generated. Use the function `f` to process the 
+generated structures and to enforce constraints that the allowed structures must satisfy.
+
+`f(s)` must take as inputs a structure `s` and must return one of three signals:
+
+- `ACCEPT` (or `true`): enumeration continues as normal.
+- `REJECT` (or `false`): the children of the current structure will not be generated.
+- `BREAK`: the enumeration terminates immediately.
+
+To ensure well-defined behavior, the function `f` may not accept the offspring of structures that it rejects.
+
+All other keyword arguments are passed to the underlying `reversesearch` routine, see its documentation for more information.
+
+Return value consist of the total number of structures generated and the largest structure size observed.
+"""
+function polyenum(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf, kwargs...) where {D,T,F}
     ls(u, v) = f!(u, v, assembly_system)
     adj(u, v, j, aux) = adj!(u, v, j, aux, assembly_system)
 
@@ -39,14 +58,33 @@ function polyenum(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstr
     aux = HashType[]
     rsys = RSSystem(ls, adj, v₀; compare=is_isomorphic, aux)
 
-    _, nv, maxdepth = reversesearch(f, rsys; cached, maxdepth=maxsize, maxverts=maxstrs+1)
+    frs = isnothing(f) ? nothing : (v, depth, args...)->f(v, size(v), args...)
+    _, nv, maxdepth = reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs+1, kwargs...)
     return nv-1, maxdepth
 end
 polyenum(assembly_system::AssemblySystem; kwargs...) = polyenum(nothing, assembly_system; kwargs...)
 
 
+"""
+    polygen([f::Function], assembly_system::AssemblySystem{D,T,F,G}; maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
+
+Generate all structures (polyforms) allowed by `assembly_system` using a brute force enumeration, and remove duplicates by comparing the graph
+hashes of structure anatomies. This function may be faster than `polyenum` for small enumerations, but requires much more memory. Structures are 
+generated up to size `maxsize`, and the enumeration terminates after `maxstr` structures have been generated. Use the function `f` to enforce 
+constraints that the allowed structures must satisfy.
+
+`f(s)` must take as inputs a structure `s` and must return one of three signals:
+
+- `ACCEPT`: enumeration continues as normal.
+- `REJECT`: the children of the current structure will not be generated.
+- `BREAK`: the enumeration terminates immediately.
+
+To ensure well-defined behavior, the function `f` may not accept offspring of structures that it rejects.
+
+Return value is a list of all generated structures.
+"""
 function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
-    strs = [bblock for bblock in buildingblocks(assembly_system) if f(bblock, 1) == ReverseSearch.NOREJECT]
+    strs = [bblock for bblock in buildingblocks(assembly_system) if f(bblock) == ReverseSearch.ACCEPT]
     hashes = Set{HashType}()
     queue = Queue{Polyform{D,T,F}}()
 
@@ -57,7 +95,7 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
     end
 
     u = Polyform{D,T,F}()
-    nstrs = length(bblocks)
+    nstrs = length(strs)
 
     while !isempty(queue) && nstrs < maxstrs
         v = dequeue!(queue)
@@ -79,8 +117,8 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
                 next = copy(u)
                 depth = size(next)
 
-                signal = f(next, depth)
-                if signal == ReverseSearch.NOREJECT
+                signal = f(next)
+                if signal == ReverseSearch.ACCEPT
                     push!(strs, next)
                     enqueue!(queue, next)
                     nstrs += 1
@@ -98,5 +136,5 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
     return strs
 end
 function polygen(assembly_system::AssemblySystem; kwargs...)
-    return polygen((_, _)->ReverseSearch.NOREJECT, assembly_system; kwargs...)
+    return polygen(_->ReverseSearch.ACCEPT, assembly_system; kwargs...)
 end

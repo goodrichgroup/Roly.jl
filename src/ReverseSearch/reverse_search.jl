@@ -1,4 +1,7 @@
-@enum RejectValue NOREJECT = 0 REJECT = 1 BREAK = 2
+# @enum RejectValue REJECT = 0 ACCEPT = 1 BREAK = 2
+const ACCEPT = 1
+const REJECT = 0
+const BREAK = -1
 @enum RSStatus COMPLETE = 0 MAXVERTREACHED = 1 MAXDEPTHREACHED = 2 BREAKTRIGGERED = 3
 
 
@@ -90,6 +93,10 @@ function reverse_traverse!(state::RSState, rsys::RSSystem{isinplace}) where {isi
         end
         isnothing(next) && return false
         increment!(state.counter, Δj)
+
+        # TODO: let adj return missing if the neighbor is invalid, but more could be generated
+        # then add this line
+        # ismissing(next) && continue
 
         if isinplace
             rsys.ls(state._temp2, next)
@@ -239,11 +246,11 @@ function _rsworker(f, rsys::RSSystem, input_queue, work_tokens, break_flag; dept
 
         total_depth = task_depth + start_depth
 
-        signal = hasf ? f(v, total_depth, args...) : NOREJECT
+        signal = hasf ? f(v, total_depth, args...) : ACCEPT
 
         if signal == BREAK
             Threads.atomic_or!(break_flag, true)
-        elseif signal == NOREJECT && (task_nv[] >= verts_per_task || task_depth == depth_per_task)
+        elseif signal == ACCEPT && (task_nv[] >= verts_per_task || task_depth == depth_per_task)
             signal = REJECT
 
             if isinplace(rsys)
@@ -327,8 +334,8 @@ During the enumeration, evaluate `f(v, depth)` on each object `v` generated at a
 If `threaded=true`, the enumeration is performed in parallel and the following additional keyword arguments become available:
 
 - `nthreads`: the number of threads to use (defaults to `Threads.nthreads()`).
-- `depth_per_task`: the maximal depth a single task can explore before terminating.
-- `verts_per_task`: the maximal number of objects a single task can generate before terminating.
+- `depth_per_task`: the maximal depth a single task will explore before terminating.
+- `verts_per_task`: the maximal number of objects a single task will generate before terminating.
 
 The optimal values for `depth_per_task` and `verts_per_task` are highly problem-specific, there are no default values and some tuning is usually required 
 to achieve good performance.
@@ -337,12 +344,12 @@ The `cached` keyword argument determines whether information along the current b
 regenerated at each forward traverse. This should usually be left as `true`, unless you are dealing with large enumerations that reach very low depths or 
 run into memory issues.
 
-The (optional) function `f` can be used to both process the generated objects and to steer the enumeration procedure.
+The optional function `f` can be used to both process the generated objects and to steer the enumeration procedure.
 `f(v, depth, args...)` must take as inputs an object `v`, the `depth` at which `v` was found, and any number of optional arguments, which will be passed 
 through via the `fargs` keyword argument. `f` must return one of three signals:
 
-- `NOREJECT`: reverse-search continues as normal.
-- `REJECT`: the children of the current object will not be generated and the enumeration continues from the parent of the current object.
+- `ACCEPT` (or `true`): reverse-search continues as normal.
+- `REJECT` (or `false`): the children of the current object will not be generated and the enumeration continues from the parent of the current object.
 - `BREAK`: the enumeration terminates immediately.
 
 !!! warning "Warning"
@@ -374,12 +381,12 @@ function _reversesearch(f, rsys::RSSystem, state::RSState, ::Val{threaded}; maxd
         end
        
         if !maxvert_flag[]
-            signal = hasf ? f(v, depth, args...) : NOREJECT
+            signal = hasf ? f(v, depth, args...) : ACCEPT
         else
             signal = BREAK
         end
 
-        if signal == NOREJECT
+        if signal == ACCEPT
             if threaded
                 Threads.atomic_add!(nv, 1)
                 Threads.atomic_max!(lowest_depth, depth)
