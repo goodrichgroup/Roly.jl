@@ -36,13 +36,13 @@ end
     polyenum([f], assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf, kwargs...) where {D,T,F}
 
 Iterate over all structures (polyforms) allowed by `assembly_system` using _reverse-search_. Structures are generated up to size `maxsize`, 
-and the enumeration terminates after `maxstr` structures have been generated. Use the function `f` to process the 
-generated structures and to enforce constraints that the allowed structures must satisfy.
+and the enumeration terminates after `maxstrs` structures have been generated. Use the function `f` to process the 
+generated structures and to impose constraints that the allowed structures must satisfy.
 
 `f(s)` must take as inputs a structure `s` and must return one of three signals:
 
 - `ACCEPT` (or `true`): enumeration continues as normal.
-- `REJECT` (or `false`): the children of the current structure will not be generated.
+- `REJECT` (or `false`): the offspring of the current structure will not be generated.
 - `BREAK`: the enumeration terminates immediately.
 
 To ensure well-defined behavior, the function `f` may not accept the offspring of structures that it rejects.
@@ -71,14 +71,14 @@ polyenum(assembly_system::AssemblySystem; kwargs...) = polyenum(nothing, assembl
 
 Generate all structures (polyforms) allowed by `assembly_system` using a brute force enumeration, and remove duplicates by comparing the graph
 hashes of structure anatomies. This function may be faster than `polyenum` for small enumerations, but requires much more memory. Structures are 
-generated up to size `maxsize`, and the enumeration terminates after `maxstr` structures have been generated. Use the function `f` to enforce 
-constraints that the allowed structures must satisfy.
+generated up to size `maxsize`, and the enumeration terminates after `maxstrs` structures have been generated. Use the function `f` to impose additional 
+constraints that the generated structures must satisfy.
 
 `f(s)` must take as inputs a structure `s` and must return one of three signals:
 
-- `ACCEPT` (or `true`): enumeration continues as normal.
-- `REJECT` (or `false`): the children of the current structure will not be generated.
-- `BREAK`: the enumeration terminates immediately.
+- `ACCEPT` (or `true`): `s` is added to the list of structures and the enumeration continues as normal.
+- `REJECT` (or `false`): `s` is not added to the list of structures and the offspring of `s` will not be generated.
+- `BREAK`: `s` is not added to the list of structures and the enumeration terminates immediately.
 
 To ensure well-defined behavior, the function `f` may not accept offspring of structures that it rejects.
 
@@ -124,7 +124,7 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
                     enqueue!(queue, next)
                     nstrs += 1
                 end
-                if signal == ReverseSearch.BREAK || nstrs == maxstrs
+                if nstrs == maxstrs || signal == ReverseSearch.BREAK
                     break
                 end
             end

@@ -14,18 +14,18 @@ The enumeration can be carried out by calling `reversesearch(::RSSystem)`, or by
 
 The local search and adjacency functions are expected to adhere to the following interfaces:
 
-- `u = ls(v)` maps an object `v` to its parent `u`, such that `adj(u, j, aux) == v` for some `j`.
-    An in-place version of the form `u = ls!(u, v)` is also supported (this version must also return `u`).
+- `u = ls(v)` maps an object `v` to its parent `u`, such that `adj(u, j, aux) == v` for some index `j`.
+    An in-place version of the form `u = ls!(w, v)` is also supported (this version must also return `u`).
 - `u = adj(v, j, aux)` maps an object `v` onto its `j`th neighbor `u`, optionally making use and/or modifying the
     auxilary information stored in `aux`. In many applications, not all values for `j` will lead to a valid object, in which case 
     `missing` should be returned. If all neighbors are exhausted, `nothing` must be returned. An in-place version of the form 
-    `u, Δj = adj!(u, v, j, aux)` is also supported (this version must also return `u`).
+    `u = adj!(w, v, j, aux)` is also supported (this version must also return `u`).
 
 Note that `ls` and `adj` need to either both be in-place, or both be out-of-place.
 
 In some enumeration problems, especially when dealing with isomorphism-free generation, it can be convenient to pass additional information to the 
-adjacency oracle, for example to avoid generating isomorphic neighbors. If the adjacency oracle is defined with this in mind, `aux` can be used to pass
-the initial value of this auxilary data. If `aux` is defined, then at every object `v`, a new copy of `aux` is created and passed to the oracle as 
+adjacency oracle, for example to avoid generating isomorphic neighbors. `aux` can be used to pass the initial value of this auxilary data to the 
+adjacency oracle. If `aux` is defined, then at every object `v`, a new copy of `aux` is created and passed to the oracle as 
 `adj(v, 1, copy(aux))`. This copy can then be used and/or modified by `adj` while generating the neighbors of `v`.
 """
 struct RSSystem{isinplace,LS,ADJ,COM,VTY,ATY}
@@ -291,7 +291,7 @@ for (v, depth) in RSIterator(rsys)
 end
 ```
 
-The iterator will enumerate all objects up to a depth of `maxdepth`. For more fine-grained
+The iterator will generate all objects up to a depth of `maxdepth`. For more fine-grained
 control over the enumeration process, use `reversesearch`.
 """
 struct RSIterator{RSYS<:RSSystem}
@@ -345,7 +345,7 @@ The optional function `f` can be used to both process the generated objects and 
 through via the `fargs` keyword argument. `f` must return one of three signals:
 
 - `ACCEPT` (or `true`): reverse-search continues as normal.
-- `REJECT` (or `false`): the children of the current object will not be generated and the enumeration continues from the parent of the current object.
+- `REJECT` (or `false`): the offspring of the current object will not be generated and the enumeration continues from the parent of the current object.
 - `BREAK`: the enumeration terminates immediately.
 
 !!! warning "Warning"
