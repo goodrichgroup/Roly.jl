@@ -11,182 +11,97 @@ function adj!(u::Polyform{T,F}, v::Polyform{T,F}, j::Integer, hashes::Vector{Has
     if size(v) == 0
         bblocks = buildingblocks(assembly_system)
         if j > length(bblocks)
-            return false, j + 1
+            return nothing
         end
 
         copy!(u, bblocks[j])
-        return true, j + 1
+        push!(hashes, rhash(u))
+        return u
     end
 
     copy!(u, v)
-    success, j = raise!(u, j, assembly_system)
+    success, _ = raise!(u, j, assembly_system)
+    !success && return nothing
 
-    if success && rhash(u) ∈ hashes
-        return adj!(u, v, j + 1, hashes, assembly_system)
+    h = rhash(u)
+    if h ∉ hashes
+        push!(hashes, h)
+        return u
+    else
+        return missing
     end
-
-    return success, j + 1
 end
 
-FnorNothing = Union{<:Function,Nothing}
+"""
+    polyenum([f], assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf, kwargs...) where {D,T,F}
 
-function polyrs(v₀::Polyform{D,T,F},
-                assembly_system::AssemblySystem{D,T,F},
-                reducer::FnorNothing,
-                reduce_op::FnorNothing,
-                aggregator::FnorNothing,
-                rejector::FnorNothing,
-                max_depth::Int=0,
-                max_strs::Int=0) where {D,T,F}
-    reducing = !isnothing(reducer)
-    if reducing
-        reduce_val = reducer(v₀, assembly_system)
-    else
-        reduce_val = nothing
-    end
-    aggregating = !isnothing(aggregator)
-    if aggregating
-        aggregate_val = typeof(aggregator(v₀, assembly_system)[2])[]
-    else
-        aggregate_val = nothing
-    end
-    rejecting = !isnothing(rejector)
+Iterate over all structures (polyforms) allowed by `assembly_system` using _reverse-search_. Structures are generated up to size `maxsize`, 
+and the enumeration terminates after `maxstrs` structures have been generated. Use the function `f` to process the 
+generated structures and to impose constraints that the allowed structures must satisfy.
 
-    depth = 0
-    n_strs = 0
+`f(s)` must take as inputs a structure `s` and must return one of three signals:
 
-    v = Polyform{D,T,F}()
-    u = Polyform{D,T,F}()
-    k = Polyform{D,T,F}()
+- `ACCEPT` (or `true`): enumeration continues as normal.
+- `REJECT` (or `false`): the offspring of the current structure will not be generated.
+- `BREAK`: the enumeration terminates immediately.
 
-    copy!(v, v₀)
+To ensure well-defined behavior, the function `f` may not accept the offspring of structures that it rejects.
 
-    js = [1]
-    hashes = [HashType[]]
+All other keyword arguments are passed to the underlying `reversesearch` routine, see its documentation for more information.
 
-    if max_depth == 0
-        max_depth = typemax(max_depth)
-    end
-    if max_strs == 0
-        max_strs = typemax(max_strs)
-    end
+Return value consist of the total number of structures generated and the largest structure size observed.
+"""
+function polyenum(f, assembly_system::AssemblySystem{D,T,F}; maxsize=Inf, maxstrs=Inf, kwargs...) where {D,T,F}
+    ls(u, v) = f!(u, v, assembly_system)
+    adj(u, v, j, aux) = adj!(u, v, j, aux, assembly_system)
 
-    lowest_depth = 0
-    break_triggered = false
-
-    while true
-        success, j_new = adj!(u, v, js[end], hashes[end], assembly_system)
-        next = u
-        if success
-            js[end] = j_new
-            push!(hashes[end], rhash(next))
-
-            f!(k, next, assembly_system)
-
-            if k ≃ v
-                if rejecting
-                    reject_val = rejector(next, assembly_system)
-                    # 0: dont reject, 1: reject post, 2: reject pre, 3: break immediately
-                    reject_val == 2 && continue
-                end
-                if reducing
-                    reduce_val = reduce_op(reduce_val, reducer(next, assembly_system))
-                end
-                if aggregating
-                    aggregate, agr_val = aggregator(next, assembly_system)
-                    aggregate && push!(aggregate_val, agr_val)
-                end
-
-                n_strs += 1
-                depth += 1
-                if depth > lowest_depth
-                    lowest_depth = depth
-                end
-
-                if rejecting
-                    if reject_val == 1
-                        depth -= 1
-                        continue
-                    elseif reject_val == 3
-                        break_triggered = true
-                        break
-                    end
-                end
-
-                if n_strs >= max_strs
-                    break_triggered = true
-                    break
-                end
-
-                if depth == max_depth
-                    depth -= 1
-                    continue
-                end
-
-                copy!(v, next)
-                push!(js, 1)
-                push!(hashes, HashType[])
-            end
-
-            continue
-        end
-
-        if depth > 0
-            f!(k, v, assembly_system)    # TODO could speed this up by storing structures
-            copy!(v, k)
-
-            depth -= 1
-
-            pop!(js)
-            pop!(hashes)
-        else
-            break
-        end
-    end
-
-    return (n_strs, lowest_depth), (reduce_val, aggregate_val, break_triggered)
-end
-
-function polyenum(assembly_system::AssemblySystem{D,T,F,G};
-                  max_size=nothing, max_strs=nothing,
-                  reducer::FnorNothing=nothing,
-                  reduce_op::FnorNothing=Base.:+,
-                  aggregator::FnorNothing=nothing,
-                  rejector::FnorNothing=nothing) where {D,T,F,G}
     v₀ = Polyform{D,T,F}()
-    max_size = isnothing(max_size) ? 0 : max_size
-    max_strs = isnothing(max_strs) ? 0 : max_strs
+    aux = HashType[]
+    rsys = RSSystem(ls, adj, v₀; compare=is_isomorphic, aux)
 
-    out_base, out_vals = polyrs(v₀, assembly_system, reducer, reduce_op, aggregator, rejector, max_size, max_strs)
-    if isnothing(reducer) && isnothing(aggregator) && isnothing(rejector)
-        return out_base
-    else
-        return out_base, out_vals
-    end
+    frs = isnothing(f) ? nothing : (v, depth, args...)->f(v, size(v), args...)
+    _, nv, maxdepth = reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs+1, kwargs...)
+    return nv-1, maxdepth
 end
+polyenum(assembly_system::AssemblySystem; kwargs...) = polyenum(nothing, assembly_system; kwargs...)
 
 
-function polygen(callback::Function, assembly_system::AssemblySystem{D,T,F,G};
-                      max_size=Inf, max_strs=Inf) where {D,T,F,G}
-    bblocks = buildingblocks(assembly_system)
+"""
+    polygen([f::Function], assembly_system::AssemblySystem{D,T,F,G}; maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
 
-    values = [callback(bblock) for bblock in bblocks]
+Generate all structures (polyforms) allowed by `assembly_system` using a brute force enumeration, and remove duplicates by comparing the graph
+hashes of structure anatomies. This function may be faster than `polyenum` for small enumerations, but requires much more memory. Structures are 
+generated up to size `maxsize`, and the enumeration terminates after `maxstrs` structures have been generated. Use the function `f` to impose additional 
+constraints that the generated structures must satisfy.
+
+`f(s)` must take as inputs a structure `s` and must return one of three signals:
+
+- `ACCEPT` (or `true`): `s` is added to the list of structures and the enumeration continues as normal.
+- `REJECT` (or `false`): `s` is not added to the list of structures and the offspring of `s` will not be generated.
+- `BREAK`: `s` is not added to the list of structures and the enumeration terminates immediately.
+
+To ensure well-defined behavior, the function `f` may not accept offspring of structures that it rejects.
+
+Return value is a list of all generated structures.
+"""
+function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
+    strs = [bblock for bblock in buildingblocks(assembly_system) if f(bblock, 1) == ReverseSearch.ACCEPT]
     hashes = Set{HashType}()
     queue = Queue{Polyform{D,T,F}}()
 
-    for bblock in bblocks
+    for bblock in strs
         hashval = rhash(bblock)
         enqueue!(queue, bblock)
         push!(hashes, hashval)
     end
 
     u = Polyform{D,T,F}()
-    n_strs = length(bblocks)
+    nstrs = length(strs)
 
-    while !isempty(queue) && n_strs < max_strs
+    while !isempty(queue) && nstrs < maxstrs
         v = dequeue!(queue)
         n = size(v)
-        if n >= max_size
+        if n >= maxsize
             continue
         end
 
@@ -199,14 +114,19 @@ function polygen(callback::Function, assembly_system::AssemblySystem{D,T,F,G};
             hashval = rhash(u)
 
             if success && (hashval ∉ hashes)
-                next = copy(u)
-            
-                push!(values, callback(next))
                 push!(hashes, hashval)
-                enqueue!(queue, next)
-                
-                n_strs += 1
-                n_strs == max_strs && break
+                next = copy(u)
+                depth = size(next)
+
+                signal = f(next, depth)
+                if signal == ReverseSearch.ACCEPT
+                    push!(strs, next)
+                    enqueue!(queue, next)
+                    nstrs += 1
+                end
+                if nstrs == maxstrs || signal == ReverseSearch.BREAK
+                    break
+                end
             end
 
             j += 1
@@ -214,8 +134,8 @@ function polygen(callback::Function, assembly_system::AssemblySystem{D,T,F,G};
         end
     end
 
-    return values
+    return strs
 end
 function polygen(assembly_system::AssemblySystem; kwargs...)
-    return polygen(identity, assembly_system; kwargs...)
+    return polygen((_,__)->ReverseSearch.ACCEPT, assembly_system; kwargs...)
 end

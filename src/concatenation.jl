@@ -35,7 +35,7 @@ function attach_monomer!(p::Polyform{D,T,F}, v::Integer, partner_label::Integer,
     !success && return false
 
     append!(p.bond_partners, zeros(T, nvertices(bblock)))
-    NautyGraphs.blockdiag!(p.anatomy, bblock.anatomy)
+    blockdiag!(p.anatomy, bblock.anatomy)
     for edge in new_edges
         vi, vj = edge.src, edge.dst
         vj += nvp
@@ -79,7 +79,7 @@ end
 
 function find_bonds(p1::Polyform, p2::Polyform, assembly_system::AssemblySystem; xs1=nothing, ψs1=nothing, xs2=nothing, ψs2=nothing, ignore_parts1=nothing, ignore_parts2=nothing)
     geoms = geometries(assembly_system)
-    intmat = interaction_matrix(assembly_system)
+    intmat = interactionmatrix(assembly_system)
     spcs1 = species(p1)
     spcs2 = species(p2)
     
@@ -192,7 +192,6 @@ function lower!(p::Polyform, assembly_system::AssemblySystem)
     @views p.bond_partners .-= vertex_shift.(p.bond_partners)
 
     rem_vertices!(p.anatomy, del_vs)
-
     deleteat!(p.canonical_order, del_vs)
     canonize!(p)
     return true

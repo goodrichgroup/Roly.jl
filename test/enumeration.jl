@@ -46,7 +46,7 @@
         [1 1 1 3;
          1 2 1 4], 
          UnitSquareGeometry, 
-         ones(4))
+         [ones(4)])
 
     # Number of one-sided polyminoes (https://oeis.org/A000988) [starting from 1]
     n_polyminoes = [1, 1, 2, 7, 18, 60, 196, 704, 2500]
@@ -57,7 +57,7 @@
              1 2 1 2;
              1 3 1 3], 
              UnitTriangleGeometry, 
-             ones(3))
+             [ones(3)])
     
     # Number of one-sided polyiamonds (https://oeis.org/A006534)
     n_polyiamonds = [1, 1, 1, 4, 6, 19, 43, 120, 307, 866]
@@ -69,23 +69,23 @@
          1 3 1 3;
          1 4 1 4;
          1 5 1 5;
-         1 6 1 6], UnitCubeGeometry, ones(Int, 24))
+         1 6 1 6], UnitCubeGeometry, [ones(Int, 24)])
 
     # Number of one-sided polycubes (https://oeis.org/A006534)
     n_polycubes = [1, 1, 2, 8, 29, 166, 1023]
     n_polycubes_cumulative = cumsum(n_polycubes)
 
-    nstrs_polymino_enum = [polyenum(I_polymino, max_size=i)[1] for i in 1:length(n_polyminoes_cumulative)]
-    nstrs_polyiamond_enum = [polyenum(I_polyiamond, max_size=i)[1] for i in 1:length(n_polyiamonds_cumulative)]
-    nstrs_polycube_enum = [polyenum(I_polycube, max_size=i)[1] for i in 1:length(n_polycubes_cumulative)]
+    nstrs_polymino_enum = [polyenum(I_polymino, maxsize=i)[1] for i in 1:length(n_polyminoes_cumulative)]
+    nstrs_polyiamond_enum = [polyenum(I_polyiamond, maxsize=i)[1] for i in 1:length(n_polyiamonds_cumulative)]
+    nstrs_polycube_enum = [polyenum(I_polycube, maxsize=i)[1] for i in 1:length(n_polycubes_cumulative)]
 
     @test nstrs_polymino_enum == n_polyminoes_cumulative
     @test nstrs_polyiamond_enum == n_polyiamonds_cumulative
     @test nstrs_polycube_enum == n_polycubes_cumulative
 
-    nstrs_polymino_gen = [length(polygen(I_polymino, max_size=i)) for i in 1:length(n_polyminoes_cumulative)]
-    nstrs_polyiamond_gen = [length(polygen(I_polyiamond, max_size=i)) for i in 1:length(n_polyiamonds_cumulative)]
-    nstrs_polycube_gen = [length(polygen(I_polycube, max_size=i)) for i in 1:length(n_polycubes_cumulative)]
+    nstrs_polymino_gen = [length(polygen(I_polymino, maxsize=i)) for i in 1:length(n_polyminoes_cumulative)]
+    nstrs_polyiamond_gen = [length(polygen(I_polyiamond, maxsize=i)) for i in 1:length(n_polyiamonds_cumulative)]
+    nstrs_polycube_gen = [length(polygen(I_polycube, maxsize=i)) for i in 1:length(n_polycubes_cumulative)]
 
     @test nstrs_polymino_gen == n_polyminoes_cumulative
     @test nstrs_polyiamond_gen == n_polyiamonds_cumulative

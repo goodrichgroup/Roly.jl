@@ -12,6 +12,7 @@ Base.:*(ai::Angle{F}, aj::Angle) where {F} = Angle{F}(ai.θ + aj.θ)
 Base.inv(a::Angle{F}) where {F} = Angle{F}(-a.θ)
 Base.convert(::Type{Angle{F}}, a::Real) where {F} = Angle{F}(a)
 Base.convert(::Type{Angle{F}}, a::Angle) where {F} = Angle{F}(a.θ)
+value(a::Angle) = (a.θ,)
 
 struct Quaternion{F} <: RotationOperator{F}
     w::F
@@ -28,6 +29,7 @@ Base.:(==)(a::Quaternion, b::Quaternion) = a.w == b.w && a.x == b.x && a.y == b.
 Base.isapprox(a::Quaternion, b::Quaternion; kwargs...) = isapprox(a.w, b.w; kwargs...) && isapprox(a.x, b.x; kwargs...) && isapprox(a.y, b.y; kwargs...) && isapprox(a.z, b.z; kwargs...)
 Base.inv(q::Quaternion) = Quaternion(q.w, -q.x, -q.y, -q.z)
 LinearAlgebra.norm(q::Quaternion) = sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
+value(q::Quaternion) = (q.w, q.x, q.y, q.z)
 
 function Base.:*(qi::Quaternion, qj::Quaternion)
     a, b, c, d = qi.w, qi.x, qi.y, qi.z
@@ -44,18 +46,18 @@ Base.:/(q::Quaternion, α::Real) = inv(α) * q
 
 normalized(q::Quaternion) = inv(norm(q)) * q
 
-function rotate(x::Point{2,F}, ϕ::Angle{F}) where {F}
-    c, s = cospi(ϕ.θ), sinpi(ϕ.θ) #TODO: maybe refactor this into a method
+function rotate(x, ϕ::Angle{F}) where {F}
+    s, c = sincospi(ϕ.θ)
     return Point{2,F}(c * x[1] - s * x[2], s * x[1] + c * x[2])
 end
-function rotate(x::Point{3,F}, ϕ::Quaternion{F}) where {F}
+function rotate(x, ϕ::Quaternion{F}) where {F}
     xq = Quaternion(0, x[1], x[2], x[3])
     xq = ϕ * xq * inv(ϕ)
     return Point{3,F}(xq.x, xq.y, xq.z)
 end
 
 function rotate!(xs::AbstractVector{<:Point{2,F}}, ϕ::Angle{F}) where {F}
-    c, s = cospi(ϕ.θ), sinpi(ϕ.θ)
+    s, c = sincospi(ϕ.θ)
     for i in eachindex(xs)
         x, y = xs[i]
         xs[i] = Point{2,F}(c * x - s * y, s * x + c * y)
