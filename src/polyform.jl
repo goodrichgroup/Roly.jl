@@ -95,12 +95,14 @@ function create_monomer(geometry::AbstractGeometry{T,F},
     else
         error("Polyforms are only implemented for dimension 2 and 3.")
     end
+    anatomy = NautyDiGraph(geometry.anatomy)
+    anatomy.labels .= convert(Vector{T}, face_labels)
 
-    return Polyform(NautyDiGraph(geometry.anatomy, convert(Vector{T}, face_labels)),
-                                 zeros(T, nvertices(geometry)),
-                                 convert(Vector{T}, 1:nvertices(geometry)),
-                                 [T(species_idx)],
-                                 xs, ψs)
+    return Polyform(anatomy,
+                    zeros(T, nvertices(geometry)),
+                    convert(Vector{T}, 1:nvertices(geometry)),
+                    [T(species_idx)],
+                    xs, ψs)
 end
 
 function particle2vertex(p::Polyform, assembly_system, particle::Integer, site::Integer)

@@ -85,7 +85,7 @@ To ensure well-defined behavior, the function `f` may not accept offspring of st
 Return value is a list of all generated structures.
 """
 function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=Inf, maxstrs=Inf) where {D,T,F,G}
-    strs = [bblock for bblock in buildingblocks(assembly_system) if f(bblock) == ReverseSearch.ACCEPT]
+    strs = [bblock for bblock in buildingblocks(assembly_system) if f(bblock, 1) == ReverseSearch.ACCEPT]
     hashes = Set{HashType}()
     queue = Queue{Polyform{D,T,F}}()
 
@@ -118,7 +118,7 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
                 next = copy(u)
                 depth = size(next)
 
-                signal = f(next)
+                signal = f(next, depth)
                 if signal == ReverseSearch.ACCEPT
                     push!(strs, next)
                     enqueue!(queue, next)
@@ -137,5 +137,5 @@ function polygen(f::Function, assembly_system::AssemblySystem{D,T,F,G}; maxsize=
     return strs
 end
 function polygen(assembly_system::AssemblySystem; kwargs...)
-    return polygen(_->ReverseSearch.ACCEPT, assembly_system; kwargs...)
+    return polygen((_,__)->ReverseSearch.ACCEPT, assembly_system; kwargs...)
 end

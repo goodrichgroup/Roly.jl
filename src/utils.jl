@@ -5,11 +5,14 @@ function are_bridge(g::AbstractNautyGraph, vs::AbstractVector{<:Integer})
     neighs = zeros(Bool, nv(g))
     buffer = zeros(Int, nv(g))
 
+    # for v in vs
+    #     k = NautyGraphs.outneighbors!(buffer, g, v)
+    #     for neigh in @view buffer[1:k]
+    #         neighs[neigh] = true
+    #     end
+    # end
     for v in vs
-        k = NautyGraphs.outneighbors!(buffer, g, v)
-        for neigh in @view buffer[1:k]
-            neighs[neigh] = true
-        end
+        neighs .|= NautyGraphs.adjrow(g, v)
     end
     neighs[vs] .= false
 
@@ -26,7 +29,7 @@ function vertices_connected(g::NautyDiGraph, v0::Integer,
     targets::AbstractVector{<:Integer}, forbidden::AbstractVector{<:Integer})
 
     n = nv(g)
-    neighs = zeros(Int, n)
+    # neighs = zeros(Int, n)
     explored = zeros(Bool, n)
     
     queue = zeros(Cint, n)
@@ -38,8 +41,8 @@ function vertices_connected(g::NautyDiGraph, v0::Integer,
     while q_end > q_start
         v = queue[q_start]
         q_start += 1
-        n_neighs = NautyGraphs.outneighbors!(neighs, g, v)
-        for neigh in @view neighs[1:n_neighs]
+        # n_neighs = NautyGraphs.outneighbors!(neighs, g, v)
+        for neigh in outneighbors(g, v)
             if forbidden[neigh]
                 continue
             end
@@ -170,4 +173,14 @@ function complete_path!(path, g, w, neighs=nothing)
     end
 
     return path
+end
+
+
+function blockdiag!(g::AbstractNautyGraph, h::AbstractNautyGraph)
+    ng, nh = nv(g), nv(h)
+    add_vertices!(g, nh; vertex_labels=labels(h))
+    for e in edges(h)
+        add_edge!(g, e.src+ng, e.dst+ng)
+    end
+    return g
 end

@@ -34,18 +34,15 @@ function AssemblySystem(bindingrules::AbstractMatrix, geometries::Vector{<:Abstr
     @assert all(ds .== D)
 
     n_species = length(geometries)
-    sites = [nsites(geom) for geom in geometries]
+    sites = [sum(vertices_per_site(geom)) for geom in geometries]
 
     monomers = Polyform{D,T,F}[]
     sites_sum = cumsum(sites)
     last_label = 0
 
     for i in 1:n_species
-        if isnothing(face_labels)
-            face_labels = collect(1:sites[i])
-        end
-
-        fl = convert(Vector{T}, face_labels .+ last_label)
+        ls = isnothing(face_labels) ? collect(1:sites[i]) : face_labels[i]
+        fl = convert(Vector{T}, ls .+ last_label)
         m = create_monomer(geometries[i], T(i), fl)
         push!(monomers, m)
 
@@ -114,15 +111,15 @@ function anatomy(asys::AssemblySystem)
         i += n
     end
 
-    vertex_colors = [zeros(Cint,n_sites); ones(Cint, n_edges)]
+    vertex_labels = [zeros(Cint,n_sites); ones(Cint, n_edges)]
 
-    anatomy = NautyDiGraph(A, vertex_colors)
+    anatomy = NautyDiGraph(A; vertex_labels)
     return anatomy
 end
 
 function rhash(asys::AssemblySystem)
     a = anatomy(asys)
-    a_prime = NautyDiGraph(adjacency_matrix(a)', a.labels)
+    a_prime = NautyDiGraph(adjacency_matrix(a)'; vertex_labels=labels(a))
     return hash(sort([ghash(a), ghash(a_prime)]))
 end
 

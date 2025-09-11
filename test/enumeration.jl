@@ -46,7 +46,7 @@
         [1 1 1 3;
          1 2 1 4], 
          UnitSquareGeometry, 
-         ones(4))
+         [ones(4)])
 
     # Number of one-sided polyminoes (https://oeis.org/A000988) [starting from 1]
     n_polyminoes = [1, 1, 2, 7, 18, 60, 196, 704, 2500]
@@ -57,7 +57,7 @@
              1 2 1 2;
              1 3 1 3], 
              UnitTriangleGeometry, 
-             ones(3))
+             [ones(3)])
     
     # Number of one-sided polyiamonds (https://oeis.org/A006534)
     n_polyiamonds = [1, 1, 1, 4, 6, 19, 43, 120, 307, 866]
@@ -69,7 +69,7 @@
          1 3 1 3;
          1 4 1 4;
          1 5 1 5;
-         1 6 1 6], UnitCubeGeometry, ones(Int, 24))
+         1 6 1 6], UnitCubeGeometry, [ones(Int, 24)])
 
     # Number of one-sided polycubes (https://oeis.org/A006534)
     n_polycubes = [1, 1, 2, 8, 29, 166, 1023]

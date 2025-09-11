@@ -3,9 +3,7 @@ module Roly
 using LinearAlgebra, StaticArrays, SparseArrays
 using Base.Iterators, DataStructures
 using Graphs, NautyGraphs
-
-include("ReverseSearch/ReverseSearch.jl")
-using .ReverseSearch
+using ReverseSearch
 
 export ACCEPT, REJECT, BREAK
 export polyenum, polygen

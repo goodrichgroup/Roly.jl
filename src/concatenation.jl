@@ -35,7 +35,7 @@ function attach_monomer!(p::Polyform{D,T,F}, v::Integer, partner_label::Integer,
     !success && return false
 
     append!(p.bond_partners, zeros(T, nvertices(bblock)))
-    NautyGraphs.blockdiag!(p.anatomy, bblock.anatomy)
+    blockdiag!(p.anatomy, bblock.anatomy)
     for edge in new_edges
         vi, vj = edge.src, edge.dst
         vj += nvp
@@ -192,7 +192,6 @@ function lower!(p::Polyform, assembly_system::AssemblySystem)
     @views p.bond_partners .-= vertex_shift.(p.bond_partners)
 
     rem_vertices!(p.anatomy, del_vs)
-
     deleteat!(p.canonical_order, del_vs)
     canonize!(p)
     return true
