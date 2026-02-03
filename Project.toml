@@ -1,10 +1,9 @@
 name = "Roly"
 uuid = "1621a601-f9d4-49dc-b032-1328811fec3a"
-authors = ["Maximilian HUEBL <maximilian.huebl@ist.ac.at>"]
 version = "0.1.0"
+authors = ["Maximilian HUEBL <maximilian.huebl@ist.ac.at>"]
 
 [deps]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -16,7 +15,6 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
-BenchmarkTools = "1.6.0"
 DataStructures = "0.18"
 Graphs = "1.9"
 LinearAlgebra = "1"
