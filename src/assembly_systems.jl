@@ -66,6 +66,11 @@ function label2spcssite(label::Integer, assembly_system::AssemblySystem)
     return irg_unflatten(label, assembly_system._sites_sum)
 end
 
+function isinert(spcs::Integer, site::Integer, assembly_system::AssemblySystem)
+    l = spcssite2label(spcs, site, assembly_system)
+    return !any(interactionmatrix(assembly_system)[l, :])
+end
+
 function instantiate_interactionmatrix(interactions::AbstractMatrix{<:Integer}, sites)
     n_sites = sum(sites; init=0)
     sites_sum = cumsum(sites)
