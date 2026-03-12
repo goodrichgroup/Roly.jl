@@ -79,7 +79,7 @@ end
 
 function find_bonds(p1::Polyform, p2::Polyform, assembly_system::AssemblySystem; xs1=nothing, ψs1=nothing, xs2=nothing, ψs2=nothing, ignore_parts1=nothing, ignore_parts2=nothing)
     geoms = geometries(assembly_system)
-    intmat = interactionmatrix(assembly_system)
+    intmat = intmat(assembly_system)
     spcs1 = species(p1)
     spcs2 = species(p2)
     

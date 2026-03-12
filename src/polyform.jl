@@ -1,3 +1,16 @@
+"""
+    Polyform{D,T,F} where {D,T,F}
+
+`Polyform` is a struct containing all information required to instantiate a
+polyform, which here is defined as an aggregate of building blocks that are connected
+(bound) together at various binding sites. In a self-assembly context, a "polyform" is
+often referred to a "self-assembled structure".
+"""
+# Ideal layout:
+# anatomy::NautyDiGraph
+# species::Vector{T} # can this be cut?
+#  σ::T
+# aux::A
 mutable struct Polyform{D,T<:Integer,F<:AbstractFloat,R<:RotationOperator{F}}
     anatomy::NautyDiGraph
     bond_partners::Vector{T}
@@ -16,6 +29,7 @@ mutable struct Polyform{D,T<:Integer,F<:AbstractFloat,R<:RotationOperator{F}}
         end
     end
 end
+
 function Polyform{D,T,F}(anatomy, bond_status, canonical_order, species, xs, ψs) where {D,T,F}
     p = Polyform{D,T,F}(anatomy, bond_status, canonical_order, species, xs, ψs, 0)
     canonize!(p)

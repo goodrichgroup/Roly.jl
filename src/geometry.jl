@@ -1,107 +1,88 @@
-abstract type AbstractGeometry{T<:Integer,F<:AbstractFloat} end
-nsites(geom::AbstractGeometry) = length(geom.xs)
-vertices_per_site(geom::AbstractGeometry) = geom.site_vertices
-nvertices(geom::AbstractGeometry) = sum(vertices_per_site(geom))
+abstract type AbstractGeometry{F<:AbstractFloat} end
 
-struct PolygonGeometry{T<:Integer,F<:AbstractFloat} <: AbstractGeometry{T,F}
-    xs::Vector{Point{2,F}}                  # Displacement vectors from the center to the binding sites
-    θs_ref::Vector{Angle{F}}                # Rotation necessary to rotate side i into reference position
-    Δθs::Vector{Angle{F}}                   # Rotation to be applied to the added particle (assumed to be in reference orientation) once attached to side i 
+struct PolygonGeometry{F<:AbstractFloat} <: AbstractGeometry{F}
     corners::Vector{Point{2,F}}             # Corners of the Polygon used for overlap checking
-    anatomy::NautyDiGraph
-    site_vertices::Vector{T}
-    R_min::F
-    R_max::F
-
-    function PolygonGeometry(n::T, a::F) where {T,F}
-        r_in = convert(F, 0.5a * cot(π / n))
-        r_out = convert(F, 0.5a * csc(π / n))
-
-        θs_ref = [Angle{F}(2/n * i) for i in 0:(n-1)]
-        Δθs = [Angle{F}(1 - 2/n*i) for i in 0:(n-1)]
-
-        rs = r_in * ones(F, n)
-        corners = [convert.(F, r_out * [cos(π * (θ.θ + 1/n)), sin(π * (θ.θ + 1/n))]) for θ in θs_ref] #TODO: clean up the θ.θ
-
-        xs = [SVector{2,F}(pol2cart(r, -θ.θ - 1/2)) for (r, θ) in zip(rs, θs_ref)]
-        anatomy = NautyDiGraph(cycle_digraph(n))
-        site_vertices = fill(one(T), n)
-
-        R_min = minimum(norm.(xs))
-        R_max = maximum(norm.(corners))
-
-        return new{T,F}(xs, θs_ref, Δθs, corners, anatomy, site_vertices, R_min, R_max)
-    end
+    Rmin::F
+    Rmax::F
 end
-
-const UnitTriangleGeometry = PolygonGeometry(DefInt(3), DefFloat(1.0))
-const UnitSquareGeometry = PolygonGeometry(DefInt(4), DefFloat(1.0))
-const UnitPentagonGeometry = PolygonGeometry(DefInt(5), DefFloat(1.0))
-const UnitHexagonGeometry = PolygonGeometry(DefInt(6), DefFloat(1.0))
-
-
-struct PolyhedronGeometry{T,F<:AbstractFloat} <: AbstractGeometry{T,F}
-    xs::Vector{Point{3,F}}                # Displacement vectors from the center to the binding sites
-    θs_ref::Vector{Quaternion{F}}         # Rotation necessary to rotate side i into reference position   
-    Δθs::Vector{Quaternion{F}}            # Rotation to be applied to the added particle (assumed to be in reference orientation) once attached to side i 
-    corners::Vector{Point{3,F}}
-    anatomy::NautyDiGraph                 # Oriented graph of the dual polyhedron associated with the bb symmetry group
-    site_vertices::Vector{T}
-    R_min::F
-    R_max::F
-
-    function PolyhedronGeometry{T}(shape::Symbol, a::F) where {T,F}
-        if shape == :cube
-            xs = a * [Point{3,F}(1, 0, 0),
-                      Point{3,F}(0, 0, -1),
-                      Point{3,F}(0, 1, 0),
-                      Point{3,F}(0, 0, 1),
-                      Point{3,F}(0, -1, 0),
-                      Point{3,F}(-1, 0, 0)]
-
-            corners = vec([a * SVector(i, j, k) for i in F[-1, 1], j in F[-1, 1], k in F[-1, 1]])
-            θs_ref = [Quaternion{F}(1, 0, 0, 0),
-                      inv(√2) * Quaternion{F}(1, 0, -1, 0),
-                      inv(√2) * Quaternion{F}(1, 0, 0, -1),
-                      inv(√2) * Quaternion{F}(1, 0, 1, 0),
-                      inv(√2) * Quaternion{F}(1, 0, 0, 1),
-                      Quaternion{F}(0, 0, 0, 1)]
-            Δθs = [Quaternion{F}(0, 0, 0, 1),
-                   Quaternion{F}(0, 0, 0, 1) * (inv(√2) * Quaternion{F}(1, 0, -1, 0)),
-                   inv(√2) * Quaternion{F}(1, 0, 0, -1),
-                   Quaternion{F}(0, 0, 0, 1) * (inv(√2) * Quaternion{F}(1, 0, 1, 0)),
-                   inv(√2) * Quaternion{F}(1, 0, 0, 1),
-                   Quaternion{F}(1, 0, 0, 0)]
-
-            g0 = sparse([0 1 0 0;
-                         0 0 1 0;
-                         0 0 0 1;
-                         1 0 0 0])
-            G = blockdiag(g0, g0, g0, g0, g0, g0)
-            edges = [1, 7], [2, 20], [3, 13], [4, 10], [5, 21], [6, 17], 
-            [8, 9], [11, 16], [12, 22], [14, 19], [15, 23], [18, 24]
-            for e in edges
-                i, j = e
-                G[i, j] = G[j, i] = 1
-            end
-            anatomy = NautyDiGraph(G)
-            site_vertices = fill(T(4), 6)
-
-            R_min = minimum(norm.(xs))
-            R_max = maximum(norm.(corners))
-        else
-            error("Shape $shape not supported.")
-        end
-        
-        return new{T,F}(xs, θs_ref, Δθs, corners, anatomy, site_vertices, R_min, R_max)
-    end
+function PolygonGeometry(n::Integer, a::F) where {F}
+    Rmin = convert(F, 0.5a * cot(π / n))
+    Rmax = convert(F, 0.5a * csc(π / n))
+    θs = [2/n * i for i in 0:(n-1)]
+    corners = [convert.(F, Rmax * [cos(π * (θ + 1/n)), sin(π * (θ + 1/n))]) for θ in θs]
+    return PolygonGeometry{F}(corners, Rmin, Rmax)
 end
-
-const UnitCubeGeometry = PolyhedronGeometry{DefInt}(:cube, DefFloat(1.))
-#TODO Implement basic 3d shapes: Platonic solids and polygon extrusions
+Base.show(io::Core.IO, geom::PolygonGeometry) = print(io, "$(dimension(geom))d PolygonGeometry with $(ncorners(geom)) vertices")
 
 dimension(::PolygonGeometry) = 2
-dimension(::PolyhedronGeometry) = 3
+ncorners(geom::PolygonGeometry) = length(geom.corners)
+
+function Base.copy(geom::PolygonGeometry)
+    return PolygonGeometry(copy(geom.corners), geom.Rmin, geom.Rmax)
+end
+
+
+# struct PolyhedronGeometry{F<:AbstractFloat} <: AbstractGeometry{F}
+#     xs::Vector{Point{3,F}}                # Displacement vectors from the center to the binding sites
+#     θs_ref::Vector{Quaternion{F}}         # Rotation necessary to rotate side i into reference position   
+#     Δθs::Vector{Quaternion{F}}            # Rotation to be applied to the added particle (assumed to be in reference orientation) once attached to side i 
+#     corners::Vector{Point{3,F}}
+#     anatomy::NautyDiGraph                 # Oriented graph of the dual polyhedron associated with the bb symmetry group
+#     site_vertices::Vector{T}
+#     R_min::F
+#     R_max::F
+
+#     function PolyhedronGeometry{T}(shape::Symbol, a::F) where {T,F}
+#         if shape == :cube
+#             xs = a * [Point{3,F}(1, 0, 0),
+#                       Point{3,F}(0, 0, -1),
+#                       Point{3,F}(0, 1, 0),
+#                       Point{3,F}(0, 0, 1),
+#                       Point{3,F}(0, -1, 0),
+#                       Point{3,F}(-1, 0, 0)]
+
+#             corners = vec([a * SVector(i, j, k) for i in F[-1, 1], j in F[-1, 1], k in F[-1, 1]])
+#             θs_ref = [Quaternion{F}(1, 0, 0, 0),
+#                       inv(√2) * Quaternion{F}(1, 0, -1, 0),
+#                       inv(√2) * Quaternion{F}(1, 0, 0, -1),
+#                       inv(√2) * Quaternion{F}(1, 0, 1, 0),
+#                       inv(√2) * Quaternion{F}(1, 0, 0, 1),
+#                       Quaternion{F}(0, 0, 0, 1)]
+#             Δθs = [Quaternion{F}(0, 0, 0, 1),
+#                    Quaternion{F}(0, 0, 0, 1) * (inv(√2) * Quaternion{F}(1, 0, -1, 0)),
+#                    inv(√2) * Quaternion{F}(1, 0, 0, -1),
+#                    Quaternion{F}(0, 0, 0, 1) * (inv(√2) * Quaternion{F}(1, 0, 1, 0)),
+#                    inv(√2) * Quaternion{F}(1, 0, 0, 1),
+#                    Quaternion{F}(1, 0, 0, 0)]
+
+#             g0 = sparse([0 1 0 0;
+#                          0 0 1 0;
+#                          0 0 0 1;
+#                          1 0 0 0])
+#             G = blockdiag(g0, g0, g0, g0, g0, g0)
+#             edges = [1, 7], [2, 20], [3, 13], [4, 10], [5, 21], [6, 17], 
+#             [8, 9], [11, 16], [12, 22], [14, 19], [15, 23], [18, 24]
+#             for e in edges
+#                 i, j = e
+#                 G[i, j] = G[j, i] = 1
+#             end
+#             anatomy = NautyDiGraph(G)
+#             site_vertices = fill(T(4), 6)
+
+#             R_min = minimum(norm.(xs))
+#             R_max = maximum(norm.(corners))
+#         else
+#             error("Shape $shape not supported.")
+#         end
+        
+#         return new{T,F}(xs, θs_ref, Δθs, corners, anatomy, site_vertices, R_min, R_max)
+#     end
+# end
+
+# const UnitCubeGeometry = PolyhedronGeometry{DefInt}(:cube, DefFloat(1.))
+# #TODO Implement basic 3d shapes: Platonic solids and polygon extrusions
+
+# dimension(::PolyhedronGeometry) = 3
 
 function attachment_offset(site_i::Integer, site_j::Integer,
                            geom_i::AbstractGeometry,
