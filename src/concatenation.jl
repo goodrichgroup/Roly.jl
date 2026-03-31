@@ -22,19 +22,19 @@ function get_sitepos(p::Polyform, assembly_system, v)
     return p.xs[particle] + rotate(geom.xs[side], p.ψs[particle])
 end
 
-function attach_monomer!(p::Polyform{D,T,F}, v::Integer, partner_label::Integer, assembly_system::AssemblySystem, canonize::Bool=false) where {D,T,F}
-    p.bond_partners[v] != 0 && return false
-
+function attach_buildingblock!(p::Polyform{D}, v::Integer, attached_sitelabel::Integer; canonize::Bool=false) where {D}
+    !iszero(p.bonds[v]) && return false
+    sys = assemblysystem(p)
     nvp = nvertices(p)
-    spcs2, site2 = label2spcssite(partner_label, assembly_system)
-    bblock = buildingblocks(assembly_system)[spcs2]
-    v2 = particle2vertex(bblock, assembly_system, 1, site2)
 
-    xs2, ψs2 = get_attached_coordinates(p, bblock, assembly_system, v, v2)
+    bbspcs, bbsite = label2siteloc(sys, attached_sitelabel)
+    bblock = buildingblocks(sys)[bbspcs]
+
+    bbxs, bbψs = attached_coordinates(p, bblock, v, bbsite)
     success, new_edges = find_bonds(p, bblock, assembly_system; xs2=xs2, ψs2=ψs2)
     !success && return false
 
-    append!(p.bond_partners, zeros(T, nvertices(bblock)))
+    append!(p.bonds, zeros(T, nvertices(bblock)))
     blockdiag!(p.anatomy, bblock.anatomy)
     for edge in new_edges
         vi, vj = edge.src, edge.dst
@@ -42,13 +42,12 @@ function attach_monomer!(p::Polyform{D,T,F}, v::Integer, partner_label::Integer,
 
         add_edge!(p.anatomy, vi, vj)
         add_edge!(p.anatomy, vj, vi)
-        p.bond_partners[vi] = vj
-        p.bond_partners[vj] = vi
+        p.bonds[vi] = vj
+        p.bonds[vj] = vi
     end
 
     append!(p.xs, xs2)
     append!(p.ψs, ψs2)
-    append!(p.species, spcs2)
     resize!(p.canonical_order, nvp + nvertices(bblock))
 
     if canonize
@@ -60,24 +59,41 @@ function attach_monomer!(p::Polyform{D,T,F}, v::Integer, partner_label::Integer,
     return true
 end
 
-function get_attached_coordinates(p1::Polyform, p2::Polyform, assembly_system::AssemblySystem, v1, v2)
-    geoms = geometries(assembly_system)
-    spcs1 = species(p1)
-    spcs2 = species(p2)
+function attached_coordinates(p::Polyform, buildingblock::BuildingBlock, v, w)
+    #TODO this can probably just operate on coordinates directly, no need to pass polyforms/buildingblocks
+    x0 = positions(p)[v]
+    ψ0 = orientations(p)[v]
 
-    part1, site1 = vertex2particle(p1, assembly_system, v1)
-    part2, site2 = vertex2particle(p2, assembly_system, v2)
+    xs = copy(sites(buildingblock).xs)
+    Δx = xs[w] + x0
 
-    Δx, Δψ = attachment_offset(site1, site2, geoms[spcs1[part1]], geoms[spcs2[part2]])
-    Δx = p1.xs[part1] + rotate(Δx, p1.ψs[part1])
-    Δψ = Δψ * p1.ψs[part1]
+    ψs = copy(sites(buildingblock).ψs)
+    Δψ = inv(ψs[w]) * standard_offset(ψ0) * ψ0
 
-    xs2, ψs2 = copy(p2.xs), copy(p2.ψs)
-    grab!(xs2, ψs2, part2, Δx, Δψ)
-    return xs2, ψs2
+    xs .-= Ref(Δx)
+    xs .= Ref(Δψ) .* xs
+    ψs .*= Ref(Δψ)
+    return xs, ψs
 end
 
-function find_bonds(p1::Polyform, p2::Polyform, assembly_system::AssemblySystem; xs1=nothing, ψs1=nothing, xs2=nothing, ψs2=nothing, ignore_parts1=nothing, ignore_parts2=nothing)
+# function get_attached_coordinates(p1::Polyform, p2::Polyform, assembly_system::AssemblySystem, v1, v2)
+#     geoms = geometries(assembly_system)
+#     spcs1 = species(p1)
+#     spcs2 = species(p2)
+
+#     part1, site1 = vertex2particle(p1, assembly_system, v1)
+#     part2, site2 = vertex2particle(p2, assembly_system, v2)
+
+#     Δx, Δψ = attachment_offset(site1, site2, geoms[spcs1[part1]], geoms[spcs2[part2]])
+#     Δx = p1.xs[part1] + rotate(Δx, p1.ψs[part1])
+#     Δψ = Δψ * p1.ψs[part1]
+
+#     xs2, ψs2 = copy(p2.xs), copy(p2.ψs)
+#     grab!(xs2, ψs2, part2, Δx, Δψ)
+#     return xs2, ψs2
+# end
+
+function find_bonds(p1::Polyform, p2::Polyform; xs1=nothing, ψs1=nothing, xs2=nothing, ψs2=nothing, ignore_parts1=nothing, ignore_parts2=nothing)
     geoms = geometries(assembly_system)
     intmat = intmat(assembly_system)
     spcs1 = species(p1)

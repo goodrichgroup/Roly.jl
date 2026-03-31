@@ -1,7 +1,7 @@
 const BindingSiteLoc = NTuple{2,Int}
 
 """
-    AssemblySystem(bindingrules::AbstractMatrix, geometries::Vector{<:AbstractGeometry{T,F}}, face_labels=nothing) where {T,F}
+    AssemblySystem(bindingrules, buildingblocks)
 
 Defines an _assembly system_, consisting of a list of building blocks, their geometries, and their binding rules. The structures (polyforms)
 that satify the binding rules without any particle overlaps are the _allowed structures_ of an assembly system, and can be enumerated or 
@@ -22,8 +22,9 @@ mutable struct AssemblySystem{D,BB<:BuildingBlock}
     nspcs::Int
     nbonds::Int
     nsites::Int
-    _label2site::Vector{BindingSiteLoc}
-    _site2label::Dict{BindingSiteLoc,Int}
+    _idx2siteloc::Vector{BindingSiteLoc}
+    _siteloc2idx::Dict{BindingSiteLoc,Int}
+    _label2species::Dict{Int,Int}
     _bondlist::Vector{NTuple{2,Int}}
     _bonded_sites::Vector{NTuple{2,BindingSiteLoc}}
     _bonded_species::Vector{NTuple{2,Int}}
@@ -35,12 +36,12 @@ function AssemblySystem(bindingrules, buildingblocks::AbstractVector{BB}) where 
     end
 
     buildingblocks = _shift_sitelabels(buildingblocks)
-    label2site, site2label = _make_sitelabel_lookuptables(buildingblocks)
+    idx2siteloc, siteloc2idx, label2species = _make_lookuptables(buildingblocks)
 
-    nsites = length(site2label)
+    nsites = length(siteloc2idx)
     nspcs = length(buildingblocks)
 
-    intmat = _parse_intmat(bindingrules, site2label)
+    intmat = _parse_intmat(bindingrules, siteloc2idx)
     bondlist = map(findall(intmat)) do cartidx
         (cartidx[1], cartidx[2])
     end
@@ -50,18 +51,18 @@ function AssemblySystem(bindingrules, buildingblocks::AbstractVector{BB}) where 
     sort!(bondlist)
     bondedsites = map(bondlist) do bond
         a, b, = bond[1], bond[2]
-        sort((label2site[a], label2site[b]))
+        sort((idx2siteloc[a], idx2siteloc[b]))
     end
     bondedspecies = map(bondedsites) do ((spc1, _), (spc2, ))
         (spc1, spc2)
     end
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
-    return AssemblySystem{D,BB}(intmat, buildingblocks, nspcs, nbonds, nsites, label2site, site2label, bondlist, bondedsites, bondedspecies)
+    return AssemblySystem{D,BB}(intmat, buildingblocks, nspcs, nbonds, nsites, idx2siteloc, siteloc2idx, label2species, bondlist, bondedsites, bondedspecies)
 end
 function AssemblySystem(bindingrules, buildingblock::BuildingBlock)
-    n_species = maximum(interactions[:, [1, 3]])
-    buildingblocks = [buildingblock for _ in 1:n_species]
+    nspcs = _extract_nspecies(bindingrules)
+    buildingblocks = [buildingblock for _ in 1:nspcs]
     return AssemblySystem(bindingrules, buildingblocks)
 end
 
@@ -73,6 +74,15 @@ nbonds(sys::AssemblySystem) = sys.nbonds
 nsites(sys::AssemblySystem) = sys.nsites
 
 dimension(::AssemblySystem{D}) where {D} = D
+dimension(::Type{<:AssemblySystem{D}}) where {D} = D
+numtype(::AssemblySystem{D,BB}) where {D,BB} = numtype(BB)
+numtype(::Type{<:AssemblySystem{D,BB}}) where {D,BB} = numtype(BB)
+
+positiontype(::AssemblySystem{D,BB}) where {D,BB} = positiontype(BB)
+positiontype(::Type{<:AssemblySystem{D,BB}}) where {D,BB} = positiontype(BB)
+orientationtype(::AssemblySystem{D,BB}) where {D,BB} = orientationtype(BB)
+orientationtype(::Type{<:AssemblySystem{D,BB}}) where {D,BB} = orientationtype(BB)
+
 Base.size(sys::AssemblySystem) = sys.nspcs, sys.nbonds
 Base.size(sys::AssemblySystem, i) = i == 1 ? sys.nspcs : i == 2 ? sys.nbonds : 1
 
@@ -88,16 +98,19 @@ function bonded_species(sys::AssemblySystem)
     return sys._bonded_species
 end
 
-function site2label(sys::AssemblySystem, site::BindingSiteLoc)
-    return sys._site2label[site]
+function siteloc2index(sys::AssemblySystem, site::BindingSiteLoc)
+    return sys._siteloc2idx[site]
 end
-function label2site(sys::AssemblySystem, label::Integer)
-    return sys._label2site[label]
+function index2siteloc(sys::AssemblySystem, index::Integer)
+    return sys._idx2site[index]
+end
+function label2species(sys::AssemblySystem, label::Integer)
+    return sys._label2species[label]
 end
 
 function isinert(sys::AssemblySystem, site::BindingSiteLoc)
-    label = site2label(sys, site)
-    return !any(@view intmat(assembly_system)[label, :])
+    idx = siteloc2index(sys, site)
+    return !any(@view intmat(assembly_system)[:, idx])
 end
 
 function anatomy(sys::AssemblySystem)
@@ -138,37 +151,46 @@ function canonid(sys::AssemblySystem)
     return sort([canonical_id(a), canonical_id(a_prime)])
 end
 
+function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
+    _checkshape(bindingrules)
+    return maximum(bindingrules[:, [1, 3]])
+end
+
 function _shift_sitelabels(buildingblocks::AbstractVector{<:BuildingBlock})
     buildingblocks = [copy(bb) for bb in buildingblocks]
 
     l = 1
     for bb in buildingblocks
         labs = labels(bb.anatomy)
+        # TODO: make all nonidentical labels contiguous, ie. (1, 1, 3, 7) -> (1, 1, 2, 3)
         setlabels!(bb.anatomy, labs .- minimum(labs) .+ l)
         l = maximum(labels(bb.anatomy)) + 1
     end
     return buildingblocks
 end
-function _make_sitelabel_lookuptables(buildingblocks::AbstractVector{<:BuildingBlock})
-    label2site = BindingSiteLoc[]
-    site2label = Dict{BindingSiteLoc,Int}()
+function _make_lookuptables(buildingblocks::AbstractVector{<:BuildingBlock})
+    index2siteloc = BindingSiteLoc[]
+    siteloc2index = Dict{BindingSiteLoc,Int}()
+    label2species = Dict{Int,Int}()
 
     for (spcs, bb) in enumerate(buildingblocks)
-        for site in sites(bb)
+        for site in 1:nsites(bb)
             spcssite = (spcs, site)
-            push!(label2site, spcssite)
-            site2label[spcssite] = length(label2site)
+            push!(index2siteloc, spcssite)
+            siteloc2index[spcssite] = length(index2siteloc)
+        end
+        for l in labels(anatomy(bb))
+            label2species[l] = spcs
         end
     end
-    return label2site, site2label
+    return index2siteloc, siteloc2index, label2species
 end
 
 function _parse_intmat(bindingrules, site2label)
     return _intmat_from_bonds(bindingrules, site2label)
 end
 function _parse_intmat(bindingrules::AbstractMatrix{<:Integer}, site2label)
-    mustbe4 = size(bindingrules, 2)
-    mustbe4 != 4 && throw(ArgumentError("binding rules must be defined by a matrix of size (nbonds, 4)"))
+    _checkshape(bindingrules)
     return _intmat_from_bonds(eachrow(bindingrules), site2label)
 end
 function _intmat_from_bonds(bonds, site2label)
@@ -182,7 +204,16 @@ function _intmat_from_bonds(bonds, site2label)
     return Symmetric(intmat)
 end
 
-
+function _checkshape(bindingrules::AbstractMatrix{<:Integer})
+    mustbe4 = size(bindingrules, 2)
+    mustbe4 != 4 && throw(ArgumentError("bonds must be defined in the form [spcs1 site1 spcs2 site2]"))
+    return
+end
+function _checkshape(bindingrules::AbstractVector{AbstractVector{<:Integer}})
+    mustbe4 = length(bindingrules[1])
+    mustbe4 != 4 && throw(ArgumentError("bonds must be defined in the form [spcs1 site1 spcs2 site2]"))
+    return
+end
 
 # """
 #     composition(p::Polyform, assembly_system::AssemblySystem)

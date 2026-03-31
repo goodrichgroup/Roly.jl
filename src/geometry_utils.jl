@@ -93,9 +93,9 @@ end
 
 function cart2pol(x::F, y::Real) where {F}
     y = convert(F, y)
-    return [sqrt(x^2 + y^2), atan(y, x) / π]
+    return [sqrt(x^2 + y^2), atan(y, x)]
 end
 function pol2cart(r::F, ψ::Real) where {F}
     ψ = convert(F, ψ)
-    return [r * cos(π * ψ),  r * sin(π * ψ)]
+    return [r * cos(ψ),  r * sin(ψ)]
 end
