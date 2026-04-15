@@ -23,21 +23,20 @@ function get_sitepos(p::Polyform, assembly_system, v)
 end
 
 function attach_buildingblock!(p::Polyform{D}, v::Integer, attached_sitelabel::Integer; canonize::Bool=false) where {D}
-    !iszero(p.bonds[v]) && return false
+    !iszero(p._bonds[v]) && return false
     sys = assemblysystem(p)
     nvp = nvertices(p)
 
     bbspcs, bbsite = label2siteloc(sys, attached_sitelabel)
-    bblock = buildingblocks(sys)[bbspcs]
+    bblock = buildingblocks(sys, bbspcs)
 
     bbxs, bbψs = attached_coordinates(p, bblock, v, bbsite)
-    success, new_edges = find_bonds(p, bblock, assembly_system; xs2=xs2, ψs2=ψs2)
-    !success && return false
+    overlap, extrabonds = overlap_or_extrabonds(p, bblock, assembly_system; xs2=xs2, ψs2=ψs2)
+    overlap && return false
 
     append!(p.bonds, zeros(T, nvertices(bblock)))
     blockdiag!(p.anatomy, bblock.anatomy)
-    for edge in new_edges
-        vi, vj = edge.src, edge.dst
+    for (; vi, vj) in extrabonds
         vj += nvp
 
         add_edge!(p.anatomy, vi, vj)
@@ -93,24 +92,49 @@ end
 #     return xs2, ψs2
 # end
 
-function find_bonds(p1::Polyform, p2::Polyform; xs1=nothing, ψs1=nothing, xs2=nothing, ψs2=nothing, ignore_parts1=nothing, ignore_parts2=nothing)
+"""
+    check_contacts(xs1, ψs1, xs2, ψs2; intmat, allow_noninteracting=false, allow_misaligned=false, kwargs...)
+
+Take two sets of binding site coordinates and find all binding site contacts. Return early if any invalid
+contacts (noninteracting or misalgined sites, depending on kwargs) are found. Return final status (all valid contacts?)
+and a list of contacting binding site indices. The trailing kwargs are passed to `isapprox`.
+"""
+# function check_contacts(xs1, ψs1, xs2, ψs2; intmat, allow_noninteracting=false, allow_misaligned=false, kwargs...)
+#     contacts = NTuple{2,Int}[]
+
+#     for i in eachindex(xs1, ψs1), j in eachindex(xs2, ψs2)
+#         x_overlap = isapprox(xs1[i], xs2[j]; kwargs...)
+#         if x_overlap
+#             si, sj = ...
+#             interacting = intmat[si, siteloc2index(, j)]
+#             if !allow_noninteracting && !interacting
+#                 return false, contacts
+#             end
+
+#             ψ_overlap = isapprox(ψs1[j], ψs2[j]; kwargs...)
+#             if !allow_misaligned && !ψ_overlap
+#                 return false, contacts
+#             end
+#             push!(contacts, (i, j))
+#         end
+#     end
+#     return true, contacts
+# end
+
+function overlap_or_extrabonds(p1::Polyform, p2; xs1=nothing, ψs1=nothing, xs2=nothing, ψs2=nothing)
     geoms = geometries(assembly_system)
-    intmat = intmat(assembly_system)
-    spcs1 = species(p1)
-    spcs2 = species(p2)
+    intmat = interactionmatrix(assembly_system)
     
     xs1 = isnothing(xs1) ? p1.xs : xs1
     ψs1 = isnothing(ψs1) ? p1.ψs : ψs1
     xs2 = isnothing(xs2) ? p2.xs : xs2
     ψs2 = isnothing(ψs2) ? p2.ψs : ψs2
 
-    new_edges = Edge{Cint}[]
+    extrabonds = Edge{Cint}[]
     for (i, (xi, ψi)) in enumerate(zip(xs1, ψs1)), (j, (xj, ψj)) in enumerate(zip(xs2, ψs2))
-        if !isnothing(ignore_parts1) && i in ignore_parts1 continue end
-        if !isnothing(ignore_parts2) && j in ignore_parts2 continue end
         cstat, bound_sites = contact_status(xj - xi, ψi, ψj, geoms[spcs1[i]], geoms[spcs2[j]])
         # Return if particles overlap
-        !cstat && return false, new_edges
+        !cstat && return false, extrabonds
 
         for sites in bound_sites
             si, sj = sites
@@ -126,12 +150,12 @@ function find_bonds(p1::Polyform, p2::Polyform; xs1=nothing, ψs1=nothing, xs2=n
             label_j = vertex2label(p2, assembly_system, first(vs_j))
             
             # Return if a disallowed bond is found
-            !intmat[label_i, label_j] && return false, new_edges
+            !intmat[label_i, label_j] && return false, extrabonds
 
-            bond_to_edge!(new_edges, vs_i, vs_j)
+            bond_to_edge!(extrabonds, vs_i, vs_j)
         end
     end
-    return true, new_edges
+    return true, extrabonds
 end
 
 function bond_to_edge!(edges::AbstractVector{<:Edge}, vs_i::AbstractVector{<:Integer}, vs_j::AbstractVector{<:Integer})

@@ -1,95 +1,44 @@
-Point{D,F} = SVector{D,F}
-abstract type RotationOperator{F<:Real} end
-
-struct Angle{F} <: RotationOperator{F}
-    θ::F
-    Angle{F}(θ) where {F} = new{F}(mod(θ, 2))
+struct Pose{D,F,R<:Rotation{D,F}}
+    x::SVector{D,F}
+    ψ::R
 end
-Angle(θ::F) where {F<:Real} = Angle{F}(θ)
-Base.:(==)(a::Angle, b::Angle) = a.θ == b.θ
-Base.isapprox(a::Angle, b::Angle) = isapprox(a.θ, b.θ)
-Base.:*(ai::Angle{F}, aj::Angle) where {F} = Angle{F}(ai.θ + aj.θ)
-Base.inv(a::Angle{F}) where {F} = Angle{F}(-a.θ)
-Base.convert(::Type{Angle{F}}, a::Real) where {F} = Angle{F}(a)
-Base.convert(::Type{Angle{F}}, a::Angle) where {F} = Angle{F}(a.θ)
-value(a::Angle) = (a.θ,)
-
-struct Quaternion{F} <: RotationOperator{F}
-    w::F
-    x::F
-    y::F
-    z::F
-end
-Quaternion(w::F, x::F, y::F, z::F) where {F<:Real} = Quaternion{F}(w, x, y, z)
-Quaternion(w::Real, x::Real, y::Real, z::Real) = Quaternion(promote(w, x, y, z)...)
-Base.convert(::Type{Quaternion{F}}, v::AbstractVector) where {F} = Quaternion{F}(v[1:4]...)
-Base.convert(::Type{Quaternion{F}}, q::Quaternion) where {F} = Quaternion{F}(q.w, q.x, q.y, q.z)
-# TODO: take symmetry into account
-Base.:(==)(a::Quaternion, b::Quaternion) = a.w == b.w && a.x == b.x && a.y == b.y && a.z == b.z
-Base.isapprox(a::Quaternion, b::Quaternion; kwargs...) = isapprox(a.w, b.w; kwargs...) && isapprox(a.x, b.x; kwargs...) && isapprox(a.y, b.y; kwargs...) && isapprox(a.z, b.z; kwargs...)
-Base.inv(q::Quaternion) = Quaternion(q.w, -q.x, -q.y, -q.z)
-LinearAlgebra.norm(q::Quaternion) = sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
-value(q::Quaternion) = (q.w, q.x, q.y, q.z)
-
-function Base.:*(qi::Quaternion, qj::Quaternion)
-    a, b, c, d = qi.w, qi.x, qi.y, qi.z
-    w, x, y, z = qj.w, qj.x, qj.y, qj.z
-
-    o = a*w - b*x - c*y - d*z
-    i = a*x + b*w + c*z - d*y
-    j = a*y - b*z + c*w + d*x
-    k = a*z + b*y - c*x + d*w
-    return Quaternion(o, i, j, k)
-end
-Base.:*(α::Real, q::Quaternion) = Quaternion(α * q.w, α * q.x, α * q.y, α * q.z)
-Base.:/(q::Quaternion, α::Real) = inv(α) * q
-
-normalized(q::Quaternion) = inv(norm(q)) * q
-
-function rotate(x, ϕ::Angle{F}) where {F}
-    s, c = sincospi(ϕ.θ)
-    return Point{2,F}(c * x[1] - s * x[2], s * x[1] + c * x[2])
-end
-function rotate(x, ϕ::Quaternion{F}) where {F}
-    xq = Quaternion(0, x[1], x[2], x[3])
-    xq = ϕ * xq * inv(ϕ)
-    return Point{3,F}(xq.x, xq.y, xq.z)
-end
-
-function rotate!(xs::AbstractVector{<:Point{2,F}}, ϕ::Angle{F}) where {F}
-    s, c = sincospi(ϕ.θ)
-    for i in eachindex(xs)
-        x, y = xs[i]
-        xs[i] = Point{2,F}(c * x - s * y, s * x + c * y)
+function Pose{D}() where {D} 
+    if D == 3
+        return  Pose{D,Float64,RotXYZ{Float64}}(zeros(3), RotXYZ(0.0, 0.0, 0.0))
+    elseif D == 2 
+        return Pose{D,Float64,Angle2d{Float64}}(zeros(2), Angle2d(0.0))
+    else
+        throw(ArgumentError("Pose must be 2d or 3d"))
     end
 end
-function rotate!(xs::AbstractVector{<:Point{3,F}}, ϕ::Quaternion{F}) where {F}
-    for i in eachindex(xs)
-        xs[i] = rotate(xs[i], ϕ)
+function Pose(x, psi)
+    return Pose{length(x),eltype(x),typeof(psi)}(x, psi)
+end
+
+Base.:(==)(p1::Pose, p2::Pose) = p1.x == p2.x && p1.ψ == p2.ψ
+Base.isapprox(p1::Pose, p2::Pose; kwargs...) = isapprox(p1.x, p2.x; kwargs...) && isapprox(p1.ψ, p2.ψ; kwargs...)
+Base.:*(p1::Pose, p2::Pose) = typeof(p1)(p2.ψ * p1.x + p2.x, p1.ψ * p2.ψ)
+Base.:*(R::Rotation, p::Pose) = typeof(p)(R * p.x, R * p.ψ)
+Base.:*(p::Pose, R::Rotation) = typeof(p)(p.x, p.ψ * R)
+
+Base.inv(p::Pose) = let ψinv = inv(p.ψ); typeof(p)(-ψinv * p.x, ψinv) end
+Base.:/(p1::Pose, p2::Pose) = p1 * inv(p2)
+Base.:\(p1::Pose, p2::Pose) = inv(p1) * p2
+
+tomatrix(p::Pose{2,F}) where F = [p.ψ p.x; zeros(F, 2)' F(1)]
+tomatrix(p::Pose{3,F}) where F = [p.ψ p.x; zeros(F, 3)' F(1)]
+
+function Base.show(io::Core.IO, p::Pose{D,F,R}) where {D,F,R}
+    print(io, "$D-dimensional Pose{$D,$F,$(string(nameof(R)))}:\n")
+    print(io, " -x: $(p.x)\n")
+    if D == 2
+        print(io, " -ψ: $(rotation_angle(p.ψ) / π)π")
+    elseif D == 3
+        print(io, " -ψ: $(rotation_angle(p.ψ) / π)π, $(rotation_axis(p.ψ))")
     end
 end
-function rotate!(ψs::AbstractVector{<:RotationOperator{F}}, ϕ::RotationOperator{F}) where {F}
-    ψs .= Ref(ϕ) .* ψs
-    return
-end
-
-function shift!(xs::AbstractVector{<:Point}, Δx::Point)
-    xs .+= Ref(Δx)
-    return
-end
-
-function grab!(xs::AbstractVector{<:Point}, ψs::AbstractVector{<:RotationOperator}, i::Integer, Δx=nothing, Δψ=nothing)
-    # Shifts and rotates a list of xs and ψs such that particle i is at the origin in reference orientation
-    Δψ = isnothing(Δψ) ? inv(ψs[i]) : Δψ * inv(ψs[i])
-
-    shift!(xs, -xs[i])
-    rotate!(xs, Δψ)
-    rotate!(ψs, Δψ)
-
-    !isnothing(Δx) && shift!(xs, Δx)
-    return
-end
-
+dimension(::Pose{D}) where D = D
+dimension(::Type{<:Pose{D}}) where D = D
 
 function cart2pol(x::F, y::Real) where {F}
     y = convert(F, y)

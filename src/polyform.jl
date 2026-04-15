@@ -1,11 +1,5 @@
-"""
-    Polyform{D,T,F} where {D,T,F}
 
-`Polyform` is a struct containing all information required to instantiate a
-polyform, which here is defined as an aggregate of building blocks that are connected
-(bound) together at various binding sites. In a self-assembly context, a polyform is
-often referred to a "self-assembled structure".
-"""
+
 
 mutable struct PolyformAnatomy{G<:AbstractNautyGraph}
     const anatomy::G            # always keep this canonized (?)
@@ -34,7 +28,7 @@ end
 function canonid(pa::PolyformAnatomy)
     return canonical_id(pa.anatomy)
 end
-Base.hash(pa::PolyformAnatomy, h::UInt=zero(Uint)) = hash(pa.anatomy, h)
+Base.hash(pa::PolyformAnatomy, h::UInt) = hash(pa.anatomy, h)
 Base.:(==)(p::PolyformAnatomy, h::PolyformAnatomy) = p.anatomy ≃ h.anatomy
 Graphs.vertices(pa::PolyformAnatomy) = vertices(pa.anatomy)
 Graphs.edges(pa::PolyformAnatomy) = edges(pa.anatomy)
@@ -48,10 +42,25 @@ function symmetrynumber(pa::PolyformAnatomy)
     return pa.σ
 end
 
+
+struct Particle{P,NV}
+    pose::P
+    species::Int
+    vertices::NTuple{NV,Int}
+end
+
+"""
+    Polyform{D,T,F} where {D,T,F}
+
+`Polyform` is a struct containing all information required to instantiate a
+polyform, which here is defined as an aggregate of building blocks that are connected
+(bound) together at various binding sites. In a self-assembly context, a polyform is
+often referred to a "self-assembled structure".
+"""
 struct Polyform{D,F<:AbstractFloat,R<:Rotation{D},PA<:PolyformAnatomy,AS<:AssemblySystem}
     anatomy::PA
-    xs::Vector{Point{D,F}}
-    ψs::Vector{R}
+    xs::Vector{Point{D,F}}     # positions of binding sites
+    ψs::Vector{R}              # orientations of binding sites
     assemblysystem::AS
     _bonds::Vector{Int}        # bonds[v] is the vertex v is bound to (or zero if unbound)
     _nparticles::Int
@@ -69,41 +78,38 @@ function Polyform(sys::AssemblySystem{D}, buildingblock::BuildingBlock{D}) where
 end
 Polyform(sys::AssemblySystem, i::Integer) = Polyform(sys, buildingblocks(sys)[i])
 
-anatomy(p::Polyform) = p.anatomy
-sitelabels(p::Polyform) = sitelabels(anatomy(p))
-symmetrynumber(p::Polyform) = anatomy(p).σ
-assemblysystem(p::Polyform) = p.assemblysystem
-positions(p::Polyform) = p.xs
-orientations(p::Polyform) = p.ψs
+@inline anatomy(p::Polyform) = p.anatomy
+@inline sitelabels(p::Polyform) = sitelabels(anatomy(p))
+@inline symmetrynumber(p::Polyform) = anatomy(p).σ
+@inline assemblysystem(p::Polyform) = p.assemblysystem
+@inline positions(p::Polyform) = p.xs
+@inline orientations(p::Polyform) = p.ψs
+@inline n_particles(p::Polyform) = p._nparticles
+@inline n_vertices(p::Polyform) = nv(p.anatomy)
+@inline sitecolor(p::Polyform, v::Integer) = label2color(p.assemblysystem, label(anatomy(p), v))
+Graphs.vertices(p::Polyform) = vertices(anatomy(p)) # TODO: remove this?
 
-Graphs.vertices(p::Polyform) = vertices(anatomy(p))
+dimension(::Polyform{D}) where {D} = D
+dimension(::Type{Polyform{D}}) where {D} = D
 
-function interior_edges(p::Polyform)
-    return _filter_edges_by_species(p, Val(true))
-end
-function exterior_edges(p::Polyform)
-    return _filter_edges_by_species(p, Val(false))
-end
+@inline interior_edges(p::Polyform) = _filter_edges_by_species(p, Val(true))
+@inline exterior_edges(p::Polyform) = _filter_edges_by_species(p, Val(false))
 function _filter_edges_by_species(p::Polyform, ::Val{same_species}) where same_species
     sys = assemblysystem(p)
     labs = sitelabels(p)
     es = edges(anatomy(p))
-    interior_edges = Iterators.filter(es) do (; src, dst)
+    filtered_edges = Iterators.filter(es) do (; src, dst)
         src_spcs = label2species(sys, labs[src])
         dst_spcs = label2species(sys, labs[dst])
         return same_species ? src_spcs == dst_spcs : src_spcs != dst_spcs
     end
-    return interior_edges
+    return filtered_edges
 end
 
-nparticles(p::Polyform) = p._nparticles
-nvertices(p::Polyform) = nv(p.anatomy)
 function Base.show(io::Core.IO, p::Polyform{D,T,F}) where {D,T,F}
-    print(io, "Polyform{$D,$T,$F}[n=$(nparticles(p))]")
+    print(io, "Polyform{$D,$T,$F}[n=$(n_particles(p))]")
 end
 Base.show(io::Core.IO, ::Type{Polyform{D,T,F}}) where {D,T,F} = print(io, "Polyform{$D,$T,$F}")
-dimension(::Polyform{D}) where {D} = D
-dimension(::Type{Polyform{D}}) where {D} = D
 
 # function canonize!(p::Polyform{D,T}) where {D,T}
 #     canonperm, autg = nauty(p.anatomy; canonize=true)

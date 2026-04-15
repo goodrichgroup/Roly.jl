@@ -1,6 +1,7 @@
 HashType = UInt
 DefInt, DefFloat = Int16, Float32
 
+
 function are_bridge(g::AbstractNautyGraph, vs::AbstractVector{<:Integer})
     neighs = zeros(Bool, nv(g))
     buffer = zeros(Int, nv(g))
@@ -63,35 +64,12 @@ function vertices_connected(g::NautyDiGraph, v0::Integer,
     return false
 end
 
-
-function irg_flatten(a::Integer, b::Integer, intervals::AbstractVector{<:Integer})
-    if a == 1
-        return b
-    else
-        return intervals[a-1] + b
+function take_nth(itr, n, default=nothing)
+    for (i, val) in enumerate(itr)
+        i == n && return val
     end
+    return default
 end
-function irg_unflatten(i::Integer, intervals::AbstractVector{<:Integer})
-    if i <= intervals[1]
-        return (1, i)
-    else
-        a = searchsortedlast(intervals, i, lt=≤) + 1
-        b = i - intervals[a - 1]
-        return (a, b)
-    end
-end
-
-function find_nth(f::Function, A, n)
-    # Return the index of the nth true value of f.(A), as well as how many matches were found
-    # TODO this is a weird function, make it better
-    j = 0
-    for (k, a) in enumerate(A)
-        if f(a) j += 1 end
-        j == n && return k, j
-    end
-    return nothing, j
-end
-find_nth(A, n) = find_nth(identity, A, n)
 
 
 mutable struct PathIterator{G,T}

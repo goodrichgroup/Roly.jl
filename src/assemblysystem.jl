@@ -1,47 +1,47 @@
 const BindingSiteLoc = NTuple{2,Int}
 
 """
-    AssemblySystem(bindingrules, buildingblocks)
+    AssemblySystem(bindingrules, particlespecies)
 
-Defines an _assembly system_, consisting of a list of building blocks, their geometries, and their binding rules. The structures (polyforms)
+Defines an _assembly system_, consisting of a list of particle species and their binding rules. The structures (polyforms)
 that satify the binding rules without any particle overlaps are the _allowed structures_ of an assembly system, and can be enumerated or 
 iterated over using `polygen` or `polyenum`, respectively.
 
 The binding rules are specified by the matrix `bindingrules`, where every row of the matrix defines a valid bond between particle species.
 A bonds is specified in the format `[species1 site1 species2 site2]`. For example, if binding site 3 of particle species 1 binds to site 4 of
-particle species 2, the corresponding bond would read `[1 3 2 4;]`. The ordering of binding sites depends on the particle geometry, for 
-polygonal geometries, sites are numbered in clockwise order.
+particle species 2, the corresponding bond would read `[1 3 2 4;]`. The ordering of binding sites depends on the building block, for 
+polygonal building blocks, sites are numbered in clockwise order.
 
 Even without enumerating the allowed structures, it is possible to determine whether two assembly systems lead to the same set of allowed structures.
 If this is the case, then the two systems are identical up a relabeling and/or rotating the building blocks -- they are isomorphic.
 This can be checked by comparing the `rhash`es of different assembly systems; if the hashes are equal, the systems are isomorphic. 
 """
-mutable struct AssemblySystem{D,BB<:BuildingBlock}
-    intmat::Symmetric{Bool, Matrix{Bool}}
-    buildingblocks::Vector{BB}
-    nspcs::Int
+mutable struct AssemblySystem{D,VPS<:AbstractVector{<:ParticleSpecies}}
+    intmat::Symmetric{Bool,Matrix{Bool}}
+    particlespecies::VPS
     nbonds::Int
     nsites::Int
-    _idx2siteloc::Vector{BindingSiteLoc}
-    _siteloc2idx::Dict{BindingSiteLoc,Int}
-    _label2species::Dict{Int,Int}
+    ncolors::Int
+    _color2siteloc::Dict{Int,Vector{BindingSiteLoc}}
+    _siteloc2color::Dict{BindingSiteLoc,Int}
+    _label2color::Dict{Int,Int}
     _bondlist::Vector{NTuple{2,Int}}
-    _bonded_sites::Vector{NTuple{2,BindingSiteLoc}}
+    _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
 end
-function AssemblySystem(bindingrules, buildingblocks::AbstractVector{BB}) where {BB<:BuildingBlock}
-    D = dimension(first(buildingblocks))
-    for bb in buildingblocks
-        dimension(bb) != D && throw(ArgumentError("building blocks do not all have the same dimension"))
+function AssemblySystem(bindingrules, particlespecies::AbstractVector{<:ParticleSpecies})
+    D = dimension(first(particlespecies))
+    for ps in particlespecies
+        dimension(ps) != D && throw(ArgumentError("particlespecies do not all have the same dimension"))
     end
 
-    buildingblocks = _shift_sitelabels(buildingblocks)
-    idx2siteloc, siteloc2idx, label2species = _make_lookuptables(buildingblocks)
+    particlespecies = _shift_sitelabels(particlespecies)
+    color2siteloc, siteloc2color, label2color = _make_bindingsite_lookuptables(particlespecies)
 
-    nsites = length(siteloc2idx)
-    nspcs = length(buildingblocks)
+    nsites = length(siteloc2color)
+    ncolors = length(color2siteloc)
 
-    intmat = _parse_intmat(bindingrules, siteloc2idx)
+    intmat = _parse_intmat(bindingrules, siteloc2color)
     bondlist = map(findall(intmat)) do cartidx
         (cartidx[1], cartidx[2])
     end
@@ -51,70 +51,78 @@ function AssemblySystem(bindingrules, buildingblocks::AbstractVector{BB}) where 
     sort!(bondlist)
     bondedsites = map(bondlist) do bond
         a, b, = bond[1], bond[2]
-        sort((idx2siteloc[a], idx2siteloc[b]))
+        sort((color2siteloc[a], color2siteloc[b]))
     end
-    bondedspecies = map(bondedsites) do ((spc1, _), (spc2, ))
+    bondedspecies = map(bondedsites) do (sitelocs1, sitelocs2)
+        spc1, spc2 = sitelocs1[1][1], sitelocs2[1][1]
         (spc1, spc2)
     end
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
-    return AssemblySystem{D,BB}(intmat, buildingblocks, nspcs, nbonds, nsites, idx2siteloc, siteloc2idx, label2species, bondlist, bondedsites, bondedspecies)
+    return AssemblySystem{D,typeof(particlespecies)}(intmat, particlespecies, nbonds, nsites, ncolors,
+                                color2siteloc, siteloc2color, label2color, 
+                                bondlist, bondedsites, bondedspecies)
 end
-function AssemblySystem(bindingrules, buildingblock::BuildingBlock)
+function AssemblySystem(bindingrules, particlespecies::ParticleSpecies)
     nspcs = _extract_nspecies(bindingrules)
-    buildingblocks = [buildingblock for _ in 1:nspcs]
-    return AssemblySystem(bindingrules, buildingblocks)
+    particlespecies = [particlespecies for _ in 1:nspcs]
+    return AssemblySystem(bindingrules, particlespecies)
 end
 
-intmat(sys::AssemblySystem) = sys.intmat
-buildingblocks(sys::AssemblySystem) = sys.buildingblocks
-
-nspecies(sys::AssemblySystem) = sys.nspcs
+interactionmatrix(sys::AssemblySystem) = sys.intmat
+species(sys::AssemblySystem) = sys.particlespecies
+species(sys::AssemblySystem, i::Integer) = sys.particlespecies[i]
+nspecies(sys::AssemblySystem) = length(sys.particlespecies)
 nbonds(sys::AssemblySystem) = sys.nbonds
 nsites(sys::AssemblySystem) = sys.nsites
+ncolors(sys::AssemblySystem) = sys.ncolors
 
 dimension(::AssemblySystem{D}) where {D} = D
 dimension(::Type{<:AssemblySystem{D}}) where {D} = D
-numtype(::AssemblySystem{D,BB}) where {D,BB} = numtype(BB)
-numtype(::Type{<:AssemblySystem{D,BB}}) where {D,BB} = numtype(BB)
+numtype(::AssemblySystem{D,PS}) where {D,PS} = Float64 #numtype(PS)
 
-positiontype(::AssemblySystem{D,BB}) where {D,BB} = positiontype(BB)
-positiontype(::Type{<:AssemblySystem{D,BB}}) where {D,BB} = positiontype(BB)
-orientationtype(::AssemblySystem{D,BB}) where {D,BB} = orientationtype(BB)
-orientationtype(::Type{<:AssemblySystem{D,BB}}) where {D,BB} = orientationtype(BB)
+posetype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
+speciestype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
 
 Base.size(sys::AssemblySystem) = sys.nspcs, sys.nbonds
 Base.size(sys::AssemblySystem, i) = i == 1 ? sys.nspcs : i == 2 ? sys.nbonds : 1
 
-Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySytem [n=$(nspecies(sys)), k=$(nbonds(sys))]")
+Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySytem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
 
-function bondlist(sys::AssemblySystem)
+@inline function bondlist(sys::AssemblySystem)
     return sys._bondlist
 end
-function bonded_sites(sys::AssemblySystem)
+@inline function bonded_sites(sys::AssemblySystem)
     return sys._bonded_sites
 end
-function bonded_species(sys::AssemblySystem)
+@inline function bonded_species(sys::AssemblySystem)
     return sys._bonded_species
 end
 
-function siteloc2index(sys::AssemblySystem, site::BindingSiteLoc)
-    return sys._siteloc2idx[site]
+@inline function siteloc2color(sys::AssemblySystem, site::BindingSiteLoc)
+    return sys._siteloc2color[site]
 end
-function index2siteloc(sys::AssemblySystem, index::Integer)
-    return sys._idx2site[index]
+@inline function color2siteloc(sys::AssemblySystem, color::Integer)
+    return sys._color2siteloc[color]
 end
-function label2species(sys::AssemblySystem, label::Integer)
-    return sys._label2species[label]
+@inline function label2color(sys::AssemblySystem, label::Integer)
+    return sys._label2color[label]
+end
+@inline function color2species(sys::AssemblySystem, color::Integer)
+    return color2siteloc(sys, color)[1][1]
+end
+@inline function label2species(sys::AssemblySystem, label::Integer)
+    return color2species(sys, label2color(sys, label))
 end
 
-function isinert(sys::AssemblySystem, site::BindingSiteLoc)
-    idx = siteloc2index(sys, site)
-    return !any(@view intmat(assembly_system)[:, idx])
+
+@inline function isinert(sys::AssemblySystem, site::BindingSiteLoc)
+    color = siteloc2color(sys, site)
+    return !any(@view interactionmatrix(assembly_system)[:, color])
 end
 
-function anatomy(sys::AssemblySystem)
-    imat = intmat(sys)
+function graphrep(sys::AssemblySystem)
+    imat = interactionmatrix(sys)
     ns = nsites(sys)
     nb = nbonds(sys)
 
@@ -131,22 +139,28 @@ function anatomy(sys::AssemblySystem)
         A[ns+edge_counter, j] = 1
         edge_counter += 1
     end
-    
+
     i = 1
-    for bb in buildingblocks(sys)
-        a = adjacency_matrix(bb.anatomy)
+    for bb in species(sys)
+        a = adjacency_matrix(bb.graphrep)
         n = size(a, 1)
         A[i:i+n-1, i:i+n-1] .+= a
         i += n
     end
 
     vertex_labels = [zeros(Cint, ns); ones(Cint, nb)]
-    anatomy = NautyDiGraph(A; vertex_labels)
-    return anatomy
+    graphrep = NautyDiGraph(A; vertex_labels)
+    return graphrep
+end
+
+function compatible_sitelocs(sys::AssemblySystem, color::Integer)
+    intmat = interactionmatrix(sys)
+    cs = 1:ncolors(sys)
+    return (siteloc for c in cs if intmat[c, color] for siteloc in color2siteloc(sys, c))
 end
 
 function canonid(sys::AssemblySystem)
-    a = anatomy(sys)
+    a = graphrep(sys)
     a_prime = NautyDiGraph(adjacency_matrix(a)'; vertex_labels=labels(a))
     return sort([canonical_id(a), canonical_id(a_prime)])
 end
@@ -156,34 +170,47 @@ function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
     return maximum(bindingrules[:, [1, 3]])
 end
 
-function _shift_sitelabels(buildingblocks::AbstractVector{<:BuildingBlock})
-    buildingblocks = [copy(bb) for bb in buildingblocks]
+function _shift_sitelabels(particlespecies::AbstractVector{<:ParticleSpecies})
+    particlespecies = [copy(ps) for ps in particlespecies]
 
     l = 1
-    for bb in buildingblocks
-        labs = labels(bb.anatomy)
+    for ps in particlespecies
+        g = graphrep(ps)
+        labs = labels(g)
         # TODO: make all nonidentical labels contiguous, ie. (1, 1, 3, 7) -> (1, 1, 2, 3)
-        setlabels!(bb.anatomy, labs .- minimum(labs) .+ l)
-        l = maximum(labels(bb.anatomy)) + 1
+        setlabels!(g, labs .- minimum(labs) .+ l)
+        l = maximum(labels(g)) + 1
     end
-    return buildingblocks
+    return particlespecies
 end
-function _make_lookuptables(buildingblocks::AbstractVector{<:BuildingBlock})
-    index2siteloc = BindingSiteLoc[]
-    siteloc2index = Dict{BindingSiteLoc,Int}()
-    label2species = Dict{Int,Int}()
+function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:ParticleSpecies})
+    color2siteloc = Dict{Int,Vector{BindingSiteLoc}}()
+    siteloc2color = Dict{BindingSiteLoc,Int}()
+    label2color = Dict{Int,Int}()
 
-    for (spcs, bb) in enumerate(buildingblocks)
-        for site in 1:nsites(bb)
-            spcssite = (spcs, site)
-            push!(index2siteloc, spcssite)
-            siteloc2index[spcssite] = length(index2siteloc)
-        end
-        for l in labels(anatomy(bb))
-            label2species[l] = spcs
+    color = 1
+    for (spcs, ps) in enumerate(particlespecies)
+        for site_indices in equivalent_site_indices(ps)
+            for site_index in site_indices
+                spcssite = (spcs, site_index)
+                if haskey(color2siteloc, color)
+                    push!(color2siteloc[color], spcssite)
+                else
+                    color2siteloc[color] = [spcssite]
+                end
+                siteloc2color[spcssite] = color
+
+                site = bindingsite(ps, site_index)
+                for v in site.vertices
+                    l = label(graphrep(ps), v)
+                    l ∈ keys(label2color) && continue
+                    label2color[l] = color
+                end
+            end
+            color += 1
         end
     end
-    return index2siteloc, siteloc2index, label2species
+    return color2siteloc, siteloc2color, label2color
 end
 
 function _parse_intmat(bindingrules, site2label)
@@ -230,7 +257,7 @@ end
 #         m[s] += 1
 #     end
 
-#     es = Graphs.edges(p.anatomy)
+#     es = Graphs.edges(p.graphrep)
 #     double_bonds = [e for e in es if reverse(e) in es]
 #     bonds = []
 #     for b in double_bonds
@@ -242,7 +269,7 @@ end
 #     bondlist = findall(Roly.intmat(assembly_system))
 #     filter!(x->x[1] <= x[2], bondlist)
 #     sort!(bondlist)
-    
+
 #     for b in bonds
 #         lsrc, ldst = sort!([vertex2label(p, assembly_system, b.src), vertex2label(p, assembly_system, b.dst)])
 #         i = findfirst(x->x==CartesianIndex(lsrc, ldst), bondlist)
