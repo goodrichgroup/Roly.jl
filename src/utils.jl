@@ -2,16 +2,9 @@ HashType = UInt
 DefInt, DefFloat = Int16, Float32
 
 
-function are_bridge(g::AbstractNautyGraph, vs::AbstractVector{<:Integer})
+function are_cutvertices(g::AbstractNautyGraph, vs::AbstractVector{<:Integer})
     neighs = zeros(Bool, nv(g))
-    buffer = zeros(Int, nv(g))
 
-    # for v in vs
-    #     k = NautyGraphs.outneighbors!(buffer, g, v)
-    #     for neigh in @view buffer[1:k]
-    #         neighs[neigh] = true
-    #     end
-    # end
     for v in vs
         neighs .|= NautyGraphs.adjrow(g, v)
     end

@@ -35,7 +35,7 @@ function AssemblySystem(bindingrules, particlespecies::AbstractVector{<:Particle
         dimension(ps) != D && throw(ArgumentError("particlespecies do not all have the same dimension"))
     end
 
-    particlespecies = _shift_sitelabels(particlespecies)
+    particlespecies = _shift_sitecolors_and_labels(particlespecies)
     color2siteloc, siteloc2color, label2color = _make_bindingsite_lookuptables(particlespecies)
 
     nsites = length(siteloc2color)
@@ -118,7 +118,10 @@ end
 
 @inline function isinert(sys::AssemblySystem, site::BindingSiteLoc)
     color = siteloc2color(sys, site)
-    return !any(@view interactionmatrix(assembly_system)[:, color])
+    return isinert(sys, color)
+end
+@inline function isinert(sys::AssemblySystem, color::Integer)
+    return !any(@view interactionmatrix(sys)[:, color])
 end
 
 function graphrep(sys::AssemblySystem)
@@ -170,16 +173,21 @@ function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
     return maximum(bindingrules[:, [1, 3]])
 end
 
-function _shift_sitelabels(particlespecies::AbstractVector{<:ParticleSpecies})
+function _shift_sitecolors_and_labels(particlespecies::AbstractVector{<:ParticleSpecies})
     particlespecies = [copy(ps) for ps in particlespecies]
 
+    c = 1
     l = 1
     for ps in particlespecies
         g = graphrep(ps)
         labs = labels(g)
+
         # TODO: make all nonidentical labels contiguous, ie. (1, 1, 3, 7) -> (1, 1, 2, 3)
         setlabels!(g, labs .- minimum(labs) .+ l)
         l = maximum(labels(g)) + 1
+
+        setcolor!(ps, c)
+        c += nsites(ps)
     end
     return particlespecies
 end

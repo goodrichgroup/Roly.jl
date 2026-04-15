@@ -21,13 +21,13 @@ function Base.show(io::Core.IO, p::Particle{P}) where {P}
     print(io, " - vertices:\t$(graphvertices(p))")
 end
 
-graphvertices(p::Particle) = p.leading_vertex .- 1 .+ vertices(graphrep(species(p))) #Todo: this needs to either allocate or it may not be type-stable (or all particle species must have the same number of vertices for every site (maybe we can pad them?))
+graphvertices(p::Particle) = (1:nv(graphrep(species(p)))) .+ (p.leading_vertex - 1)
 leading_vertex(p::Particle) = p.leading_vertex
 species(p::Particle) = p.species
 nsites(p::Particle) = nsites(species(p))
 
 function bindingsite(p::Particle, i::Integer) 
-    return p.pose * shift_vertices(bindingsite(species(p), i), leading_vertex(p) - 1)
+    return shift_vertices(bindingsite(species(p), i), leading_vertex(p) - 1) * p.pose
 end
 function bindingsites(p::Particle)
     return (bindingsite(p, i) for i in 1:nsites(p))

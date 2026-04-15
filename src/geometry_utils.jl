@@ -30,11 +30,11 @@ tomatrix(p::Pose{3,F}) where F = [p.ψ p.x; zeros(F, 3)' F(1)]
 
 function Base.show(io::Core.IO, p::Pose{D,F,R}) where {D,F,R}
     print(io, "$D-dimensional Pose{$D,$F,$(string(nameof(R)))}:\n")
-    print(io, " -x: $(p.x)\n")
+    print(io, " - x: $(p.x)\n")
     if D == 2
-        print(io, " -ψ: $(rotation_angle(p.ψ) / π)π")
+        print(io, " - ψ: $(rotation_angle(p.ψ) / π)π")
     elseif D == 3
-        print(io, " -ψ: $(rotation_angle(p.ψ) / π)π, $(rotation_axis(p.ψ))")
+        print(io, " - ψ: $(rotation_angle(p.ψ) / π)π, $(rotation_axis(p.ψ))")
     end
 end
 dimension(::Pose{D}) where D = D
