@@ -1,4 +1,4 @@
-struct Particle{P,SPC}
+struct Particle{P,SPC<:ParticleSpecies}
     pose::P
     leading_vertex::Int
     species::SPC

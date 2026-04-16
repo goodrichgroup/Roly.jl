@@ -25,5 +25,5 @@ include("particle.jl")
 include("polyform_new.jl")
 # include("polyform.jl")
 # include("concatenation.jl")
-# include("enumeration.jl")
+include("enumeration.jl")
 end

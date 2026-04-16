@@ -16,9 +16,11 @@ end
 function Polyform(sys::AssemblySystem{D}) where {D}
     P = posetype(sys)
     g = NautyDiGraph(0)
+    ps = species(sys, 1)
+
     sigma = 1
     canonvs = []
-    return Polyform{D,Particle{P,typeof(sys)},typeof(sys),typeof(g)}(g, sigma, canonvs, Dict(), sys)
+    return Polyform{D,Particle{P,typeof(ps)},typeof(sys),typeof(g)}(g, sigma, canonvs, Dict(), sys)
 end
 function Polyform(sys::AssemblySystem{D}, i::Integer) where {D}
     P = posetype(sys)
@@ -43,6 +45,7 @@ function Base.show(io::Core.IO, p::Polyform{D}) where {D}
     print(io, "Polyform{$D}[n=$(nparticles(p))]")
 end
 Base.show(io::Core.IO, ::Type{Polyform{D}}) where {D} = print(io, "Polyform{$D}")
+Base.:(==)(p1::Polyform, p2::Polyform) = graphrep(p1) == graphrep(p2)
 
 @inline particle(p::Polyform, v::Integer) = get(p.particles, v, nothing)
 @inline nparticles(p::Polyform) = length(p.particles)
@@ -177,13 +180,15 @@ function raise!(poly::Polyform, j::Integer; kwargs...)
 
     for (vs1, vs2) in contacting_vertices
         for (v1, v2) in zip(vs1, vs2)
+            v1 = invperm(canonical_vertices(poly))[v1]
             add_edge!(graphrep(poly), v1, v2)
             add_edge!(graphrep(poly), v2, v1)
         end
     end
+
     append!(poly.canonvs, graphvertices(attached_particle))
     perm, autg = nauty(graphrep(poly); canonize=true)
-    poly.canonvs .= @view perm[poly.canonvs]
+    poly.canonvs .= @view poly.canonvs[perm]
     poly.sigma = convert(Int, autg.n)
 
     return poly
@@ -201,18 +206,35 @@ function lower!(poly::Polyform)
         return poly
     end
 
+    println("LOWER")
     for v in Iterators.reverse(canonical_vertices(poly))
+        @show canonical_vertices(poly)
+
         is_leadingvertex(poly, v) || continue
+        @show v
 
         part = particle(poly, v)
         vs0 = graphvertices(part)
-        vs = canonical_vertices(poly)[vs0]
+        # vs = canonical_vertices(poly)[vs0]
+        vs = invperm(canonical_vertices(poly))[vs0]
+        # @show vs
 
+        # @show graphrep(poly).graphset
+        # for p in values(poly.particles)
+        #     println(leading_vertex(p) => p.pose)
+        # end
         are_cutvertices(graphrep(poly), vs) && continue
+        # println("##########")
+        # @show vs0
+        # @show vs
 
         pop!(poly.particles, leading_vertex(part))
         rem_vertices!(graphrep(poly), vs)
-        deleteat!(poly.canonvs, vs0)
+        deleteat!(poly.canonvs, vs)
+
+        vertex_shift(v) = sum(x -> x <= v, vs0)
+        @views poly.canonvs .-= vertex_shift.(poly.canonvs)
+
         perm, autg = nauty(graphrep(poly); canonize=true)
         poly.canonvs .= @view perm[poly.canonvs]
         poly.sigma = convert(Int, autg.n)
