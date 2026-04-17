@@ -1,9 +1,14 @@
+"""
+    BindingSiteLoc
+
+Indicates the location of a binding site in the format `(species_index, site_index)`.
+"""
 const BindingSiteLoc = NTuple{2,Int}
 
 """
     AssemblySystem(bindingrules, particlespecies)
 
-Defines an _assembly system_, consisting of a list of particle species and their binding rules. The structures (polyforms)
+An `AssemblySystem` consists of a list of particle species and their binding rules. The structures (polyforms)
 that satify the binding rules without any particle overlaps are the _allowed structures_ of an assembly system, and can be enumerated or 
 iterated over using `polygen` or `polyenum`, respectively.
 

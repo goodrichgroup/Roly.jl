@@ -47,13 +47,17 @@ end
 
 Base.:(==)(p1::Pose, p2::Pose) = p1.x == p2.x && p1.psi == p2.psi
 Base.isapprox(p1::Pose, p2::Pose; kwargs...) = isapprox(p1.x, p2.x; kwargs...) && isapprox(p1.psi, p2.psi; kwargs...)
+
 Base.:*(p1::Pose, p2::Pose) = typeof(p1)(p2.psi * p1.x + p2.x, p1.psi * p2.psi)
 Base.:*(R::Rotation, p::Pose) = typeof(p)(R * p.x, R * p.psi)
 Base.:*(p::Pose, R::Rotation) = typeof(p)(p.x, p.psi * R)
+
 Base.inv(p::Pose) = let ψinv = inv(p.psi); typeof(p)(-ψinv * p.x, ψinv) end
 Base.:/(p1::Pose, p2) = p1 * inv(p2)
 Base.:\(p1, p2::Pose) = inv(p1) * p2
+
 Base.eltype(::Type{<:Pose{D,F}}) where {D,F} = F
+
 dimension(::Pose{D}) where D = D
 dimension(::Type{<:Pose{D}}) where D = D
 
@@ -81,7 +85,6 @@ function Base.show(io::Core.IO, ::MIME"text/plain", p::Pose{D,F,R}) where {D,F,R
         print(io, " - psi: $(rotation_angle(p.psi) / π)π, $(rotation_axis(p.psi))")
     end
 end
-
 
 function cart2pol(x::F, y::Real) where {F}
     y = convert(F, y)

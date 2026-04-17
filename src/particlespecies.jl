@@ -1,26 +1,57 @@
+"""
+    ParticleSpecies{D,F}
+
+Abstract supertype of all particle species.
+"""
 abstract type ParticleSpecies{D,F} end
+
 const SpeciesAndPose{SPC} = Union{Pair{SPC,<:Pose},Tuple{SPC,<:Pose}} where {SPC<:ParticleSpecies}
 
 """
-    could_contact(p1::SpeciesAndPose, p2::SpeciesAndPose)
+    graphrep(p::ParticleSpecies)
 
-Perform a quick check to determine whether two particle species at specific poses could
-potentially be in contact. If `could_contact` returns `false`, it is assumed that contact
-is impossible and no further contact checks will be performed.
+Return the graph representation of the particle species `p`.
 """
-function graphrep(p::ParticleSpecies) end
+function graphrep(::ParticleSpecies) end
+
+"""
+    dimension(p::ParticleSpecies)
+
+Return the spatial dimension a particle of species `p` lives in.
+"""
 function dimension(::ParticleSpecies) end
-function nsites(p::ParticleSpecies) end
-function bindingsite(p::ParticleSpecies, i::Integer) end
-function bindingsites(p::ParticleSpecies)
+
+"""
+    nsites(p::ParticleSpecies)
+
+Return the number of binding sites of a particle of species `p`.
+"""
+function nsites(::ParticleSpecies) end
+
+"""
+    bindingsite(p::ParticleSpecies, i::Integer)
+
+Return the `i`th binding site of particle species `p`.
+"""
+function bindingsite(::ParticleSpecies, ::Integer) end
+
+"""
+    bindingsites(p::ParticleSpecies)
+
+Return an iterator over all binding sites of a particle of species `p`.
+"""
+function bindingsites(::ParticleSpecies)
     return (bindingsite(p, i) for i in 1:nsites(p))
 end
-function setcolor!(p::ParticleSpecies, c::Integer) end
 
-function symmetrynumber(p::ParticleSpecies)
-    _, autg = nauty(graphrep(p))
-    return convert(Int, autg.n)
-end
+"""
+    setcolor!(p::ParticleSpecies, c::Integer)
+
+Set the base color of particle species `p` to `c`.
+
+The colors of the binding sites will then start at `c`.
+"""
+function setcolor!(::ParticleSpecies, ::Integer) end
 
 """
     isconvex(::ParticleSpecies)
@@ -32,8 +63,36 @@ function isconvex(::ParticleSpecies)
     return false
 end
 
-function could_contact(p1::SpeciesAndPose, p2::SpeciesAndPose) end
-function overlap(p1::SpeciesAndPose, p2::SpeciesAndPose) end
+"""
+    could_contact(p1::SpeciesAndPose, p2::SpeciesAndPose)
+
+Return true if the particle species at their respective poses could potentially be in contact.
+
+This should be a quick and efficient check and a value of `true` does not necessarily mean that
+contact has occured. If `false`, however, it is assumed that contact is impossible and no
+further contact checks will be performed.
+"""
+function could_contact(::SpeciesAndPose, ::SpeciesAndPose) end
+
+"""
+    overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)
+
+Return true if the particle species at their respective poses are overlapping.
+"""
+function overlap(::SpeciesAndPose, ::SpeciesAndPose) end
+
+"""
+    symmetrynumber(p::ParticleSpecies)
+
+Return the symmetry number of the particle species `p`.
+
+The symmetry number is equal to the size of the automorphism group
+of `graphrep(p)`.
+"""
+function symmetrynumber(p::ParticleSpecies)
+    _, autg = nauty(graphrep(p))
+    return convert(Int, autg.n)
+end
 
 """
     equivalent_site_indices(spcs::ParticleSpecies)

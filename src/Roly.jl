@@ -28,5 +28,5 @@ include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
 
-include("particlespecies/polygonparticlespecies.jl")
+include("species/polygonparticlespecies.jl")
 end
