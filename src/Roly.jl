@@ -4,6 +4,7 @@ using LinearAlgebra, StaticArrays, SparseArrays, Rotations
 using Base.Iterators, DataStructures
 using Graphs, NautyGraphs
 using ReverseSearch
+using CairoMakie
 
 export ACCEPT, REJECT, BREAK
 export polyenum, polygen
@@ -20,6 +21,7 @@ include("geometry_utils.jl")
 # include("geometry.jl")
 # include("buildingblock.jl")
 include("particlespecies.jl")
+include("polygon_particle.jl")
 include("assemblysystem.jl")
 include("particle.jl")
 include("polyform_new.jl")

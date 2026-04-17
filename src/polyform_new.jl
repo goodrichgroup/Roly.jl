@@ -206,12 +206,12 @@ function lower!(poly::Polyform)
         return poly
     end
 
-    println("LOWER")
+    # println("LOWER")
     for v in Iterators.reverse(canonical_vertices(poly))
-        @show canonical_vertices(poly)
+        # @show canonical_vertices(poly)
 
         is_leadingvertex(poly, v) || continue
-        @show v
+        # @show v
 
         part = particle(poly, v)
         vs0 = graphvertices(part)
@@ -249,4 +249,18 @@ function attach(species_and_site::Pair{<:ParticleSpecies, <:Integer}, at::Bindin
     # We want the pose of bindingsite(particle, site_index) to be equal to the pose of at + the standard_offset
     particle_pose = inv(site.pose) * orientation_offset(at)
     return Particle(particle_species, particle_pose; leading_vertex)
+end
+
+function render!(ax, p::Polyform; kwargs...)
+    out = for part in values(p.particles)
+        render!(ax, part; kwargs...)
+    end
+    return out
+end
+function render(p::Polyform; kwargs...)
+    f = Figure()
+    ax = Axis(f[1, 1], aspect=DataAspect())
+    hidedecorations!(ax)
+    render!(ax, p; kwargs...)
+    return f
 end

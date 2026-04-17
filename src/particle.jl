@@ -41,3 +41,9 @@ function overlap(p1::Particle, p2::Particle)
 end
 isconvex(p::Particle) = isconvex(p.species)
 
+function render!(ax, p::Particle; kwargs...)
+    return render!(ax, species(p), p.pose; kwargs...)
+end
+function render(p::Particle; kwargs...)
+    return render(species(p), p.pose; kwargs...)
+end
