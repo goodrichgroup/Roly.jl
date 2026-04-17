@@ -17,10 +17,8 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux)
     (ismissing(out) || isnothing(out)) && return out
 
     if graphrep(out) ∈ aux
-        println("already in !")
         return missing
     else
-        # println("hashy")
         push!(aux, copy(graphrep(out)))
         return out
     end

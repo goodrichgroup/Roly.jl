@@ -14,7 +14,7 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors)
     for (i, (c, l)) in enumerate(zip(colors, labels))
         ψ = Angle2d{F}(-F(π) * (1/2 + 2/n * (i-1)))
         x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ))) 
-        push!(sites, BindingSite(Pose(x, ψ), c, l:l))
+        push!(sites, BindingSite(Pose(x, ψ), c, i:i))
     end
 
     g = NautyDiGraph(cycle_digraph(n); vertex_labels=labels)

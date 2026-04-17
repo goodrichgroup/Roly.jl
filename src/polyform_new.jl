@@ -160,7 +160,6 @@ end
 function raise!(poly::Polyform, j::Integer; kwargs...)
     #TODO: handle n==0
     site, siteloc = select_jth_compatible_siteloc(poly::Polyform, j::Integer)
-    @show site, siteloc
     isnothing(site) && return nothing
     species_index, site_index = siteloc
 
@@ -211,13 +210,18 @@ function lower!(poly::Polyform)
     for v in Iterators.reverse(canonical_vertices(poly))
         # @show canonical_vertices(poly)
 
-        is_leadingvertex(poly, v) || continue
+        # find the leading vertex corresponding to v
+        for k in v:-1:1
+            is_leadingvertex(poly, k) || continue
+            v = k
+            break
+        end
         # @show v
 
         part = particle(poly, v)
         vs0 = graphvertices(part)
         # vs = canonical_vertices(poly)[vs0]
-        vs = invperm(canonical_vertices(poly))[vs0]
+        vs = sort!(invperm(canonical_vertices(poly))[vs0])
         # @show vs
 
         # @show graphrep(poly).graphset
