@@ -1,37 +1,4 @@
-struct BindingSite{P}
-    pose::P
-    color::Int
-    vertices::UnitRange{Int}
-end
-function Base.show(io::Core.IO, b::BindingSite)
-    print(io, "$(dimension(b.pose))-dimensional BindingSite:\n")
-    print(io, " - color: \t")
-    println(io, b.color)
-    print(io, " - vertices:\t$(b.vertices)\n")
-    #TODO make this general
-    print(io, " - x: $(b.pose.x)\n")
-    print(io, " - ψ: $(rotation_angle(b.pose.ψ) / π)π")
-end
-
-Base.:*(p::Pose, site::BindingSite) = typeof(site)(p * site.pose, site.color, site.vertices)
-Base.:*(site::BindingSite, p::Pose) = typeof(site)(site.pose * p, site.color, site.vertices)
-shift_vertices(site::BindingSite, v::Integer) = typeof(site)(site.pose, site.color, site.vertices .+ v)
-shift_color(site::BindingSite, c::Integer) = typeof(site)(site.pose, site.color + c, site.vertices)
-@inline orientation_offset(b::BindingSite{<:Pose{2,F}}) where {F} = b.pose * Angle2d{F}(π)
-@inline orientation_offset(b::BindingSite{<:Pose{3,F}}) where {F} =  b.pose * RotXYZ{F}(0, 0, π)
-
-color(b::BindingSite) = b.color
-function istouching(b1::BindingSite, b2::BindingSite; kwargs...)
-    return isapprox(b1.pose.x, b2.pose.x; kwargs...)
-end
-function isaligned(b1::BindingSite, b2::BindingSite; kwargs...)
-    return isapprox(b1.pose.ψ, orientation_offset(b2).ψ; kwargs...)
-end
-function isincontact(b1::BindingSite, b2::BindingSite; kwargs...)
-    return isapprox(b1.pose, b2.pose; kwargs...)
-end
-
-abstract type ParticleSpecies end
+abstract type ParticleSpecies{D,F} end
 const SpeciesAndPose{SPC} = Union{Pair{SPC,<:Pose},Tuple{SPC,<:Pose}} where {SPC<:ParticleSpecies}
 
 """

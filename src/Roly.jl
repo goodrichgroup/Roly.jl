@@ -6,6 +6,9 @@ using Graphs, NautyGraphs
 using ReverseSearch
 using CairoMakie
 
+export Pose, tomatrix, dimension
+export BindingSite, color
+
 export ACCEPT, REJECT, BREAK
 export polyenum, polygen
 export AssemblySystem, interactionmatrix, buildingblocks, 
@@ -14,18 +17,16 @@ export AssemblySystem, interactionmatrix, buildingblocks,
 
 
 export Polyform, canonical_id, composition, compositions, interactionmatrix, isinert
-export PolygonGeometry, UnitTriangleGeometry, UnitSquareGeometry, UnitPentagonGeometry, UnitHexagonGeometry, UnitCubeGeometry
+export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
 
 include("utils.jl")
-include("geometry_utils.jl")
-# include("geometry.jl")
-# include("buildingblock.jl")
+include("pose.jl")
+include("bindingsite.jl")
 include("particlespecies.jl")
-include("polygon_particle.jl")
 include("assemblysystem.jl")
 include("particle.jl")
-include("polyform_new.jl")
-# include("polyform.jl")
-# include("concatenation.jl")
+include("polyform.jl")
 include("enumeration.jl")
+
+include("particlespecies/polygonparticlespecies.jl")
 end

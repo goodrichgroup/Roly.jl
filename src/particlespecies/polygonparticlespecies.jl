@@ -1,4 +1,4 @@
-mutable struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies
+mutable struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F}
     g::NautyDiGraph
     sites::Vector{B}
     corners::Matrix{F}
@@ -70,8 +70,8 @@ const DEFAULT_COLORS = [
     [colorant"#95FABA", colorant"#4DD980", colorant"#21AB53", colorant"#008832"]
 ]
 
-function render!(ax, spcs::PolygonParticleSpecies, pose::Pose=Pose{2}(); 
-                 r=nothing, color=nothing, strokewidth=3, kwargs...)
+function render!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=Pose{2,F}(); 
+                 r=nothing, color=nothing, strokewidth=3, kwargs...) where {F}
     n = nsites(spcs)
     a = 2spcs.rmin * tan(π / n)
     if isnothing(r)
