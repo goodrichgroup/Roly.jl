@@ -6,14 +6,17 @@ using Graphs, NautyGraphs
 using ReverseSearch
 using CairoMakie
 
+export Rotation, Angle2d, RotXYZ, rotation_angle, rotation_axis, SVector
 export Pose, tomatrix, dimension
 export BindingSite, color
+export ParticleSpecies, SpeciesAndPose, bindingsites, 
+       graphrep, isconvex, could_contact, overlap, setcolor!, nsites, symmetrynumber
 
 export ACCEPT, REJECT, BREAK
 export polyenum, polygen
 export AssemblySystem, interactionmatrix, buildingblocks, 
        nspecies, nbonds, nsites, dimension,
-       bondlist, bonded_sites, bonded_species, isinert
+       bonded_colors, bonded_sites, bonded_species, isinert
 
 
 export Polyform, canonical_id, composition, compositions, interactionmatrix, isinert

@@ -8,11 +8,20 @@ abstract type ParticleSpecies{D,F} end
 const SpeciesAndPose{SPC} = Union{Pair{SPC,<:Pose},Tuple{SPC,<:Pose}} where {SPC<:ParticleSpecies}
 
 """
-    graphrep(p::ParticleSpecies)
+    bindingsites(p::ParticleSpecies, i::Integer)
 
-Return the graph representation of the particle species `p`.
+Return the `i`th binding site of particle species `p`.
 """
-function graphrep(::ParticleSpecies) end
+function bindingsites(::ParticleSpecies, ::Integer) end
+
+"""
+    bindingsites(p::ParticleSpecies)
+
+Return an iterator over all binding sites of a particle of species `p`.
+"""
+function bindingsites(p::ParticleSpecies)
+    return (bindingsites(p, i) for i in 1:nsites(p))
+end
 
 """
     dimension(p::ParticleSpecies)
@@ -22,27 +31,18 @@ Return the spatial dimension a particle of species `p` lives in.
 function dimension(::ParticleSpecies) end
 
 """
+    graphrep(p::ParticleSpecies)
+
+Return the graph representation of the particle species `p`.
+"""
+function graphrep(::ParticleSpecies) end
+
+"""
     nsites(p::ParticleSpecies)
 
 Return the number of binding sites of a particle of species `p`.
 """
 function nsites(::ParticleSpecies) end
-
-"""
-    bindingsite(p::ParticleSpecies, i::Integer)
-
-Return the `i`th binding site of particle species `p`.
-"""
-function bindingsite(::ParticleSpecies, ::Integer) end
-
-"""
-    bindingsites(p::ParticleSpecies)
-
-Return an iterator over all binding sites of a particle of species `p`.
-"""
-function bindingsites(::ParticleSpecies)
-    return (bindingsite(p, i) for i in 1:nsites(p))
-end
 
 """
     setcolor!(p::ParticleSpecies, c::Integer)
@@ -66,9 +66,9 @@ end
 """
     could_contact(p1::SpeciesAndPose, p2::SpeciesAndPose)
 
-Return true if the particle species at their respective poses could potentially be in contact.
+Return `true` if the particle species at their respective poses could potentially be in contact.
 
-This should be a quick and efficient check and a value of `true` does not necessarily mean that
+This should be a quick and efficient pre-check; a value of `true` does not necessarily mean that
 contact has occured. If `false`, however, it is assumed that contact is impossible and no
 further contact checks will be performed.
 """
@@ -77,7 +77,7 @@ function could_contact(::SpeciesAndPose, ::SpeciesAndPose) end
 """
     overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)
 
-Return true if the particle species at their respective poses are overlapping.
+Return `true` if the particle species at their respective poses are overlapping.
 """
 function overlap(::SpeciesAndPose, ::SpeciesAndPose) end
 

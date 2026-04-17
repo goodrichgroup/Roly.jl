@@ -40,7 +40,7 @@ function AssemblySystem(bindingrules, particlespecies::AbstractVector{<:Particle
         dimension(ps) != D && throw(ArgumentError("particlespecies do not all have the same dimension"))
     end
 
-    particlespecies = _shift_sitecolors_and_labels(particlespecies)
+    particlespecies = _adjust_labels_and_colors(particlespecies)
     color2siteloc, siteloc2color, label2color = _make_bindingsite_lookuptables(particlespecies)
 
     nsites = length(siteloc2color)
@@ -74,27 +74,27 @@ function AssemblySystem(bindingrules, particlespecies::ParticleSpecies)
     return AssemblySystem(bindingrules, particlespecies)
 end
 
-interactionmatrix(sys::AssemblySystem) = sys.intmat
-species(sys::AssemblySystem) = sys.particlespecies
-species(sys::AssemblySystem, i::Integer) = sys.particlespecies[i]
-nspecies(sys::AssemblySystem) = length(sys.particlespecies)
-nbonds(sys::AssemblySystem) = sys.nbonds
-nsites(sys::AssemblySystem) = sys.nsites
-ncolors(sys::AssemblySystem) = sys.ncolors
+@inline interactionmatrix(sys::AssemblySystem) = sys.intmat
+@inline species(sys::AssemblySystem) = sys.particlespecies
+@inline species(sys::AssemblySystem, i::Integer) = sys.particlespecies[i]
+@inline nspecies(sys::AssemblySystem) = length(sys.particlespecies)
+@inline nbonds(sys::AssemblySystem) = sys.nbonds
+@inline nsites(sys::AssemblySystem) = sys.nsites
+@inline ncolors(sys::AssemblySystem) = sys.ncolors
 
-dimension(::AssemblySystem{D}) where {D} = D
-dimension(::Type{<:AssemblySystem{D}}) where {D} = D
-numtype(::AssemblySystem{D,PS}) where {D,PS} = Float64 #numtype(PS)
+@inline dimension(::AssemblySystem{D}) where {D} = D
+@inline dimension(::Type{<:AssemblySystem{D}}) where {D} = D
+@inline numtype(::AssemblySystem{D,PS}) where {D,PS} = Float64 #numtype(PS)
 
-posetype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
-speciestype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
+@inline posetype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
+@inline speciestype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
 
 Base.size(sys::AssemblySystem) = sys.nspcs, sys.nbonds
 Base.size(sys::AssemblySystem, i) = i == 1 ? sys.nspcs : i == 2 ? sys.nbonds : 1
 
 Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySytem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
 
-@inline function bondlist(sys::AssemblySystem)
+@inline function bonded_colors(sys::AssemblySystem)
     return sys._bondlist
 end
 @inline function bonded_sites(sys::AssemblySystem)
@@ -119,7 +119,6 @@ end
 @inline function label2species(sys::AssemblySystem, label::Integer)
     return color2species(sys, label2color(sys, label))
 end
-
 
 @inline function isinert(sys::AssemblySystem, site::BindingSiteLoc)
     color = siteloc2color(sys, site)
@@ -178,7 +177,7 @@ function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
     return maximum(bindingrules[:, [1, 3]])
 end
 
-function _shift_sitecolors_and_labels(particlespecies::AbstractVector{<:ParticleSpecies})
+function _adjust_labels_and_colors(particlespecies::AbstractVector{<:ParticleSpecies})
     particlespecies = [copy(ps) for ps in particlespecies]
 
     c = 1
@@ -213,7 +212,7 @@ function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:Partic
                 end
                 siteloc2color[spcssite] = color
 
-                site = bindingsite(ps, site_index)
+                site = bindingsites(ps, site_index)
                 for v in site.vertices
                     l = label(graphrep(ps), v)
                     l ∈ keys(label2color) && continue

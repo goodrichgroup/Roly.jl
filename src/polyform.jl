@@ -71,12 +71,12 @@ function _filter_edges_by_species(p::Polyform, ::Val{same_species}) where same_s
 end
 
 """
-    bindingsite(p::Polyform, i::Integer)
+    bindingsites(p::Polyform, i::Integer)
 
 Return the `i`th binding site of polyform `p`. The order of binding sites is
 given by the isomorphism class of the graph encoding of `p` and is deterministic.
 """
-function bindingsite(p::Polyform, i::Integer)
+function bindingsites(p::Polyform, i::Integer)
     k = 0
     for v in canonical_vertices(p)
         prtcl = particle(p, v)
@@ -86,19 +86,19 @@ function bindingsite(p::Polyform, i::Integer)
             # TODO: skip bound or non-interacting sites
             k += 1
             if k == i
-                return bindingsite(prtcl, j)
+                return bindingsites(prtcl, j)
             end
         end
     end
     return nothing
 end
 function bindingsites(p::Polyform)
-    return (bindingsite(p, i) for i in 1:nsites(p))
+    return (bindingsites(p, i) for i in 1:nsites(p))
 end
 
 function open_bindingsites(p::Polyform)
-    return Iterators.takewhile(!isnothing, (bindingsite(p, k) for k in 1:nsites(p) 
-           if !isbound_site(p, k) && !isinert(assemblysystem(p), color(bindingsite(p, k)))))
+    return Iterators.takewhile(!isnothing, (bindingsites(p, k) for k in 1:nsites(p) 
+           if !isbound_site(p, k) && !isinert(assemblysystem(p), color(bindingsites(p, k)))))
 end
 function open_bindingsite(p::Polyform, i::Integer)
     #TODO simplify this by assinging color=0 to all inert sites
@@ -115,7 +115,7 @@ function isbound_vertex(p::Polyform, v::Integer)
 end
 
 function isbound_site(p::Polyform, site_index::Integer)
-    return isbound_vertex(p, invperm(canonical_vertices(p))[first(bindingsite(p, site_index).vertices)])
+    return isbound_vertex(p, invperm(canonical_vertices(p))[first(bindingsites(p, site_index).vertices)])
 end
 
 function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracting=false, allow_misaligned=false, kwargs...)
@@ -237,8 +237,8 @@ end
 
 function attach(species_and_site::Pair{<:ParticleSpecies, <:Integer}, at::BindingSite; leading_vertex)
     particle_species, site_index = species_and_site
-    site = bindingsite(particle_species, site_index)
-    # We want the pose of bindingsite(particle, site_index) to be equal to the pose of at + the standard_offset
+    site = bindingsites(particle_species, site_index)
+    # We want the pose of bindingsites(particle, site_index) to be equal to the pose of at + the standard_offset
     particle_pose = inv(site.pose) * standard_offset(at)
     return Particle(particle_species, particle_pose; leading_vertex)
 end

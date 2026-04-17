@@ -7,7 +7,7 @@ using Rotations, StaticArrays
     # include("assembly_system.jl")
     # include("polyform.jl")
     # include("utils.jl")
-    # include("enumeration.jl")
     include("pose.jl")
     include("bindingsite.jl")
+    include("enumeration.jl")
 end;

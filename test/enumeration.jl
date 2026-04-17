@@ -6,7 +6,6 @@
          3 1 4 1],
         UnitTriangle)
 
-
     I137 = AssemblySystem(
         [1 2 2 1;
          1 3 3 1;

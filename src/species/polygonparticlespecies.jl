@@ -30,7 +30,7 @@ dimension(::PolygonParticleSpecies) = 2
 graphrep(p::PolygonParticleSpecies) = p.g
 symmetrynumber(p::PolygonParticleSpecies) = 1
 nsites(p::PolygonParticleSpecies) = length(p.sites)
-bindingsite(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
+bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 function setcolor!(p::PolygonParticleSpecies, c::Integer)
     map!(p.sites) do s
         shift_color(s, c - 1)

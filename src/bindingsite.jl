@@ -23,12 +23,12 @@ Base.:*(site::BindingSite, p) = typeof(site)(site.pose * p, site.color, site.ver
 """
     standard_offset(b::BindingSite{<:Pose{D,F}}) where {D,F}
 
-Calculate the default orientational offset between two attached binding sites. We employ the 
+Calculate the default offset between two attached binding sites. We employ the 
 convention that attached binding sites are "facing each other": their poses are related 
 via a 180 degree rotation around their (shared) z-axes.
 """
-@inline standard_offset(b::BindingSite{<:Pose{2,F}}) where {F} = b.pose.psi * Angle2d{F}(π)
-@inline standard_offset(b::BindingSite{<:Pose{3,F}}) where {F} =  b.pose.psi * RotXYZ{F}(0, 0, π)
+@inline standard_offset(b::BindingSite{<:Pose{2,F}}) where {F} = b.pose * Angle2d{F}(π)
+@inline standard_offset(b::BindingSite{<:Pose{3,F}}) where {F} =  b.pose * RotXYZ{F}(0, 0, π)
 
 """
     color(b::BindingSite)
@@ -36,7 +36,8 @@ via a 180 degree rotation around their (shared) z-axes.
 Return the binding site's color.
 
 If the binding site comes from an `AssemblySystem`, its interactions with other
-binding sites are determined by `interactionmatrix(sys)[:, color(b)]`.
+binding sites are determined by `interactionmatrix(sys)[:, color(b)]`. A color
+of `0` indicates that the site is inert, i.e. it does not bind to any other site.
 """
 color(b::BindingSite) = b.color
 
@@ -63,7 +64,7 @@ Absolute (`atol`) and relative (`rtol`) tolerances should be supplied
 as keyword arguments.
 """
 function isaligned(b1::BindingSite, b2::BindingSite; kwargs...)
-    return isapprox(b1.pose.psi, standard_offset(b2); kwargs...)
+    return isapprox(b1.pose.psi, standard_offset(b2).psi; kwargs...)
 end
 
 """
