@@ -115,7 +115,7 @@ function isbound_vertex(p::Polyform, v::Integer)
 end
 
 function isbound_site(p::Polyform, site_index::Integer)
-    return isbound_vertex(p, first(bindingsite(p, site_index).vertices))
+    return isbound_vertex(p, invperm(canonical_vertices(p))[first(bindingsite(p, site_index).vertices)])
 end
 
 function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracting=false, allow_misaligned=false, kwargs...)
@@ -160,6 +160,7 @@ end
 function raise!(poly::Polyform, j::Integer; kwargs...)
     #TODO: handle n==0
     site, siteloc = select_jth_compatible_siteloc(poly::Polyform, j::Integer)
+    @show site, siteloc
     isnothing(site) && return nothing
     species_index, site_index = siteloc
 
@@ -257,10 +258,10 @@ function render!(ax, p::Polyform; kwargs...)
     end
     return out
 end
-function render(p::Polyform; kwargs...)
+function render(p::Polyform; hidedecorations=true, kwargs...)
     f = Figure()
     ax = Axis(f[1, 1], aspect=DataAspect())
-    hidedecorations!(ax)
+    hidedecorations && hidedecorations!(ax)
     render!(ax, p; kwargs...)
     return f
 end

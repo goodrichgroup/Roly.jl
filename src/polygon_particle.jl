@@ -55,6 +55,7 @@ const UnitSquare = PolygonParticleSpecies(4)
 const UnitHexagon = PolygonParticleSpecies(6)
 
 
+const INERT_COLOR = colorant"#E7E7E7"
 const DEFAULT_COLORS = [
     [colorant"#B2D0EA", colorant"#54A3E4", colorant"#1A78C6", colorant"#00549A"],
     [colorant"#F39F9D", colorant"#ED7E7C", colorant"#E75451", colorant"#BE2E2C"],
@@ -70,7 +71,7 @@ const DEFAULT_COLORS = [
 ]
 
 function render!(ax, spcs::PolygonParticleSpecies, pose::Pose=Pose{2}(); 
-                 r=nothing, color=nothing, strokewidth=1, kwargs...)
+                 r=nothing, color=nothing, strokewidth=3, kwargs...)
     n = nsites(spcs)
     a = 2spcs.rmin * tan(π / n)
     if isnothing(r)
@@ -80,6 +81,7 @@ function render!(ax, spcs::PolygonParticleSpecies, pose::Pose=Pose{2}();
         sitecolors = [b.color for b in bindingsites(spcs)]
         spcs_color = cld(first(sitecolors), n)
         color = DEFAULT_COLORS[spcs_color][1:n]
+        # grey out inert sides (set their color to zero to indicate that)
     end
     return _draw_ngon!(ax, pose.x[1], pose.x[2], rotation_angle(pose.ψ); n, a, r, color, strokewidth, kwargs...)
 end
