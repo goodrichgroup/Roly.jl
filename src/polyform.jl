@@ -173,6 +173,12 @@ function lower!(poly::Polyform)
         return poly
     end
 
+    nv_g = nv(graphrep(poly))
+    is_target = zeros(Bool, nv_g)
+    forbidden = zeros(Bool, nv_g)
+    explored = zeros(Bool, nv_g)
+    queue = zeros(Cint, nv_g)
+
     for v in Iterators.reverse(canonical_vertices(poly))
         # find the leading vertex corresponding to v
         for k in v:-1:1
@@ -185,7 +191,7 @@ function lower!(poly::Polyform)
         vs0 = graphvertices(part)
         vs = sort!(invperm(canonical_vertices(poly))[vs0])
 
-        are_cutvertices(graphrep(poly), vs) && continue
+        are_cutvertices!(graphrep(poly), vs, is_target, forbidden, explored, queue) && continue
 
         pop!(poly.particles, leading_vertex(part))
         rem_vertices!(graphrep(poly), vs)

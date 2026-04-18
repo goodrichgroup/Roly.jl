@@ -3,58 +3,55 @@ DefInt, DefFloat = Int16, Float32
 
 
 function are_cutvertices(g::AbstractNautyGraph, vs::AbstractVector{<:Integer})
-    neighs = zeros(Bool, nv(g))
-
-    for v in vs
-        neighs .|= NautyGraphs.adjrow(g, v)
-    end
-    neighs[vs] .= false
-
-    if length(neighs) < 2
-        return false
-    end
-
-    forbidden = zeros(Bool, nv(g))
-    forbidden[vs] .= true
-
-    return !vertices_connected(g, findfirst(neighs), findall(neighs), forbidden)
-end
-function vertices_connected(g::NautyDiGraph, v0::Integer, 
-    targets::AbstractVector{<:Integer}, forbidden::AbstractVector{<:Integer})
-
     n = nv(g)
-    # neighs = zeros(Int, n)
-    explored = zeros(Bool, n)
-    
-    queue = zeros(Cint, n)
+    return are_cutvertices!(g, vs, zeros(Bool, n), zeros(Bool, n), zeros(Bool, n), zeros(Cint, n))
+end
+
+function are_cutvertices!(g::AbstractNautyGraph, vs::AbstractVector{<:Integer},
+    is_target::AbstractVector{Bool}, forbidden::AbstractVector{Bool},
+    explored::AbstractVector{Bool}, queue::AbstractVector)
+
+    fill!(is_target, false)
+    fill!(forbidden, false)
+    forbidden[vs] .= true
+    for v in vs
+        is_target .|= NautyGraphs.adjrow(g, v)
+    end
+    is_target[vs] .= false
+
+    n_targets = count(is_target)
+    n_targets < 2 && return false
+
+    v0 = findfirst(is_target)
+    fill!(explored, false)
+    explored[v0] = true
+    n_found = 1
+
     queue[1] = v0
     q_start = 1
     q_end = 2
 
-    explored[v0] = true
     while q_end > q_start
         v = queue[q_start]
         q_start += 1
-        # n_neighs = NautyGraphs.outneighbors!(neighs, g, v)
-        for neigh in outneighbors(g, v)
-            if forbidden[neigh]
-                continue
-            end
 
+        outneighs = NautyGraphs.adjrow(g, v)
+        for neigh in eachindex(outneighs)
+            outneighs[neigh] || continue
+            forbidden[neigh] && continue
             if !explored[neigh]
                 explored[neigh] = true
-
-                if all(@view explored[targets])
-                    return true
+                if is_target[neigh]
+                    n_found += 1
+                    n_found == n_targets && return false
                 end
-
                 queue[q_end] = neigh
-                q_end += 1                
+                q_end += 1
             end
         end
     end
 
-    return false
+    return true
 end
 
 function take_nth(itr, n, default=nothing)
