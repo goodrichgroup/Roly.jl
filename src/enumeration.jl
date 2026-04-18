@@ -2,23 +2,28 @@ mutable struct PolyformAux{BS<:BindingSite}
     seen::Set{NautyDiGraph}
     pairs::Vector{Tuple{BS,BindingSiteLoc}}
 end
+Base.copy(polyaux::PolyformAux) = typeof(polyaux)(copy(polyaux.seen), copy(polyaux.pairs))
 
 function collect_compatible_pairs!(aux::PolyformAux, poly::Polyform)
     sys = assemblysystem(poly)
     inv_cv = invperm(canonical_vertices(poly))
     empty!(aux.pairs)
+
     for orig_v in canonical_vertices(poly)
         part = particle(poly, orig_v)
         isnothing(part) && continue
+
         for k in 1:nsites(part)
             site = bindingsites(part, k)
             isbound_vertex(poly, inv_cv[first(site.vertices)]) && continue
             isinert(sys, color(site)) && continue
+
             for siteloc in compatible_sitelocs(sys, color(site))
                 push!(aux.pairs, (site, siteloc))
             end
         end
     end
+    return
 end
 
 function ls!(k::Polyform, s::Polyform)
