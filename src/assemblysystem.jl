@@ -21,9 +21,9 @@ Even without enumerating the allowed structures, it is possible to determine whe
 If this is the case, then the two systems are identical up a relabeling and/or rotating the building blocks -- they are isomorphic.
 This can be checked by comparing the `rhash`es of different assembly systems; if the hashes are equal, the systems are isomorphic. 
 """
-mutable struct AssemblySystem{D,VPS<:AbstractVector{<:ParticleSpecies}}
+mutable struct AssemblySystem{D,PS<:ParticleSpecies}
     intmat::Symmetric{Bool,Matrix{Bool}}
-    particlespecies::VPS
+    particlespecies::Vector{PS}
     nbonds::Int
     nsites::Int
     ncolors::Int
@@ -34,7 +34,7 @@ mutable struct AssemblySystem{D,VPS<:AbstractVector{<:ParticleSpecies}}
     _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
 end
-function AssemblySystem(bindingrules, particlespecies::AbstractVector{<:ParticleSpecies})
+function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
     D = dimension(first(particlespecies))
     for ps in particlespecies
         dimension(ps) != D && throw(ArgumentError("particlespecies do not all have the same dimension"))
@@ -64,8 +64,8 @@ function AssemblySystem(bindingrules, particlespecies::AbstractVector{<:Particle
     end
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
-    return AssemblySystem{D,typeof(particlespecies)}(intmat, particlespecies, nbonds, nsites, ncolors,
-                                color2siteloc, siteloc2color, label2color, 
+    return AssemblySystem{D,PS}(intmat, particlespecies, nbonds, nsites, ncolors,
+                                color2siteloc, siteloc2color, label2color,
                                 bondlist, bondedsites, bondedspecies)
 end
 function AssemblySystem(bindingrules, particlespecies::ParticleSpecies)
@@ -140,9 +140,9 @@ Return the spatial dimension of the particles of the assembly system `sys`.
 @inline dimension(::AssemblySystem{D}) where {D} = D
 @inline dimension(::Type{<:AssemblySystem{D}}) where {D} = D
 
-@inline numtype(::AssemblySystem{D,}) where {D,PS} = Float64 #numtype(PS)
-@inline posetype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
-@inline speciestype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
+@inline numtype(::AssemblySystem{D,PS}) where {D,PS} = numtype(PS)
+@inline posetype(::AssemblySystem{D,PS}) where {D,PS} = posetype(PS)
+@inline speciestype(::AssemblySystem{D,PS}) where {D,PS} = PS
 
 """
     bonded_colors(sys::AssemblySystem)
@@ -180,7 +180,7 @@ end
 Return the binding site color associated with the binding site location `siteloc`.
 """
 @inline function siteloc2color(sys::AssemblySystem, siteloc::BindingSiteLoc)
-    return sys._siteloc2color[site]
+    return sys._siteloc2color[siteloc]
 end
 
 """
@@ -289,8 +289,8 @@ function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
     return maximum(bindingrules[:, [1, 3]])
 end
 
-function _adjust_labels_and_colors(particlespecies::AbstractVector{<:ParticleSpecies})
-    particlespecies = [copy(ps) for ps in particlespecies]
+function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
+    particlespecies = PS[copy(ps) for ps in particlespecies]
 
     c = 1
     l = 1

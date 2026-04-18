@@ -1,9 +1,26 @@
 """
-    ParticleSpecies{D,F}
+    ParticleSpecies{D,F,P<:Pose{D,F}}
 
-Abstract supertype of all particle species.
+Abstract supertype of all particle species. `D` is the spatial dimension, `F` is the
+numeric type, and `P` is the concrete `Pose` type used by the species.
 """
-abstract type ParticleSpecies{D,F} end
+abstract type ParticleSpecies{D,F,P<:Pose{D,F}} end
+
+"""
+    numtype(::ParticleSpecies{D,F,P}) -> Type
+
+Return the numeric element type `F`.
+"""
+numtype(::ParticleSpecies{D,F}) where {D,F} = F
+numtype(::Type{<:ParticleSpecies{D,F}}) where {D,F} = F
+
+"""
+    posetype(::ParticleSpecies{D,F,P}) -> Type
+
+Return the concrete `Pose` type `P` used by the particle species.
+"""
+posetype(::ParticleSpecies{D,F,P}) where {D,F,P} = P
+posetype(::Type{<:ParticleSpecies{D,F,P}}) where {D,F,P} = P
 
 const SpeciesAndPose{SPC} = Union{Pair{SPC,<:Pose},Tuple{SPC,<:Pose}} where {SPC<:ParticleSpecies}
 

@@ -1,4 +1,4 @@
-mutable struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F}
+mutable struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F,Pose{2,F,Angle2d{F}}}
     g::NautyDiGraph
     sites::Vector{B}
     corners::Matrix{F}
