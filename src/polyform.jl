@@ -96,26 +96,12 @@ function bindingsites(p::Polyform)
     return (bindingsites(p, i) for i in 1:nsites(p))
 end
 
-function open_bindingsites(p::Polyform)
-    return Iterators.takewhile(!isnothing, (bindingsites(p, k) for k in 1:nsites(p) 
-           if !isbound_site(p, k) && !isinert(assemblysystem(p), color(bindingsites(p, k)))))
-end
-function open_bindingsite(p::Polyform, i::Integer)
-    #TODO simplify this by assinging color=0 to all inert sites
-    return take_nth(open_bindingsites(p), i)
-end
-nopensites(p::Polyform) = sum(x->1, open_bindingsites(p); init=0)
-
 function isbound_vertex(p::Polyform, v::Integer)
     vspcs = label2species(assemblysystem(p), label(graphrep(p), v))
     # calling `outneighbors` on a NautyGraph would allocate, this is a workaround for that
     neighbor_bitvec = NautyGraphs.adjrow(graphrep(p), v)
-    return any(label2species(assemblysystem(p), label(graphrep(p), n)) != vspcs 
+    return any(label2species(assemblysystem(p), label(graphrep(p), n)) != vspcs
                for n in eachindex(neighbor_bitvec) if neighbor_bitvec[n])
-end
-
-function isbound_site(p::Polyform, site_index::Integer)
-    return isbound_vertex(p, invperm(canonical_vertices(p))[first(bindingsites(p, site_index).vertices)])
 end
 
 function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracting=false, allow_misaligned=false, kwargs...)
@@ -126,7 +112,6 @@ function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracti
         could_contact(polypart, part) || continue
         overlap(polypart, part) && return true, nothing
 
-        # TODO: we could only iterate over open binding sites
         for b1 in bindingsites(polypart), b2 in bindingsites(part)
             istouching(b1, b2; kwargs...) || continue
 
@@ -140,49 +125,31 @@ function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracti
             push!(contacts, (b1.vertices, b2.vertices))
         end
     end
-    return false, contacts 
+    return false, contacts
 end
 
-function select_jth_compatible_siteloc(poly::Polyform, j::Integer)
-    i = 0
-    for s in 1:nopensites(poly)
-        site = open_bindingsite(poly, s)
-        for siteloc in compatible_sitelocs(assemblysystem(poly), color(site))
-            i += 1
-            if i == j
-                return site, siteloc
-            end
-        end
-    end
-    return nothing, nothing
-end
-
-function raise!(poly::Polyform, j::Integer; kwargs...)
-    #TODO: handle n==0
-    site, siteloc = select_jth_compatible_siteloc(poly::Polyform, j::Integer)
-    isnothing(site) && return nothing
+function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwargs...)
     species_index, site_index = siteloc
-
     particle_species = species(assemblysystem(poly), species_index)
     leading_vertex = nv(graphrep(poly)) + 1
     attached_particle = attach(particle_species => site_index, site; leading_vertex)
 
-    overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
-    overlap && return missing
+    has_overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
+    has_overlap && return missing
 
     poly.particles[leading_vertex] = attached_particle
 
     g_attach = graphrep(species(attached_particle))
     add_vertices!(graphrep(poly); vertex_labels=labels(g_attach))
-    for (;src, dst) in edges(g_attach)
+    for (; src, dst) in edges(g_attach)
         add_edge!(graphrep(poly), src + leading_vertex - 1, dst + leading_vertex - 1)
     end
 
+    inv_cv = invperm(canonical_vertices(poly))
     for (vs1, vs2) in contacting_vertices
         for (v1, v2) in zip(vs1, vs2)
-            v1 = invperm(canonical_vertices(poly))[v1]
-            add_edge!(graphrep(poly), v1, v2)
-            add_edge!(graphrep(poly), v2, v1)
+            add_edge!(graphrep(poly), inv_cv[v1], v2)
+            add_edge!(graphrep(poly), v2, inv_cv[v1])
         end
     end
 
