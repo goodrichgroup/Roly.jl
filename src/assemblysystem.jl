@@ -74,60 +74,175 @@ function AssemblySystem(bindingrules, particlespecies::ParticleSpecies)
     return AssemblySystem(bindingrules, particlespecies)
 end
 
+
+"""
+    interactionmatrix(sys::AssemblySystem)
+
+Return the interaction matrix of the assembly system `sys`.
+
+The interaction matrix is indexed by the colors of binding sites.
+If two binding sites have colors `c1` and `c2`, then the truth value of 
+`interactionmatrix(sys)[c1, c2]` determines whether the two sites are able
+to bind to each other.
+"""
 @inline interactionmatrix(sys::AssemblySystem) = sys.intmat
+
+"""
+    species(sys::AssemblySystem)
+
+Return the list of particle species of the assembly system `sys`.
+"""
 @inline species(sys::AssemblySystem) = sys.particlespecies
+
+"""
+    species(sys::AssemblySystem, i::Integer)
+
+Return the `i`th particle species of the assembly system `sys`.
+"""
 @inline species(sys::AssemblySystem, i::Integer) = sys.particlespecies[i]
+
+"""
+    nspecies(sys::AssemblySystem)
+
+Return the number of particle species of the assembly system `sys`.
+"""
 @inline nspecies(sys::AssemblySystem) = length(sys.particlespecies)
+
+"""
+    nbonds(sys::AssemblySystem)
+
+Return the total number of possible bonds between binding sites of the assembly system `sys`.
+"""
 @inline nbonds(sys::AssemblySystem) = sys.nbonds
+
+"""
+    nsites(sys::AssemblySystem)
+
+Return the total number of binding sites across all particle species of the assembly system `sys`.
+"""
 @inline nsites(sys::AssemblySystem) = sys.nsites
+
+"""
+    ncolors(sys::AssemblySystem)
+
+Return the total number of binding sites colors across all particle species of the assembly system `sys`.
+
+`ncolors(sys)` is not necessarily the equal to `nsites(sys)`. 
+If particle species have symmetry, some binding sites may carry the same color.
+"""
 @inline ncolors(sys::AssemblySystem) = sys.ncolors
 
+"""
+    dimension(::AssemblySystem)
+
+Return the spatial dimension of the particles of the assembly system `sys`.
+"""
 @inline dimension(::AssemblySystem{D}) where {D} = D
 @inline dimension(::Type{<:AssemblySystem{D}}) where {D} = D
-@inline numtype(::AssemblySystem{D,PS}) where {D,PS} = Float64 #numtype(PS)
 
+@inline numtype(::AssemblySystem{D,}) where {D,PS} = Float64 #numtype(PS)
 @inline posetype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
 @inline speciestype(::AssemblySystem{D,PS}) where {D,PS} = Pose{2,Float64,Angle2d{Float64}} #positiontype(BB)
 
-Base.size(sys::AssemblySystem) = sys.nspcs, sys.nbonds
-Base.size(sys::AssemblySystem, i) = i == 1 ? sys.nspcs : i == 2 ? sys.nbonds : 1
+"""
+    bonded_colors(sys::AssemblySystem)
 
-Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySytem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
-
+Return all pairs of binding site colors that may bind according to the binding rules
+of the assembly system `sys`.
+"""
 @inline function bonded_colors(sys::AssemblySystem)
     return sys._bondlist
 end
+
+"""
+    bonded_sites(sys::AssemblySystem)
+
+Return all pairs of binding site locations that may bind according to the binding rules
+of the assembly system `sys`.
+"""
 @inline function bonded_sites(sys::AssemblySystem)
     return sys._bonded_sites
 end
+
+"""
+    bonded_species(sys::AssemblySystem)
+
+Return all pairs of particle species that may bind according to the binding rules
+of the assembly system `sys`.
+"""
 @inline function bonded_species(sys::AssemblySystem)
     return sys._bonded_species
 end
 
-@inline function siteloc2color(sys::AssemblySystem, site::BindingSiteLoc)
+"""
+    siteloc2color(sys::AssemblySystem, siteloc::BindingSiteLoc)
+
+Return the binding site color associated with the binding site location `siteloc`.
+"""
+@inline function siteloc2color(sys::AssemblySystem, siteloc::BindingSiteLoc)
     return sys._siteloc2color[site]
 end
+
+"""
+    color2siteloc(sys::AssemblySystem, color::Integer)
+
+Return the (possible multiple) binding site locations associated with the binding site color `color`.
+"""
 @inline function color2siteloc(sys::AssemblySystem, color::Integer)
     return sys._color2siteloc[color]
 end
+
+"""
+    label2color(sys::AssemblySystem, label::Integer)
+
+Return the binding site color associated with the graph representation label `label`.
+"""
 @inline function label2color(sys::AssemblySystem, label::Integer)
     return sys._label2color[label]
 end
+
+"""
+    color2species(sys::AssemblySystem, color::Integer)
+
+Return the particle species that contains the binding site with color `color`.
+"""
 @inline function color2species(sys::AssemblySystem, color::Integer)
     return color2siteloc(sys, color)[1][1]
 end
+
+"""
+    label2species(sys::AssemblySystem, label::Integer)
+
+Return the particle species whose graph representation contains the label `label`.
+"""
 @inline function label2species(sys::AssemblySystem, label::Integer)
     return color2species(sys, label2color(sys, label))
 end
 
-@inline function isinert(sys::AssemblySystem, site::BindingSiteLoc)
-    color = siteloc2color(sys, site)
+"""
+    isinert(sys::AssemblySystem, siteloc::BindingSiteLoc)
+
+Return `true` if the binding site at `siteloc` does not bind to any binding sites.
+"""
+@inline function isinert(sys::AssemblySystem, siteloc::BindingSiteLoc)
+    color = siteloc2color(sys, siteloc)
     return isinert(sys, color)
 end
+
+"""
+    isinert(sys::AssemblySystem, color::Integer)
+
+Return `true` if the binding site with color `color` does not bind to any binding sites.
+"""
 @inline function isinert(sys::AssemblySystem, color::Integer)
     return !any(@view interactionmatrix(sys)[:, color])
 end
 
+"""
+    graphrep(sys::AssemblySystem)
+
+Return the graph representation of the assembly system `sys`.
+"""
 function graphrep(sys::AssemblySystem)
     imat = interactionmatrix(sys)
     ns = nsites(sys)
@@ -166,11 +281,8 @@ function compatible_sitelocs(sys::AssemblySystem, color::Integer)
     return (siteloc for c in cs if intmat[c, color] for siteloc in color2siteloc(sys, c))
 end
 
-function canonid(sys::AssemblySystem)
-    a = graphrep(sys)
-    a_prime = NautyDiGraph(adjacency_matrix(a)'; vertex_labels=labels(a))
-    return sort([canonical_id(a), canonical_id(a_prime)])
-end
+Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySytem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
+
 
 function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
     _checkshape(bindingrules)
