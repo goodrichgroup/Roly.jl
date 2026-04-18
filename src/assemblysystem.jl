@@ -33,6 +33,8 @@ mutable struct AssemblySystem{D,PS<:ParticleSpecies}
     _bondlist::Vector{NTuple{2,Int}}
     _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
+    _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
+    _isinert::BitVector
 end
 function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
     D = dimension(first(particlespecies))
@@ -64,9 +66,20 @@ function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}) where
     end
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
+
+    compatible_sitelocs_cache = [Vector{BindingSiteLoc}() for _ in 1:ncolors]
+    for c in 1:ncolors
+        for c2 in 1:ncolors
+            intmat[c2, c] || continue
+            append!(compatible_sitelocs_cache[c], color2siteloc[c2])
+        end
+    end
+    isinert_cache = BitVector(!any(intmat[:, c]) for c in 1:ncolors)
+
     return AssemblySystem{D,PS}(intmat, particlespecies, nbonds, nsites, ncolors,
                                 color2siteloc, siteloc2color, label2color,
-                                bondlist, bondedsites, bondedspecies)
+                                bondlist, bondedsites, bondedspecies,
+                                compatible_sitelocs_cache, isinert_cache)
 end
 function AssemblySystem(bindingrules, particlespecies::ParticleSpecies)
     nspcs = _extract_nspecies(bindingrules)
@@ -235,7 +248,7 @@ end
 Return `true` if the binding site with color `color` does not bind to any binding sites.
 """
 @inline function isinert(sys::AssemblySystem, color::Integer)
-    return !any(@view interactionmatrix(sys)[:, color])
+    return sys._isinert[color]
 end
 
 """
@@ -276,9 +289,7 @@ function graphrep(sys::AssemblySystem)
 end
 
 function compatible_sitelocs(sys::AssemblySystem, color::Integer)
-    intmat = interactionmatrix(sys)
-    cs = 1:ncolors(sys)
-    return (siteloc for c in cs if intmat[c, color] for siteloc in color2siteloc(sys, c))
+    return sys._compatible_sitelocs[color]
 end
 
 Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySytem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
