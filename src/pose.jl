@@ -48,7 +48,8 @@ end
 Base.:(==)(p1::Pose, p2::Pose) = p1.x == p2.x && p1.psi == p2.psi
 Base.isapprox(p1::Pose, p2::Pose; kwargs...) = isapprox(p1.x, p2.x; kwargs...) && isapprox(p1.psi, p2.psi; kwargs...)
 
-Base.:*(p1::Pose, p2::Pose) = typeof(p1)(p2.psi * p1.x + p2.x, p1.psi * p2.psi)
+Base.:*(p1::Pose, p2::Pose) = typeof(p1)(p1.psi * p2.x + p1.x, p1.psi * p2.psi)
+Base.:*(p::Pose, v::SVector) = p.psi * v + p.x
 Base.:*(R::Rotation, p::Pose) = typeof(p)(R * p.x, R * p.psi)
 Base.:*(p::Pose, R::Rotation) = typeof(p)(p.x, p.psi * R)
 

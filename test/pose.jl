@@ -41,16 +41,16 @@ using StaticArrays, Rotations
     p3 = Pose(Y, one(RotXYZ))
     p4 = Pose(X, RZ)
 
-    @test isapprox(p3 * p4, Pose(-Y + X, RZ); atol=1e-12)
-    @test isapprox(p4 * p3, Pose(Y + X, RZ); atol=1e-12)
+    @test isapprox(p3 * p4, Pose(X + Y, RZ); atol=1e-12)
+    @test isapprox(p4 * p3, Pose(-Y + X, RZ); atol=1e-12)
 
     p5 = Pose(X, RY)
     p6 = Pose(Z, RZ)
 
-    @test isapprox(p5 * p6, Pose(-X + Z, RY * RZ); atol=1e-12)
-    @test isapprox(p6 * p5, Pose(X + X, RZ * RY); atol=1e-12)
-    @test isapprox(p5 / p6, Pose(-X - Z, RY * RZ'); atol=1e-12)
-    @test isapprox(p6 / p5, Pose(-X - Z, RZ * RY'); atol=1e-12)
-    @test isapprox(p5 \ p6, Pose(-Z + Z, RY' * RZ); atol=1e-12)
-    @test isapprox(p6 \ p5, Pose(-X + X, RZ' * RY); atol=1e-12)
+    @test isapprox(p5 * p6, Pose(X + X, RY * RZ); atol=1e-12)
+    @test isapprox(p6 * p5, Pose(-X + Z, RZ * RY); atol=1e-12)
+    @test isapprox(p5 / p6, Pose(-X + X, RY * RZ'); atol=1e-12)
+    @test isapprox(p6 / p5, Pose(-Z + Z, RZ * RY'); atol=1e-12)
+    @test isapprox(p5 \ p6, Pose(-X - Z, RY' * RZ); atol=1e-12)
+    @test isapprox(p6 \ p5, Pose(-X - Z, RZ' * RY); atol=1e-12)
 end

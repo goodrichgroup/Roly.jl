@@ -56,7 +56,7 @@ nsites(p::Particle, sys::AssemblySystem) = nsites(species(sys, p.species_index))
 Return the `i`th binding site of particle `p`.
 """
 function bindingsites(p::Particle, sys::AssemblySystem, i::Integer)
-    return shift_vertices(bindingsites(species(sys, p.species_index), i), leading_vertex(p) - 1) * p.pose
+    return p.pose * shift_vertices(bindingsites(species(sys, p.species_index), i), leading_vertex(p) - 1)
 end
 
 """

@@ -8,17 +8,23 @@ binding sites may bind. One binding site may be represented by multiple contiguo
 graph vertices and particle/polyform graph representation. The relative poses of two
 attached binding sites is given by `standard_offset`.
 """
-struct BindingSite{P<:Pose}
+struct BindingSite{P<:Pose, F<:Real}
     pose::P
     color::Int
     vertices::UnitRange{Int}
-    #TODO: we could add a size/alignment scale here
+    touching_tolerance::F
+    alignment_tolerance::F
+end
+function BindingSite(pose::P, color::Integer, vertices::UnitRange{<:Integer},
+                     touching_tolerance::Real, alignment_tolerance::Real) where {P<:Pose}
+    F = eltype(P)
+    return BindingSite{P,F}(pose, color, vertices, convert(F, touching_tolerance), convert(F, alignment_tolerance))
 end
 
-Base.:*(p, site::BindingSite) = typeof(site)(p * site.pose, site.color, site.vertices)
-Base.:*(site::BindingSite, p) = typeof(site)(site.pose * p, site.color, site.vertices)
-@inline shift_vertices(site::BindingSite, v::Integer) = typeof(site)(site.pose, site.color, site.vertices .+ v)
-@inline shift_color(site::BindingSite, c::Integer) = typeof(site)(site.pose, site.color + c, site.vertices)
+Base.:*(p, site::BindingSite) = typeof(site)(p * site.pose, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance)
+Base.:*(site::BindingSite, p) = typeof(site)(site.pose * p, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance)
+@inline shift_vertices(site::BindingSite, v::Integer) = typeof(site)(site.pose, site.color, site.vertices .+ v, site.touching_tolerance, site.alignment_tolerance)
+@inline shift_color(site::BindingSite, c::Integer) = typeof(site)(site.pose, site.color + c, site.vertices, site.touching_tolerance, site.alignment_tolerance)
 
 """
     standard_offset(b::BindingSite{<:Pose{D,F}}) where {D,F}
@@ -50,8 +56,9 @@ are approximately equal.
 Absolute (`atol`) and relative (`rtol`) tolerances should be supplied
 as keyword arguments.
 """
-function istouching(b1::BindingSite, b2::BindingSite; kwargs...)
-    return isapprox(b1.pose.x, b2.pose.x; kwargs...)
+function istouching(b1::BindingSite, b2::BindingSite)
+    return isapprox(b1.pose.x, b2.pose.x;
+                    atol = b1.touching_tolerance + b2.touching_tolerance, rtol = 0)
 end
 
 """
@@ -63,8 +70,9 @@ differ by a standard offset.
 Absolute (`atol`) and relative (`rtol`) tolerances should be supplied
 as keyword arguments.
 """
-function isaligned(b1::BindingSite, b2::BindingSite; kwargs...)
-    return isapprox(b1.pose.psi, standard_offset(b2).psi; kwargs...)
+function isaligned(b1::BindingSite, b2::BindingSite)
+    return isapprox(b1.pose.psi, standard_offset(b2).psi;
+                    atol = b1.alignment_tolerance + b2.alignment_tolerance, rtol = 0)
 end
 
 """
@@ -75,8 +83,8 @@ Check whether the binding sites' are touching and aligned.
 Absolute (`atol`) and relative (`rtol`) tolerances should be supplied
 as keyword arguments.
 """
-function isincontact(b1::BindingSite, b2::BindingSite; kwargs...)
-    return istouching(b1, b2; kwargs...) && isaligned(b1, b2; kwargs...)
+function isincontact(b1::BindingSite, b2::BindingSite)
+    return istouching(b1, b2) && isaligned(b1, b2)
 end
 
 function Base.show(io::Core.IO, b::BindingSite)

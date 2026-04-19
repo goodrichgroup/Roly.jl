@@ -114,13 +114,13 @@ function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracti
         overlap(polypart, part, sys) && return true, nothing
 
         for b1 in bindingsites(polypart, sys), b2 in bindingsites(part, sys)
-            istouching(b1, b2; kwargs...) || continue
+            istouching(b1, b2) || continue
 
             interacting = intmat[color(b1), color(b2)]
             if !allow_noninteracting && !interacting
                 return true, nothing
             end
-            if !allow_misaligned && !isaligned(b1, b2; kwargs...)
+            if !allow_misaligned && !isaligned(b1, b2)
                 return true, nothing
             end
             push!(contacts, (b1.vertices, b2.vertices))
@@ -219,7 +219,7 @@ end
 
 function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer, at::BindingSite; leading_vertex)
     site = bindingsites(ps, site_index)
-    particle_pose = inv(site.pose) * standard_offset(at)
+    particle_pose = standard_offset(at) * inv(site.pose)
     return Particle(particle_pose, leading_vertex, species_index)
 end
 
