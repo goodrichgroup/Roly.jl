@@ -1,7 +1,3 @@
-HashType = UInt
-DefInt, DefFloat = Int16, Float32
-
-
 function are_cutvertices(g::AbstractNautyGraph, vs::AbstractVector{<:Integer})
     n = nv(g)
     return are_cutvertices!(g, vs, zeros(Bool, n), zeros(Bool, n), zeros(Bool, n), zeros(Cint, n))

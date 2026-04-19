@@ -1,9 +1,10 @@
-mutable struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F,Pose{2,F,Angle2d{F}}}
+struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F,Pose{2,F,Angle2d{F}}}
     g::NautyDiGraph
     sites::Vector{B}
     corners::Matrix{F}
     rmin::F
     rmax::F
+    isregular::Bool
 end
 function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors) where {F<:Real}
     # TODO: this should have a constructor that takes polygon vertices and automatically creates sites on each polygon side
@@ -13,18 +14,18 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors)
     sites = BindingSite{Pose{2,F,Angle2d{F}}}[]
     for (i, (c, l)) in enumerate(zip(colors, labels))
         ψ = Angle2d{F}(-F(π) * (1/2 + 2/n * (i-1)))
-        x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ))) 
+        x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ)))
         push!(sites, BindingSite(Pose(x, ψ), c, i:i))
     end
 
     g = NautyDiGraph(cycle_digraph(n); vertex_labels=labels)
     corners = zeros(F, n, 2)
-    return PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out)
+    return PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, true)
 end
 
 Base.show(io::Core.IO, ps::PolygonParticleSpecies) = print(io, "$(dimension(ps))d PolygonParticleSpecies with $(nsites(ps)) sites")
 
-Base.copy(pps::PolygonParticleSpecies) = PolygonParticleSpecies(copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax)
+Base.copy(pps::PolygonParticleSpecies) = PolygonParticleSpecies(copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax, pps.isregular)
 dimension(::PolygonParticleSpecies) = 2
 
 graphrep(p::PolygonParticleSpecies) = p.g
@@ -40,6 +41,13 @@ function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer}
     return
 end
 
+function can_skip_overlap_check(p1::PolygonParticleSpecies, p2::PolygonParticleSpecies)
+    p1.isregular && p2.isregular || return false
+    n = nsites(p1)
+    n in (3, 4, 6) || return false
+    return nsites(p2) == n
+end
+
 function could_contact(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
     spcs1, pose1 = p1
     spcs2, pose2 = p2
@@ -48,7 +56,7 @@ end
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; buffer=0.1, kwargs...)
     spcs1, pose1 = p1
     spcs2, pose2 = p2
-    #TODO: this only works if the buildingblocks tile
+    can_skip_overlap_check(spcs1, spcs2) || error("full polygon overlap check is not yet implemented")
     return norm(pose1.x - pose2.x) < (spcs1.rmin + spcs2.rmin) * (1 - buffer)
 end
 

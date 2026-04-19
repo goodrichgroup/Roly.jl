@@ -9,8 +9,8 @@ using CairoMakie
 export Rotation, Angle2d, RotXYZ, rotation_angle, rotation_axis, SVector
 export Pose, tomatrix, dimension
 export BindingSite, color
-export ParticleSpecies, SpeciesAndPose, bindingsites, 
-       graphrep, isconvex, could_contact, overlap, setcolor!, nsites, symmetrynumber
+export ParticleSpecies, SpeciesAndPose, bindingsites,
+       graphrep, isconvex, could_contact, overlap, setcolors!, nsites, symmetrynumber
 
 export ACCEPT, REJECT, BREAK
 export polyenum, polygen
@@ -32,4 +32,5 @@ include("polyform.jl")
 include("enumeration.jl")
 
 include("species/polygonparticlespecies.jl")
+include("species/sphereparticlespecies.jl")
 end

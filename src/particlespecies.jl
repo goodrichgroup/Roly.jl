@@ -22,7 +22,7 @@ Return the concrete `Pose` type `P` used by the particle species.
 posetype(::ParticleSpecies{D,F,P}) where {D,F,P} = P
 posetype(::Type{<:ParticleSpecies{D,F,P}}) where {D,F,P} = P
 
-const SpeciesAndPose{SPC} = Union{Pair{SPC,<:Pose},Tuple{SPC,<:Pose}} where {SPC<:ParticleSpecies}
+const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
 """
     bindingsites(p::ParticleSpecies, i::Integer)
@@ -90,14 +90,14 @@ This should be a quick and efficient pre-check; a value of `true` does not neces
 contact has occured. If `false`, however, it is assumed that contact is impossible and no
 further contact checks will be performed.
 """
-function could_contact(::SpeciesAndPose, ::SpeciesAndPose) end
+function could_contact(::SpeciesAndPose, ::SpeciesAndPose; kwargs...) end
 
 """
     overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)
 
 Return `true` if the particle species at their respective poses are overlapping.
 """
-function overlap(::SpeciesAndPose, ::SpeciesAndPose) end
+function overlap(::SpeciesAndPose, ::SpeciesAndPose; kwargs...) end
 
 """
     symmetrynumber(p::ParticleSpecies)
