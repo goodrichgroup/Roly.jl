@@ -31,9 +31,11 @@ graphrep(p::PolygonParticleSpecies) = p.g
 symmetrynumber(p::PolygonParticleSpecies) = 1
 nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
-function setcolor!(p::PolygonParticleSpecies, c::Integer)
-    map!(p.sites) do s
-        shift_color(s, c - 1)
+function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer})
+    length(colors) != nsites(p) && throw(ArgumentError("incorrect number of colors"))
+    for k in eachindex(p.sites)
+        s = p.sites[k]
+        p.sites[k] = BindingSite(s.pose, colors[k], s.vertices)
     end
     return
 end
@@ -57,33 +59,33 @@ const UnitHexagon = PolygonParticleSpecies(6)
 
 const INERT_COLOR = colorant"#E7E7E7"
 const DEFAULT_COLORS = [
-    [colorant"#B2D0EA", colorant"#54A3E4", colorant"#1A78C6", colorant"#00549A"],
-    [colorant"#F39F9D", colorant"#ED7E7C", colorant"#E75451", colorant"#BE2E2C"],
-    [colorant"#FEE3B5", colorant"#FFC563", colorant"#FFB12F", colorant"#FFA000"],
-    [colorant"#DBB9E4", colorant"#D99DE8", colorant"#B571C4", colorant"#8E4E9C"],
-    [colorant"#AAF5FF", colorant"#86E4F1", colorant"#43CFE2", colorant"#20BCD2"],
-    [colorant"#BCF3E1", colorant"#3DD4A4", colorant"#19B684", colorant"#008D60"],
-    [colorant"#FFD4B6", colorant"#F7AF7D", colorant"#FF8835", colorant"#ED6304"],
-    [colorant"#C5C9FE", colorant"#A9AFFF", colorant"#7C85FF", colorant"#4854FD"],
-    [colorant"#F4FFC4", colorant"#E0F290", colorant"#B9D63E", colorant"#859F13"],
-    [colorant"#FFB2C5", colorant"#FF8EA9", colorant"#FF5C83", colorant"#E32654"],
-    [colorant"#95FABA", colorant"#4DD980", colorant"#21AB53", colorant"#008832"]
+    [colorant"#EAF3FB", colorant"#C9E1F3", colorant"#B2D0EA", colorant"#54A3E4", colorant"#1A78C6", colorant"#00549A"],
+    [colorant"#FDCFCE", colorant"#F8B8B7", colorant"#F39F9D", colorant"#ED7E7C", colorant"#E75451", colorant"#BE2E2C"],
+    [colorant"#FFF3D9", colorant"#FEECCC", colorant"#FEE3B5", colorant"#FFC563", colorant"#FFB12F", colorant"#FFA000"],
+    [colorant"#EDD5F3", colorant"#E2C3EA", colorant"#DBB9E4", colorant"#D99DE8", colorant"#B571C4", colorant"#8E4E9C"],
+    [colorant"#D5F5FB", colorant"#BCEEF8", colorant"#AAF5FF", colorant"#86E4F1", colorant"#43CFE2", colorant"#20BCD2"],
+    [colorant"#D9F5EC", colorant"#BFEEDD", colorant"#BCF3E1", colorant"#3DD4A4", colorant"#19B684", colorant"#008D60"],
+    [colorant"#FFE9D5", colorant"#FFD6BA", colorant"#FFD4B6", colorant"#F7AF7D", colorant"#FF8835", colorant"#ED6304"],
+    [colorant"#E0E2FF", colorant"#CED1FF", colorant"#C5C9FE", colorant"#A9AFFF", colorant"#7C85FF", colorant"#4854FD"],
+    [colorant"#F9FFE8", colorant"#EDFAC8", colorant"#F4FFC4", colorant"#E0F290", colorant"#B9D63E", colorant"#859F13"],
+    [colorant"#FFD5DE", colorant"#FFBCCA", colorant"#FFB2C5", colorant"#FF8EA9", colorant"#FF5C83", colorant"#E32654"],
+    [colorant"#D2FDE4", colorant"#B5F8CC", colorant"#95FABA", colorant"#4DD980", colorant"#21AB53", colorant"#008832"]
 ]
 
-function render!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=Pose{2,F}(); 
-                 r=nothing, color=nothing, strokewidth=3, kwargs...) where {F}
+function render!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=Pose{2,F}();
+                 r=nothing, fillcolor=nothing, species_index::Int=1, strokewidth=3, kwargs...) where {F}
     n = nsites(spcs)
     a = 2spcs.rmin * tan(π / n)
     if isnothing(r)
         r = 0.15 * a
     end
-    if isnothing(color)
-        sitecolors = [b.color for b in bindingsites(spcs)]
-        spcs_color = cld(first(sitecolors), n)
-        color = DEFAULT_COLORS[spcs_color][1:n]
-        # grey out inert sides (set their color to zero to indicate that)
+    if isnothing(fillcolor)
+        palette = DEFAULT_COLORS[mod1(species_index, length(DEFAULT_COLORS))]
+        fillcolor = map(enumerate(bindingsites(spcs))) do (i, b)
+            b.color == 0 ? INERT_COLOR : palette[mod1(i, length(palette))]
+        end
     end
-    return _draw_ngon!(ax, pose.x[1], pose.x[2], rotation_angle(pose.ψ); n, a, r, color, strokewidth, kwargs...)
+    return _draw_ngon!(ax, pose.x[1], pose.x[2], rotation_angle(pose.psi); n, a, r, color=fillcolor, strokewidth, kwargs...)
 end
 function render(spcs::PolygonParticleSpecies, pose::Pose=Pose{2}(); r=nothing, kwargs...)
     f = Figure()

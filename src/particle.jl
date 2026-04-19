@@ -1,31 +1,33 @@
 """
-    Particle{P<:Pose,SPC<:ParticleSpecies}
+    Particle{P<:Pose}
 
 A `Particle` describes an indivisible subunit that makes up a `Polyform`.
 
-Every particle is a member of a `ParticleSpecies` and is located in space
-at a specific `Pose`.
+Every particle is a member of a `ParticleSpecies` (identified by `species_index` within
+an `AssemblySystem`) and is located in space at a specific `Pose`.
 """
-struct Particle{P<:Pose,SPC<:ParticleSpecies}
+struct Particle{P<:Pose}
     pose::P
     leading_vertex::Int
-    species::SPC
+    species_index::Int
 end
 
 """
-    Particle(ps::ParticleSpecies, pose=nothing; leading_vertex::Integer)
+    Particle(sys::AssemblySystem, species_index::Integer, pose=nothing; leading_vertex::Integer)
 
-Create a particle of species `ps` at a given `pose`.
+Create a particle of species `species_index` within `sys` at a given `pose`.
 """
-function Particle(ps::ParticleSpecies{D,F}, pose=nothing; leading_vertex::Integer) where {D,F}
+function Particle(sys::AssemblySystem, species_index::Integer, pose=nothing; leading_vertex::Integer)
+    ps = species(sys, species_index)
+    D, F = dimension(ps), numtype(ps)
     if isnothing(pose)
         pose = Pose{D,F}()
     end
-    return Particle(pose, leading_vertex, ps)
+    return Particle(pose, leading_vertex, species_index)
 end
 
-# TODO: this should probably be a function on a polyform?
-graphvertices(p::Particle) = (1:nv(graphrep(species(p)))) .+ (p.leading_vertex - 1)
+graphvertices(p::Particle, sys::AssemblySystem) =
+    (1:nv(graphrep(species(sys, p.species_index)))) .+ (p.leading_vertex - 1)
 
 """
     leading_vertex(p::Particle)
@@ -35,77 +37,78 @@ Return the leading vertex of particle `p`.
 leading_vertex(p::Particle) = p.leading_vertex
 
 """
-    species(p::Particle)
+    species_index(p::Particle)
 
-Return the particle species of particle `p`.
+Return the species index of particle `p` within its `AssemblySystem`.
 """
-species(p::Particle) = p.species
+species_index(p::Particle) = p.species_index
 
 """
-    nsites(p::Particle)
+    nsites(p::Particle, sys::AssemblySystem)
 
 Return the number of binding sites of particle `p`.
 """
-nsites(p::Particle) = nsites(species(p))
+nsites(p::Particle, sys::AssemblySystem) = nsites(species(sys, p.species_index))
 
 """
-    bindingsites(p::Particle, i::Integer)
+    bindingsites(p::Particle, sys::AssemblySystem, i::Integer)
 
 Return the `i`th binding site of particle `p`.
 """
-function bindingsites(p::Particle, i::Integer) 
-    return shift_vertices(bindingsites(species(p), i), leading_vertex(p) - 1) * p.pose
+function bindingsites(p::Particle, sys::AssemblySystem, i::Integer)
+    return shift_vertices(bindingsites(species(sys, p.species_index), i), leading_vertex(p) - 1) * p.pose
 end
 
 """
-    bindingsites(p::Particle)
+    bindingsites(p::Particle, sys::AssemblySystem)
 
 Return an iterator over the binding sites of particle `p`.
 """
-function bindingsites(p::Particle)
-    return (bindingsites(p, i) for i in 1:nsites(p))
+function bindingsites(p::Particle, sys::AssemblySystem)
+    return (bindingsites(p, sys, i) for i in 1:nsites(p, sys))
 end
 
 """
-    could_contact(p1::Particle, p2::Particle)
+    could_contact(p1::Particle, p2::Particle, sys::AssemblySystem)
 
 Return `true` if the particles could potentially be in contact.
 """
-function could_contact(p1::Particle, p2::Particle)
-    return could_contact(p1.species => p1.pose, p2.species => p2.pose)
+function could_contact(p1::Particle, p2::Particle, sys::AssemblySystem)
+    return could_contact(species(sys, p1.species_index) => p1.pose,
+                         species(sys, p2.species_index) => p2.pose)
 end
 
 """
-    overlap(p1::Particle, p2::Particle)
+    overlap(p1::Particle, p2::Particle, sys::AssemblySystem)
 
 Return `true` if the particles are overlapping.
 """
-function overlap(p1::Particle, p2::Particle)
-    return overlap(p1.species => p1.pose, p2.species => p2.pose)
+function overlap(p1::Particle, p2::Particle, sys::AssemblySystem)
+    return overlap(species(sys, p1.species_index) => p1.pose,
+                   species(sys, p2.species_index) => p2.pose)
 end
 
 """
-    isconvex(::Particle)
+    isconvex(p::Particle, sys::AssemblySystem)
 
-Return true if the particle has a convex shape, which enables minor optimizations when checking
-for overlaps.
+Return true if the particle has a convex shape, which enables minor optimizations when
+checking for overlaps.
 """
-isconvex(p::Particle) = isconvex(p.species)
+isconvex(p::Particle, sys::AssemblySystem) = isconvex(species(sys, p.species_index))
 
-function Base.show(io::Core.IO, p::Particle{P}) where {P}
-    print(io, "Particle[cs=$([color(b) for b in bindingsites(p)])]\n")
+function Base.show(io::Core.IO, p::Particle)
+    print(io, "Particle[si=$(p.species_index), lv=$(p.leading_vertex)]")
 end
 function Base.show(io::Core.IO, ::MIME"text/plain", p::Particle)
-    print(io, "$(dimension(P))-dimensional Particle:\n")
-    print(io, " - colors: $([color(b) for b in bindingsites(p)])")
-    print(io, " - vertices:\t$(graphvertices(p))")
+    print(io, "Particle:\n")
+    print(io, " - species_index: $(p.species_index)\n")
+    print(io, " - leading_vertex: $(p.leading_vertex)\n")
+    print(io, " - pose: $(p.pose)")
 end
 
-
-function render!(ax, p::Particle; kwargs...)
-    return render!(ax, species(p), p.pose; kwargs...)
+function render!(ax, p::Particle, sys::AssemblySystem; kwargs...)
+    return render!(ax, species(sys, p.species_index), p.pose; species_index=p.species_index, kwargs...)
 end
-function render(p::Particle; kwargs...)
-    return render(species(p), p.pose; kwargs...)
+function render(p::Particle, sys::AssemblySystem; kwargs...)
+    return render(species(sys, p.species_index), p.pose; kwargs...)
 end
-
