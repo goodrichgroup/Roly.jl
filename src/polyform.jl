@@ -10,28 +10,26 @@ mutable struct Polyform{D,P<:Particle,S<:AssemblySystem,G<:AbstractNautyGraph}
     graphrep::G
     sigma::Int
     canonvs::Vector{Int}
-    particles::Dict{Int,P}
+    particles::Vector{P}
     assemblysystem::S
 end
 function Polyform(sys::AssemblySystem{D}) where {D}
     P = posetype(sys)
     g = NautyDiGraph(0)
-    ps = species(sys, 1)
-
-    sigma = 1
-    canonvs = []
-    return Polyform{D,Particle{P,typeof(ps)},typeof(sys),typeof(g)}(g, sigma, canonvs, Dict(), sys)
+    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, 1, Int[], Particle{P}[], sys)
 end
 function Polyform(sys::AssemblySystem{D}, i::Integer) where {D}
     P = posetype(sys)
     ps = species(sys, i)
     g = copy(graphrep(ps))
     canonize!(g)
-    return Polyform{D,Particle{P,typeof(ps)},typeof(sys),typeof(g)}(g, symmetrynumber(ps), copy(vertices(g)),
-                                                                    Dict(1=>Particle(ps; leading_vertex=1)), sys)
+    part = Particle(sys, i; leading_vertex=1)
+    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(
+        g, symmetrynumber(ps), collect(vertices(g)), [part], sys)
 end
 
-Base.copy(p::Polyform) = typeof(p)(copy(p.graphrep), p.sigma, copy(p.canonvs), copy(p.particles), p.assemblysystem)
+Base.copy(p::Polyform) = typeof(p)(copy(p.graphrep), p.sigma, copy(p.canonvs),
+                                   copy(p.particles), p.assemblysystem)
 function Base.copy!(dst::Polyform, src::Polyform)
     copy!(dst.graphrep, src.graphrep)
     dst.sigma = src.sigma
@@ -47,14 +45,17 @@ end
 Base.show(io::Core.IO, ::Type{Polyform{D}}) where {D} = print(io, "Polyform{$D}")
 Base.:(==)(p1::Polyform, p2::Polyform) = graphrep(p1) == graphrep(p2)
 
-@inline particle(p::Polyform, v::Integer) = get(p.particles, v, nothing)
+@inline function particle(p::Polyform, v::Integer)
+    i = findfirst(pt -> pt.leading_vertex == v, p.particles)
+    isnothing(i) ? nothing : p.particles[i]
+end
 @inline nparticles(p::Polyform) = length(p.particles)
-@inline nsites(p::Polyform) = sum(nsites, values(p.particles))
+@inline nsites(p::Polyform) = sum(prt -> nsites(prt, p.assemblysystem), p.particles; init=0)
 @inline graphrep(p::Polyform) = p.graphrep
 @inline symmetrynumber(p::Polyform) = p.sigma
 @inline assemblysystem(p::Polyform) = p.assemblysystem
 @inline canonical_vertices(p::Polyform) = p.canonvs
-@inline is_leadingvertex(p::Polyform, v::Integer) = v in keys(p.particles)
+@inline is_leadingvertex(p::Polyform, v::Integer) = any(pt -> pt.leading_vertex == v, p.particles)
 
 @inline interior_edges(p::Polyform) = _filter_edges_by_species(p, Val(true))
 @inline exterior_edges(p::Polyform) = _filter_edges_by_species(p, Val(false))
@@ -77,16 +78,16 @@ Return the `i`th binding site of polyform `p`. The order of binding sites is
 given by the isomorphism class of the graph encoding of `p` and is deterministic.
 """
 function bindingsites(p::Polyform, i::Integer)
+    sys = assemblysystem(p)
     k = 0
     for v in canonical_vertices(p)
         prtcl = particle(p, v)
         isnothing(prtcl) && continue
 
-        for j in 1:nsites(prtcl)
-            # TODO: skip bound or non-interacting sites
+        for j in 1:nsites(prtcl, sys)
             k += 1
             if k == i
-                return bindingsites(prtcl, j)
+                return bindingsites(prtcl, sys, j)
             end
         end
     end
@@ -98,21 +99,21 @@ end
 
 function isbound_vertex(p::Polyform, v::Integer)
     vspcs = label2species(assemblysystem(p), label(graphrep(p), v))
-    # calling `outneighbors` on a NautyGraph would allocate, this is a workaround for that
     neighbor_bitvec = NautyGraphs.adjrow(graphrep(p), v)
     return any(label2species(assemblysystem(p), label(graphrep(p), n)) != vspcs
                for n in eachindex(neighbor_bitvec) if neighbor_bitvec[n])
 end
 
 function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracting=false, allow_misaligned=false, kwargs...)
-    intmat = interactionmatrix(assemblysystem(poly))
+    sys = assemblysystem(poly)
+    intmat = interactionmatrix(sys)
 
     contacts = NTuple{2,UnitRange{Int}}[]
-    for polypart in values(poly.particles)
-        could_contact(polypart, part) || continue
-        overlap(polypart, part) && return true, nothing
+    for polypart in poly.particles
+        could_contact(polypart, part, sys) || continue
+        overlap(polypart, part, sys) && return true, nothing
 
-        for b1 in bindingsites(polypart), b2 in bindingsites(part)
+        for b1 in bindingsites(polypart, sys), b2 in bindingsites(part, sys)
             istouching(b1, b2; kwargs...) || continue
 
             interacting = intmat[color(b1), color(b2)]
@@ -129,17 +130,18 @@ function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracti
 end
 
 function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwargs...)
+    sys = assemblysystem(poly)
     species_index, site_index = siteloc
-    particle_species = species(assemblysystem(poly), species_index)
+    particle_species = species(sys, species_index)
     leading_vertex = nv(graphrep(poly)) + 1
-    attached_particle = attach(particle_species => site_index, site; leading_vertex)
+    attached_particle = attach(particle_species, species_index, site_index, site; leading_vertex)
 
     has_overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
     has_overlap && return missing
 
-    poly.particles[leading_vertex] = attached_particle
+    push!(poly.particles, attached_particle)
 
-    g_attach = graphrep(species(attached_particle))
+    g_attach = graphrep(particle_species)
     add_vertices!(graphrep(poly); vertex_labels=labels(g_attach))
     for (; src, dst) in edges(g_attach)
         add_edge!(graphrep(poly), src + leading_vertex - 1, dst + leading_vertex - 1)
@@ -153,7 +155,7 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwar
         end
     end
 
-    append!(poly.canonvs, graphvertices(attached_particle))
+    append!(poly.canonvs, graphvertices(attached_particle, sys))
     perm, autg = nauty(graphrep(poly); canonize=true)
     poly.canonvs .= @view poly.canonvs[perm]
     poly.sigma = convert(Int, autg.n)
@@ -163,16 +165,17 @@ end
 
 function lower!(poly::Polyform)
     n = nparticles(poly)
-    if n == 0 
+    if n == 0
         return nothing
     elseif n == 1
-        pop!(poly.particles, only(keys(poly.particles)))
+        pop!(poly.particles)
         resize!(poly.canonvs, 0)
         rem_vertices!(graphrep(poly), vertices(graphrep(poly)))
         poly.sigma = 1
         return poly
     end
 
+    sys = assemblysystem(poly)
     nv_g = nv(graphrep(poly))
     is_target = zeros(Bool, nv_g)
     forbidden = zeros(Bool, nv_g)
@@ -180,7 +183,6 @@ function lower!(poly::Polyform)
     queue = zeros(Cint, nv_g)
 
     for v in Iterators.reverse(canonical_vertices(poly))
-        # find the leading vertex corresponding to v
         for k in v:-1:1
             is_leadingvertex(poly, k) || continue
             v = k
@@ -188,12 +190,19 @@ function lower!(poly::Polyform)
         end
 
         part = particle(poly, v)
-        vs0 = graphvertices(part)
+        vs0 = graphvertices(part, sys)
         vs = sort!(invperm(canonical_vertices(poly))[vs0])
 
         are_cutvertices!(graphrep(poly), vs, is_target, forbidden, explored, queue) && continue
 
-        pop!(poly.particles, leading_vertex(part))
+        lv = leading_vertex(part)
+        idx = findfirst(pt -> pt.leading_vertex == lv, poly.particles)
+        last_idx = lastindex(poly.particles)
+        if idx < last_idx
+            poly.particles[idx] = poly.particles[last_idx]
+        end
+        pop!(poly.particles)
+
         rem_vertices!(graphrep(poly), vs)
         deleteat!(poly.canonvs, vs)
 
@@ -205,22 +214,20 @@ function lower!(poly::Polyform)
         poly.sigma = convert(Int, autg.n)
         return poly
     end
-    error()
+    error("invariant violated: no removable particle found in connected polyform")
 end
 
-function attach(species_and_site::Pair{<:ParticleSpecies, <:Integer}, at::BindingSite; leading_vertex)
-    particle_species, site_index = species_and_site
-    site = bindingsites(particle_species, site_index)
-    # We want the pose of bindingsites(particle, site_index) to be equal to the pose of at + the standard_offset
+function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer, at::BindingSite; leading_vertex)
+    site = bindingsites(ps, site_index)
     particle_pose = inv(site.pose) * standard_offset(at)
-    return Particle(particle_species, particle_pose; leading_vertex)
+    return Particle(particle_pose, leading_vertex, species_index)
 end
 
 function render!(ax, p::Polyform; kwargs...)
-    out = for part in values(p.particles)
-        render!(ax, part; kwargs...)
+    sys = assemblysystem(p)
+    for part in p.particles
+        render!(ax, part, sys; kwargs...)
     end
-    return out
 end
 function render(p::Polyform; hidedecorations=true, kwargs...)
     f = Figure()

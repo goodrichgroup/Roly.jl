@@ -13,8 +13,8 @@ function collect_compatible_pairs!(aux::PolyformAux, poly::Polyform)
         part = particle(poly, orig_v)
         isnothing(part) && continue
 
-        for k in 1:nsites(part)
-            site = bindingsites(part, k)
+        for k in 1:nsites(part, sys)
+            site = bindingsites(part, sys, k)
             isbound_vertex(poly, inv_cv[first(site.vertices)]) && continue
             isinert(sys, color(site)) && continue
 
