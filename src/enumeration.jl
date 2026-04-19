@@ -78,7 +78,7 @@ Returns `(num_structures, largest_size)`.
 """
 function polyenum(f, sys::AssemblySystem; maxsize=Inf, maxstrs=Inf, kwargs...)
     v₀ = Polyform(sys)
-    BS = BindingSite{posetype(sys)}
+    BS = BindingSite{posetype(sys), numtype(sys)}
     aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,BindingSiteLoc}[])
     rsys = RSSystem(ls!, adj!, v₀; aux)
 

@@ -206,8 +206,9 @@ function lower!(poly::Polyform)
         rem_vertices!(graphrep(poly), vs)
         deleteat!(poly.canonvs, vs)
 
-        vertex_shift(v) = sum(x -> x <= v, vs0)
-        @views poly.canonvs .-= vertex_shift.(poly.canonvs)
+        for i in eachindex(poly.canonvs)
+            poly.canonvs[i] -= searchsortedlast(vs0, poly.canonvs[i])
+        end
 
         perm, autg = nauty(graphrep(poly); canonize=true)
         poly.canonvs .= @view perm[poly.canonvs]

@@ -21,7 +21,7 @@ Even without enumerating the allowed structures, it is possible to determine whe
 If this is the case, then the two systems are identical up a relabeling and/or rotating the building blocks -- they are isomorphic.
 This can be checked by comparing the `rhash`es of different assembly systems; if the hashes are equal, the systems are isomorphic. 
 """
-mutable struct AssemblySystem{D,PS<:ParticleSpecies}
+struct AssemblySystem{D,PS<:ParticleSpecies}
     intmat::Symmetric{Bool,Matrix{Bool}}
     particlespecies::Vector{PS}
     nbonds::Int
@@ -292,7 +292,7 @@ function compatible_sitelocs(sys::AssemblySystem, color::Integer)
     return sys._compatible_sitelocs[color]
 end
 
-Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySytem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
+Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySystem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
 
 
 function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})

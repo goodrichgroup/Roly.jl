@@ -89,9 +89,9 @@ end
 
 function cart2pol(x::F, y::Real) where {F}
     y = convert(F, y)
-    return [sqrt(x^2 + y^2), atan(y, x)]
+    return SVector(sqrt(x^2 + y^2), atan(y, x))
 end
 function pol2cart(r::F, psi::Real) where {F}
     psi = convert(F, psi)
-    return [r * cos(psi),  r * sin(psi)]
+    return SVector(r * cos(psi), r * sin(psi))
 end
