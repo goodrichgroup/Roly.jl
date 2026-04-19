@@ -62,13 +62,14 @@ Return the number of binding sites of a particle of species `p`.
 function nsites(::ParticleSpecies) end
 
 """
-    setcolor!(p::ParticleSpecies, c::Integer)
+    setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
 
-Set the base color of particle species `p` to `c`.
+Assign global colors to the binding sites of particle species `p`.
 
-The colors of the binding sites will then start at `c`.
+`colors[k]` is the global color for the `k`th binding site. Colors are assigned by the
+`AssemblySystem` upon construction and determine which binding sites may interact.
 """
-function setcolor!(::ParticleSpecies, ::Integer) end
+function setcolors!(::ParticleSpecies, ::AbstractVector{<:Integer}) end
 
 """
     isconvex(::ParticleSpecies)

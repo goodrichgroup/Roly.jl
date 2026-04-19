@@ -302,66 +302,56 @@ end
 
 function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
     particlespecies = PS[copy(ps) for ps in particlespecies]
-
     c = 1
     l = 1
     for ps in particlespecies
         g = graphrep(ps)
         labs = labels(g)
-
-        # TODO: make all nonidentical labels contiguous, ie. (1, 1, 3, 7) -> (1, 1, 2, 3)
         setlabels!(g, labs .- minimum(labs) .+ l)
         l = maximum(labels(g)) + 1
 
-        setcolor!(ps, c)
+        setcolors!(ps, collect(c:c+nsites(ps)-1))
         c += nsites(ps)
     end
     return particlespecies
 end
+
 function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:ParticleSpecies})
     color2siteloc = Dict{Int,Vector{BindingSiteLoc}}()
     siteloc2color = Dict{BindingSiteLoc,Int}()
     label2color = Dict{Int,Int}()
 
-    color = 1
     for (spcs, ps) in enumerate(particlespecies)
-        for site_indices in equivalent_site_indices(ps)
-            for site_index in site_indices
-                spcssite = (spcs, site_index)
-                if haskey(color2siteloc, color)
-                    push!(color2siteloc[color], spcssite)
-                else
-                    color2siteloc[color] = [spcssite]
-                end
-                siteloc2color[spcssite] = color
-
-                site = bindingsites(ps, site_index)
-                for v in site.vertices
-                    l = label(graphrep(ps), v)
-                    l ∈ keys(label2color) && continue
-                    label2color[l] = color
-                end
+        for si in 1:nsites(ps)
+            site = bindingsites(ps, si)
+            c = color(site)
+            spcssite = (spcs, si)
+            push!(get!(color2siteloc, c, BindingSiteLoc[]), spcssite)
+            siteloc2color[spcssite] = c
+            for v in site.vertices
+                l = label(graphrep(ps), v)
+                haskey(label2color, l) || (label2color[l] = c)
             end
-            color += 1
         end
     end
     return color2siteloc, siteloc2color, label2color
 end
 
-function _parse_intmat(bindingrules, site2label)
-    return _intmat_from_bonds(bindingrules, site2label)
+function _parse_intmat(bindingrules, siteloc2color)
+    return _intmat_from_bonds(bindingrules, siteloc2color)
 end
-function _parse_intmat(bindingrules::AbstractMatrix{<:Integer}, site2label)
+function _parse_intmat(bindingrules::AbstractMatrix{<:Integer}, siteloc2color)
     _checkshape(bindingrules)
-    return _intmat_from_bonds(eachrow(bindingrules), site2label)
+    return _intmat_from_bonds(eachrow(bindingrules), siteloc2color)
 end
-function _intmat_from_bonds(bonds, site2label)
-    nsites = length(site2label)
-    intmat = falses(nsites, nsites)
+function _intmat_from_bonds(bonds, siteloc2color)
+    ncolors = length(siteloc2color)
+    intmat = falses(ncolors, ncolors)
     for bond in bonds
         spcs1, site1, spcs2, site2 = bond
-        label1, label2 = site2label[spcs1, site1], site2label[spcs2, site2]
-        intmat[label1, label2] = intmat[label2, label1] = true
+        c1 = siteloc2color[(spcs1, site1)]
+        c2 = siteloc2color[(spcs2, site2)]
+        intmat[c1, c2] = intmat[c2, c1] = true
     end
     return Symmetric(intmat)
 end
