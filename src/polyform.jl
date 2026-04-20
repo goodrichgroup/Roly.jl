@@ -43,7 +43,7 @@ function Base.show(io::Core.IO, p::Polyform{D}) where {D}
     print(io, "Polyform{$D}[n=$(nparticles(p))]")
 end
 Base.show(io::Core.IO, ::Type{Polyform{D}}) where {D} = print(io, "Polyform{$D}")
-Base.:(==)(p1::Polyform, p2::Polyform) = graphrep(p1) == graphrep(p2)
+Base.:(==)(p1::Polyform, p2::Polyform) = assemblysystem(p1) === assemblysystem(p2) && graphrep(p1) == graphrep(p2)
 
 @inline function particle(p::Polyform, v::Integer)
     i = findfirst(pt -> pt.leading_vertex == v, p.particles)
