@@ -4,7 +4,6 @@ using LinearAlgebra, StaticArrays, SparseArrays, Rotations
 using Base.Iterators, DataStructures
 using Graphs, NautyGraphs
 using ReverseSearch
-using CairoMakie
 
 export Rotation, Angle2d, RotXYZ, rotation_angle, rotation_axis, SVector
 export Pose, tomatrix, dimension

@@ -223,17 +223,3 @@ function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer
     particle_pose = standard_offset(at) * inv(site.pose)
     return Particle(particle_pose, leading_vertex, species_index)
 end
-
-function render!(ax, p::Polyform; kwargs...)
-    sys = assemblysystem(p)
-    for part in p.particles
-        render!(ax, part, sys; kwargs...)
-    end
-end
-function render(p::Polyform; hidedecorations=true, kwargs...)
-    f = Figure()
-    ax = Axis(f[1, 1], aspect=DataAspect())
-    hidedecorations && hidedecorations!(ax)
-    render!(ax, p; kwargs...)
-    return f
-end

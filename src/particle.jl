@@ -105,10 +105,3 @@ function Base.show(io::Core.IO, ::MIME"text/plain", p::Particle)
     print(io, " - leading_vertex: $(p.leading_vertex)\n")
     print(io, " - pose: $(p.pose)")
 end
-
-function render!(ax, p::Particle, sys::AssemblySystem; kwargs...)
-    return render!(ax, species(sys, p.species_index), p.pose; species_index=p.species_index, kwargs...)
-end
-function render(p::Particle, sys::AssemblySystem; kwargs...)
-    return render(species(sys, p.species_index), p.pose; kwargs...)
-end
