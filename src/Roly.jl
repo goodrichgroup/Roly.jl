@@ -20,6 +20,8 @@ export AssemblySystem, interactionmatrix, buildingblocks,
 
 export Polyform, canonical_id, composition, compositions, interactionmatrix, isinert
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
+export MetaParticleSpecies
+# export can_tile
 
 include("utils.jl")
 include("pose.jl")

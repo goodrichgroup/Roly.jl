@@ -1,21 +1,25 @@
 function plot_particlespecies!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=Pose{2,F}();
-                               site_color=nothing, assemblysystem=nothing,
+                               site_color=nothing, species_index=1, sys=nothing,
                                cornerradius=nothing, strokewidth=3, kwargs...) where {F}
     n = nsites(spcs)
     a = 2spcs.rmin * tan(π / n)
     isnothing(cornerradius) && (cornerradius = 0.2a)
 
-    if !isnothing(assemblysystem)
-        species_index = findfirst(==(spcs), species(assemblysystem))
-        inert_sites = [i for i in 1:n if isinert(assemblysystem, (species_index, i))]
-        pal = species_palette(species_index, n)
-        site_color = i -> i ∈ inert_sites ? INERT_COLOR : pal[i]
-    else
-        pal = species_palette(1, n)
-        site_color = i -> pal[i]
+    if !isnothing(sys)
+        species_index = findfirst(==(spcs), species(sys))
+    end
+    pal = species_palette(species_index, n)
+
+    if isnothing(site_color)
+        if !isnothing(sys)
+            inert_sites = [i for i in 1:n if isinert(sys, (species_index, i))]
+            site_color = (_, site_idx) -> site_idx ∈ inert_sites ? INERT_COLOR : pal[site_idx]
+        else
+            site_color = (_, site_idx) -> pal[site_idx]
+        end
     end
 
-    colors = map(site_color, 1:n)
+    colors = [site_color(species_index, i) for i in 1:n]
     return _draw_ngon!(ax, pose.x[1], pose.x[2], rotation_angle(pose.psi);
                        n, a, cornerradius, color=colors, strokewidth, kwargs...)
 end

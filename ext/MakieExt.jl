@@ -51,12 +51,13 @@ function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
     for part in poly.particles
         ps = species(sys, part.species_index)
         part_pose = isnothing(pose) ? part.pose : pose * part.pose
-        plot_particlespecies!(ax, ps, part_pose; assemblysystem=sys, kwargs...)
+        plot_particlespecies!(ax, ps, part_pose; sys, kwargs...)
     end
     return
 end
 
 include("palette.jl")
 include("plot_polygonparticle.jl")
+include("plot_metaparticle.jl")
 
 end # module
