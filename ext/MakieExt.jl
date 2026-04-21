@@ -23,7 +23,7 @@ function render(p; hidedecorations=true, kwargs...)
     f = Figure()
     ax = Axis(f[1, 1], aspect=DataAspect())
     hidedecorations && hidedecorations!(ax)
-    polyformplot!(ax, p)
+    polyformplot!(ax, p; kwargs...)
     return f
 end
 

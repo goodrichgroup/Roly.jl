@@ -1,12 +1,14 @@
 function plot_particlespecies!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=Pose{2,F}();
-                               site_color=nothing, species_index=1, sys=nothing,
+                               site_color=nothing, species_index=nothing, sys=nothing,
                                cornerradius=nothing, strokewidth=3, kwargs...) where {F}
     n = nsites(spcs)
     a = 2spcs.rmin * tan(π / n)
     isnothing(cornerradius) && (cornerradius = 0.2a)
 
-    if !isnothing(sys)
+    if !isnothing(sys) && isnothing(species_index)
         species_index = findfirst(==(spcs), species(sys))
+    else
+        species_index = 1
     end
     pal = species_palette(species_index, n)
 
