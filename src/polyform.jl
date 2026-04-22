@@ -284,3 +284,35 @@ function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer
     particle_pose = standard_offset(at) * inv(site.pose)
     return Particle(particle_pose, leading_vertex, species_index)
 end
+
+"""
+    composition(p::Polyform)
+
+Return the composition vector of `p`: counts of each particle species followed by counts
+of each bond type. Bond types are ordered as in `bonded_colors(assemblysystem(p))`, i.e.
+by the sorted pair of colors of the connected binding sites.
+"""
+function composition(p::Polyform)
+    sys = assemblysystem(p)
+    ns = nspecies(sys)
+    nb = nbonds(sys)
+    comp = zeros(Int, ns + nb)
+
+    for part in p.particles
+        comp[part.species_index] += 1
+    end
+
+    g = graphrep(p)
+    labs = labels(g)
+    bondlist = bonded_colors(sys)
+
+    for (; src, dst) in edges(g)
+        src >= dst && continue
+        has_edge(g, dst, src) || continue
+        bond = minmax(label2color(sys, labs[src]), label2color(sys, labs[dst]))
+        i = findfirst(==(bond), bondlist)
+        isnothing(i) || (comp[ns + i] += 1)
+    end
+
+    return comp
+end
