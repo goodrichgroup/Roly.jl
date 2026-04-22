@@ -1,5 +1,5 @@
 """
-    Polyform{D,T,F} where {D,T,F}
+    Polyform
 
 `Polyform` is a struct containing all information required to instantiate a
 polyform, which here is defined as an aggregate of building blocks that are connected
@@ -97,19 +97,26 @@ function bindingsites(p::Polyform)
     return (bindingsites(p, i) for i in 1:nsites(p))
 end
 
+# TODO This assumes that all particle species graphreps do not contain any double bonds.
+# This is not true for 3d particles. However, we could enforce a special label for all "structural" vertices,
+# so that we can additinally compare labels to make this work generally. This needs to be implemented before 3d
+# particles work reliably.
 function isbound_vertex(p::Polyform, v::Integer)
-    vspcs = label2species(assemblysystem(p), label(graphrep(p), v))
-    neighbor_bitvec = NautyGraphs.adjrow(graphrep(p), v)
-    return any(label2species(assemblysystem(p), label(graphrep(p), n)) != vspcs
-               for n in eachindex(neighbor_bitvec) if neighbor_bitvec[n])
+    outneighbor_bitvec = NautyGraphs.adjrow(graphrep(p), v)
+    inneighbor_bitvec = NautyGraphs.adjcol(graphrep(p), v)
+    return any(outneighbor_bitvec .* inneighbor_bitvec)
+
+    # vspcs = label2species(assemblysystem(p), label(graphrep(p), v))
+    # neighbor_bitvec = NautyGraphs.adjrow(graphrep(p), v)
+    # return any(label2species(assemblysystem(p), label(graphrep(p), n)) != vspcs
+    #            for n in eachindex(neighbor_bitvec) if neighbor_bitvec[n])
 end
 
-function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracting=false, allow_misaligned=false, kwargs...)
-    sys = assemblysystem(poly)
+function _overlap_and_contacts(polyparticles::AbstractVector{<:Particle}, part::Particle, sys::AssemblySystem; allow_noninteracting=false, allow_misaligned=false, kwargs...)
     intmat = interactionmatrix(sys)
 
     contacts = NTuple{2,UnitRange{Int}}[]
-    for polypart in poly.particles
+    for polypart in polyparticles
         could_contact(polypart, part, sys) || continue
         overlap(polypart, part, sys) && return true, nothing
 
@@ -128,6 +135,7 @@ function overlap_and_contacts(poly::Polyform, part::Particle; allow_noninteracti
     end
     return false, contacts
 end
+overlap_and_contacts(poly::Polyform, part::Particle; kwargs...) = _overlap_and_contacts(poly.particles, part, assemblysystem(poly); kwargs...)
 
 function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwargs...)
     sys = assemblysystem(poly)
@@ -216,6 +224,59 @@ function lower!(poly::Polyform)
         return poly
     end
     error("invariant violated: no removable particle found in connected polyform")
+end
+
+function collect_open_bindingsites!(sites, poly::Polyform)
+    sys = assemblysystem(poly)
+    inv_cv = invperm(canonical_vertices(poly))
+    empty!(sites)
+
+    for orig_v in canonical_vertices(poly)
+        part = particle(poly, orig_v)
+        isnothing(part) && continue
+
+        for k in 1:nsites(part, sys)
+            site = bindingsites(part, sys, k)
+            isbound_vertex(poly, inv_cv[first(site.vertices)]) && continue
+            isinert(sys, color(site)) && continue
+
+            push!(sites, site)
+        end
+    end
+    return sites
+end
+function collect_open_bindingsites(poly::Polyform)
+    sys = assemblysystem(poly)
+    sites = BindingSite{posetype(sys), numtype(sys)}[]
+    return collect_open_bindingsites!(sites, poly)
+end
+
+function collect_compatible_pairs!(pairs, poly::Polyform)
+    sys = assemblysystem(poly)
+    inv_cv = invperm(canonical_vertices(poly))
+    empty!(pairs)
+
+    for orig_v in canonical_vertices(poly)
+        part = particle(poly, orig_v)
+        isnothing(part) && continue
+
+        for k in 1:nsites(part, sys)
+            site = bindingsites(part, sys, k)
+            isbound_vertex(poly, inv_cv[first(site.vertices)]) && continue
+            isinert(sys, color(site)) && continue
+
+            for siteloc in compatible_sitelocs(sys, color(site))
+                push!(pairs, (site, siteloc))
+            end
+        end
+    end
+    return pairs
+end
+function collect_compatible_pairs(poly::Polyform)
+    sys = assemblysystem(poly)
+    BS = BindingSite{posetype(sys), numtype(sys)}
+    pairs = Tuple{BS,BindingSiteLoc}[]
+    return collect_compatible_pairs!(pairs, poly)
 end
 
 function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer, at::BindingSite; leading_vertex)

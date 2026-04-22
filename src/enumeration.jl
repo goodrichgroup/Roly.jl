@@ -4,28 +4,6 @@ mutable struct PolyformAux{BS<:BindingSite}
 end
 Base.copy(polyaux::PolyformAux) = typeof(polyaux)(copy(polyaux.seen), copy(polyaux.pairs))
 
-function collect_compatible_pairs!(aux::PolyformAux, poly::Polyform)
-    sys = assemblysystem(poly)
-    inv_cv = invperm(canonical_vertices(poly))
-    empty!(aux.pairs)
-
-    for orig_v in canonical_vertices(poly)
-        part = particle(poly, orig_v)
-        isnothing(part) && continue
-
-        for k in 1:nsites(part, sys)
-            site = bindingsites(part, sys, k)
-            isbound_vertex(poly, inv_cv[first(site.vertices)]) && continue
-            isinert(sys, color(site)) && continue
-
-            for siteloc in compatible_sitelocs(sys, color(site))
-                push!(aux.pairs, (site, siteloc))
-            end
-        end
-    end
-    return
-end
-
 function ls!(k::Polyform, s::Polyform)
     copy!(k, s)
     return lower!(k)
@@ -39,7 +17,7 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
         return copy!(u, Polyform(assemblysystem(v), j))
     end
 
-    j == 1 && collect_compatible_pairs!(aux, v)
+    j == 1 && collect_compatible_pairs!(aux.pairs, v)
     j > length(aux.pairs) && return nothing
 
     site, siteloc = aux.pairs[j]
@@ -87,6 +65,14 @@ function polyenum(f, sys::AssemblySystem; maxsize=Inf, maxstrs=Inf, kwargs...)
     return nv-1, maxdepth
 end
 polyenum(sys::AssemblySystem; kwargs...) = polyenum(nothing, sys; kwargs...)
+
+function polygen(sys; kwargs...)
+    v₀ = Polyform(sys)
+    strs = typeof(v₀)[]
+    f(s, args...) = (push!(strs, copy(s)); true)
+    polyenum(f, sys; kwargs...)
+    return sort!(strs; by=Roly.nparticles)
+end
 
 
 # """

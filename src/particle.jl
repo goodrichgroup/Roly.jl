@@ -26,6 +26,11 @@ function Particle(sys::AssemblySystem, species_index::Integer, pose=nothing; lea
     return Particle(pose, leading_vertex, species_index)
 end
 
+Base.:*(p, part::Particle) = typeof(part)(p * part.pose, part.leading_vertex, part.species_index)
+Base.:*(part::Particle, p) = typeof(part)(part.pose * p, part.leading_vertex, part.species_index)
+Base.:+(p, part::Particle) = typeof(part)(p + part.pose, part.leading_vertex, part.species_index)
+Base.:+(part::Particle, p) = typeof(part)(part.pose + p, part.leading_vertex, part.species_index)
+
 graphvertices(p::Particle, sys::AssemblySystem) =
     (1:nv(graphrep(species(sys, p.species_index)))) .+ (p.leading_vertex - 1)
 

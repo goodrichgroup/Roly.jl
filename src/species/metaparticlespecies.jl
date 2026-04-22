@@ -27,8 +27,9 @@ function MetaParticleSpecies(poly::Polyform{D}, site_indices::AbstractVector{<:I
     meta_sites = B[BindingSite(s.pose, s.color, k:k, s.touching_tolerance, s.alignment_tolerance)
                    for (k, s) in enumerate(raw_sites)]
 
-    g_base = n > 1 ? path_digraph(n) : SimpleDiGraph(max(n, 1))
-    g = NautyDiGraph(g_base; vertex_labels=1:max(n, 1))
+    # TODO: n == 2 leads to a trivial cycle, which leads to issues down the road
+    g_base = n > 1 ? cycle_digraph(max(n, 3)) : SimpleDiGraph(max(n, 1))
+    g = NautyDiGraph(g_base; vertex_labels=n > 2 ? (1:n) : n == 2 ? (1:3) : 1:1)
 
     rmax = maximum(
         norm(part.pose.x) + _bounding_radius(species(sys, part.species_index))
@@ -107,3 +108,35 @@ function overlap(p1::SpeciesAndPose{<:MetaParticleSpecies},
     return false
 end
 
+"""
+    AssemblySystem(polys::AbstractVector{<:Polyform})
+
+Construct a meta-assembly system where each polyform in `polys` is a building block.
+The open binding sites of each polyform become the binding sites of the corresponding
+meta-species. Interactions are inherited from the original assembly system: two meta-sites
+interact if and only if their original binding site colors interacted.
+"""
+function AssemblySystem(polys::AbstractVector{<:Polyform})
+    isempty(polys) && throw(ArgumentError("polys must not be empty"))
+    orig_sys = assemblysystem(first(polys))
+    any(!=(orig_sys), assemblysystem(p) for p in polys) && throw(ArgumentError("polyforms do not come from the same assembly system"))
+    orig_intmat = interactionmatrix(orig_sys)
+
+    meta_species = [MetaParticleSpecies(poly) for poly in polys]
+
+    # Capture original colors before AssemblySystem overwrites them via setcolors!
+    orig_colors = [[color(ms.meta_sites[k]) for k in 1:nsites(ms)] for ms in meta_species]
+
+    bonds = NTuple{4,Int}[]
+    for i in eachindex(meta_species), k in 1:nsites(meta_species[i])
+        c_ik = orig_colors[i][k]
+        for j in i:length(meta_species)
+            lstart = j == i ? k : 1
+            for l in lstart:nsites(meta_species[j])
+                orig_intmat[c_ik, orig_colors[j][l]] && push!(bonds, (i, k, j, l))
+            end
+        end
+    end
+
+    return AssemblySystem(bonds, meta_species)
+end

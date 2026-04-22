@@ -21,6 +21,9 @@ function BindingSite(pose::P, color::Integer, vertices::UnitRange{<:Integer},
     return BindingSite{P,F}(pose, color, vertices, convert(F, touching_tolerance), convert(F, alignment_tolerance))
 end
 
+Base.:(==)(b1::BindingSite, b2::BindingSite) = b1.vertices == b2.vertices && b1.color == b2.color
+Base.hash(b::BindingSite, h::UInt) = hash(b.color, hash(b.vertices, h))
+Base.isless(b1::BindingSite, b2::BindingSite) = isless(b1.vertices, b2.vertices)
 Base.:*(p, site::BindingSite) = typeof(site)(p * site.pose, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance)
 Base.:*(site::BindingSite, p) = typeof(site)(site.pose * p, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance)
 @inline shift_vertices(site::BindingSite, v::Integer) = typeof(site)(site.pose, site.color, site.vertices .+ v, site.touching_tolerance, site.alignment_tolerance)
