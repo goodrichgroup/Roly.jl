@@ -44,6 +44,7 @@ function Base.show(io::Core.IO, p::Polyform{D}) where {D}
 end
 Base.show(io::Core.IO, ::Type{Polyform{D}}) where {D} = print(io, "Polyform{$D}")
 Base.:(==)(p1::Polyform, p2::Polyform) = assemblysystem(p1) === assemblysystem(p2) && graphrep(p1) == graphrep(p2)
+Base.hash(p::Polyform, h::UInt) = hash(objectid(assemblysystem(p)), hash(graphrep(p), h))
 
 @inline function particle(p::Polyform, v::Integer)
     i = findfirst(pt -> pt.leading_vertex == v, p.particles)
@@ -315,4 +316,37 @@ function composition(p::Polyform)
     end
 
     return comp
+end
+
+"""
+    bondbudget(poly::Polyform)
+
+Return the remaining bond budget of `poly`: for each bond type, the total valence
+contributed by all constituent particles minus the bonds already formed.
+
+Returns `nothing` if the assembly system has no valence defined.
+
+For polyforms made of `MetaParticleSpecies`, the budget is computed in the original
+(base) assembly system's bond space, and internal bonds within each wrapped polyform
+are not counted against the budget.
+"""
+function bondbudget(poly::Polyform)
+    sys = assemblysystem(poly)
+    return _bondbudget_impl(poly, sys)
+end
+
+function _bondbudget_impl(poly::Polyform, sys::AssemblySystem)
+    isnothing(valence(sys)) && return nothing
+    val = valence(sys)
+    nb = nbonds(sys)
+    ns = nspecies(sys)
+    comp = composition(poly)
+    budget = zeros(Int, nb)
+    for b in 1:nb
+        for part in poly.particles
+            budget[b] += val[part.species_index, b]
+        end
+        budget[b] -= comp[ns + b]
+    end
+    return budget
 end

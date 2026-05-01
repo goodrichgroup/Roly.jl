@@ -1,25 +1,44 @@
-function cantile(poly::AbstractVector{<:Polyform}; maxtilesize, kwargs...)
+function cantile(poly::AbstractVector{<:Polyform}; maxtilesize, return_tile=false, kwargs...)
+    metasys = AssemblySystem(poly)
     tile_found = Ref(false)
-    f(s, args...) = isunitcell(s; kwargs...) ? (tile_found[] = true; BREAK) : ACCEPT
-    _, largest_size = polyenum(f, AssemblySystem(poly); maxsize=maxtilesize)
+    tile = Ref(Polyform(metasys))
+
+    f(s, args...) = isunitcell(s; kwargs...) ? (tile_found[] = true; tile[] = copy(s); BREAK) : ACCEPT
+    _, largest_size = polyenum(f, metasys; maxsize=maxtilesize)
     
-    tile_found[] && return true
+    tile_found[] && return return_tile ? tile[] : true
     largest_size < maxtilesize && return false
     return missing
 end
 cantile(poly::Polyform; kwargs...) = cantile([poly]; kwargs...)
+cantile(poly, bondslots; kwargs...) = cantile(poly; bondslots, kwargs...)
+
+#TODO we also need to return true if it can self-close (if it is a loop)
 
 function isunitcell(poly::Polyform; kwargs...)
     return !isnothing(lattice_vectors(poly; kwargs...))
 end
 
-function lattice_vectors(poly::Polyform; nreps=1)
+function lattice_vectors(poly::Polyform; bondslots=nothing, nreps=1)
     particles = poly.particles
+    sys = assemblysystem(poly)
+
+    slots = if !isnothing(bondslots)
+        ns = nspecies(sys)
+        nb_orig = length(_original_bonded_colors(sys))
+        slots = zeros(Int, nb_orig)
+        for (i, n) in pairs(composition(poly)[1:ns])
+            slots[bondslots[i]] .+= n
+        end
+        slots
+    else
+        nothing
+    end
 
     #TODO this should be in potential_lattice_vectors
-    n_opensites = length(Roly.collect_open_bindingsites(poly))
+    n_opensites = isnothing(bondslots) ? length(Roly.collect_open_bindingsites(poly)) : min(2*sum(slots), length(Roly.collect_open_bindingsites(poly)))
     n_opensites > 1 || return nothing
-
+    
     latvecs = potential_lattice_vectors(poly)
     isempty(latvecs) && return nothing
     nvecs = length(latvecs)
@@ -40,7 +59,7 @@ function lattice_vectors(poly::Polyform; nreps=1)
 
             for shifted_particle in shifted_particles
                 for tile_ps in tile_particles
-                    overlap, _ = Roly._overlap_and_contacts(tile_ps, shifted_particle, assemblysystem(poly))
+                    overlap, _ = Roly._overlap_and_contacts(tile_ps, shifted_particle, sys)
                     overlap && @goto upward_traverse
                 end
 
@@ -50,6 +69,24 @@ function lattice_vectors(poly::Polyform; nreps=1)
             end
 
             append!(latest_particles, shifted_particles)
+        end
+
+        # TODO check if contacts are interacting!!
+        if !isnothing(slots)
+            labs = labels(graphrep(poly))
+            orig_bondcolors = _original_bonded_colors(sys)
+            bonds = zero(slots)
+            combined_contacts = copy(tile_contacts)
+            push!(combined_contacts, latest_contacts)
+            for (vs1, vs2) in Iterators.flatten(combined_contacts)
+                v1, v2 = first(vs1), first(vs2)
+                c1 = _original_color(sys, label2color(sys, labs[v1]))
+                c2 = _original_color(sys, label2color(sys, labs[v2]))
+                bidx = findfirst(==(minmax(c1, c2)), orig_bondcolors)
+                isnothing(bidx) && @goto upward_traverse
+                bonds[bidx] += 1
+            end
+            any(<(0), slots - bonds) && @goto upward_traverse
         end
    
         push!(tile_contacts, latest_contacts)

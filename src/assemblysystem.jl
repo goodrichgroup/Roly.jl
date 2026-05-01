@@ -35,8 +35,9 @@ struct AssemblySystem{D,PS<:ParticleSpecies}
     _bonded_species::Vector{NTuple{2,Int}}
     _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
     _isinert::BitVector
+    valence::Union{Nothing,Matrix{Int}}
 end
-function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
+function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}; valence=nothing) where {PS<:ParticleSpecies}
     D = dimension(first(particlespecies))
     for ps in particlespecies
         dimension(ps) != D && throw(ArgumentError("particlespecies do not all have the same dimension"))
@@ -79,7 +80,7 @@ function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}) where
     return AssemblySystem{D,PS}(intmat, particlespecies, nbonds, nsites, ncolors,
                                 color2siteloc, siteloc2color, label2color,
                                 bondlist, bondedsites, bondedspecies,
-                                compatible_sitelocs_cache, isinert_cache)
+                                compatible_sitelocs_cache, isinert_cache, valence)
 end
 function AssemblySystem(bindingrules, particlespecies::ParticleSpecies)
     nspcs = _extract_nspecies(bindingrules)
@@ -152,6 +153,7 @@ Return the spatial dimension of the particles of the assembly system `sys`.
 """
 @inline dimension(::AssemblySystem{D}) where {D} = D
 @inline dimension(::Type{<:AssemblySystem{D}}) where {D} = D
+@inline valence(sys::AssemblySystem) = sys.valence
 
 @inline numtype(::AssemblySystem{D,PS}) where {D,PS} = numtype(PS)
 @inline posetype(::AssemblySystem{D,PS}) where {D,PS} = posetype(PS)
@@ -293,6 +295,10 @@ function compatible_sitelocs(sys::AssemblySystem, color::Integer)
 end
 
 Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d AssemblySystem[n=$(nspecies(sys)), k=$(nbonds(sys))]")
+
+_original_color(::AssemblySystem, c::Integer) = c
+_original_color(sys::AssemblySystem, labs, v) = label2color(sys, labs[v])
+_original_bonded_colors(sys::AssemblySystem) = bonded_colors(sys)
 
 
 function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
