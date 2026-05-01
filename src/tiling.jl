@@ -10,10 +10,42 @@ end
 cantile(poly::Polyform; kwargs...) = cantile([poly]; kwargs...)
 
 function isunitcell(poly::Polyform; kwargs...)
-    return !isnothing(lattice_vectors(poly; kwargs...))
+    return !isnothing(tile_latvecs(poly; kwargs...))
 end
 
-function lattice_vectors(poly::Polyform; nreps=1)
+function tile_latvecs(poly::Polyform; kwargs...)
+    out = latvecs_and_contacts(poly; kwargs...)
+    isnothing(out) && return nothing
+    return out[1]
+end
+
+function tile_contacts(poly::Polyform; kwargs...)
+    out = latvecs_and_contacts(poly; kwargs...)
+    isnothing(out) && return nothing
+    return out[2]
+end
+
+function tile_bonds(poly::Polyform; kwargs...)
+    tcs = tile_contacts(poly; kwargs...)
+    isnothing(tcs) && return nothing
+
+    sys = assemblysystem(poly)
+    bcl = bonded_colors(sys)
+    labs = labels(graphrep(poly))
+
+    bonds = Int[]
+    for contacts in tcs
+        for contact in contacts
+            vs1, vs2 = contact
+            v1, v2 = first(vs1), first(vs2)
+            c1, c2 = label2color(sys, labs[v1]), label2color(sys, labs[v2])
+            push!(bonds, findfirst(==(minmax(c1, c2)), bcl))
+        end
+    end
+    return bonds
+end
+
+function latvecs_and_contacts(poly::Polyform; nreps=1)
     particles = poly.particles
 
     #TODO this should be in potential_lattice_vectors
@@ -67,7 +99,7 @@ function lattice_vectors(poly::Polyform; nreps=1)
         end
         vec_idxs[end] += 1
     end
-    return latvecs[vec_idxs[1:end-1]]
+    return latvecs[vec_idxs[1:end-1]], tile_contacts
 end
 
 

@@ -20,7 +20,7 @@ export AssemblySystem, interactionmatrix, buildingblocks,
 export Polyform, canonical_id, composition, compositions, interactionmatrix, isinert, assemblysystem
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
 export MetaParticleSpecies
-export cantile, lattice_vectors
+export cantile, tile_latvecs, tile_bonds
 
 include("utils.jl")
 include("pose.jl")
