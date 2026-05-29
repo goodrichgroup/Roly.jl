@@ -140,3 +140,16 @@ function AssemblySystem(polys::AbstractVector{<:Polyform})
 
     return AssemblySystem(bonds, meta_species)
 end
+
+function original_assemblysystem(sys::AssemblySystem{D, <:MetaParticleSpecies}) where D
+    return assemblysystem(species(sys, 1).polyform)
+end
+
+function metacolor2origcolor(::AssemblySystem, c::Integer)
+    return c
+end
+function metacolor2origcolor(sys::AssemblySystem{D, <:MetaParticleSpecies}, c::Integer) where D
+    siteloc = first(color2siteloc(sys, c))
+    spcs = species(sys, siteloc[1])
+    return color(bindingsites(spcs.polyform, siteloc[2]))
+end

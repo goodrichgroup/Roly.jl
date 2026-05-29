@@ -307,7 +307,7 @@ function composition(p::Polyform)
     bondlist = bonded_colors(sys)
 
     for (; src, dst) in edges(g)
-        src >= dst && continue
+        src > dst && continue
         has_edge(g, dst, src) || continue
         bond = minmax(label2color(sys, labs[src]), label2color(sys, labs[dst]))
         i = findfirst(==(bond), bondlist)

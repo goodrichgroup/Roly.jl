@@ -15,20 +15,27 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors)
     tol = sqrt(eps(F)) * r_out
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]
     for (i, (c, l)) in enumerate(zip(colors, labels))
-        ψ = Angle2d{F}(-F(π) * (1/2 + 2/n * (i-1)))
+        ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
         x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ)))
         push!(sites, BindingSite(Pose(x, ψ), c, i:i, tol, tol / r_in))
     end
 
     g = NautyDiGraph(cycle_digraph(n); vertex_labels=labels)
-    corners = [SVector{2,F}(r_out * cos(-π/2 - (2k - 1) * π / n),
-                            r_out * sin(-π/2 - (2k - 1) * π / n)) for k in 1:n]
+    corners = [
+        SVector{2,F}(r_out * cos(-π / 2 - (2k - 1) * π / n), r_out * sin(-π / 2 - (2k - 1) * π / n)) for k in 1:n
+    ]
     return PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, true, tol)
 end
 
-Base.show(io::Core.IO, ps::PolygonParticleSpecies) = print(io, "$(dimension(ps))d PolygonParticleSpecies with $(nsites(ps)) sites")
+function Base.show(io::Core.IO, ps::PolygonParticleSpecies)
+    return print(io, "$(dimension(ps))d PolygonParticleSpecies with $(nsites(ps)) sites")
+end
 
-Base.copy(pps::PolygonParticleSpecies) = PolygonParticleSpecies(copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax, pps.isregular, pps.skin)
+function Base.copy(pps::PolygonParticleSpecies)
+    return PolygonParticleSpecies(
+        copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax, pps.isregular, pps.skin
+    )
+end
 
 dimension(::PolygonParticleSpecies) = 2
 
@@ -42,7 +49,7 @@ function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer}
         s = p.sites[k]
         p.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance)
     end
-    return
+    return nothing
 end
 
 function can_skip_overlap_check(p1::PolygonParticleSpecies, p2::PolygonParticleSpecies)
@@ -54,8 +61,7 @@ end
 
 isconvex(::PolygonParticleSpecies) = true
 
-function _SAT_overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies},
-                      p2::SpeciesAndPose{<:PolygonParticleSpecies})
+function _SAT_overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies})
     spcs1, pose1 = p1
     spcs2, pose2 = p2
     isconvex(spcs1) && isconvex(spcs2) || error("SAT overlap check requires convex polygons")
@@ -80,7 +86,9 @@ function _SAT_overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies},
     return true
 end
 
-function could_contact(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
+function could_contact(
+    p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...
+)
     spcs1, pose1 = p1
     spcs2, pose2 = p2
     return norm(pose1.x - pose2.x) < spcs1.rmax + spcs2.rmax

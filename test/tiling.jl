@@ -13,6 +13,7 @@ end
 function tile_add(s, args...)
     m = composition(s)
     push!(ms, m)
+
     tbonds = tile_bonds(s)
     if !isnothing(tbonds)
         np = nspecies(assemblysystem(s))
@@ -20,7 +21,14 @@ function tile_add(s, args...)
         for b in tbonds
             tile_m[np+b] += 1
         end
+        push!(ms, tile_m)
     end
+    return true
+end
+
+begin
+    ms = Vector{Int}[]
+    polyenum(tile_add, sys; maxsize=3)
 end
 
 begin
