@@ -254,7 +254,7 @@ end
 """
     graphrep(sys::AssemblySystem)
 
-Return the graph representation of the assembly system `sys`.
+Construct the graph representation of the assembly system `sys`.
 """
 function graphrep(sys::AssemblySystem)
     imat = interactionmatrix(sys)
