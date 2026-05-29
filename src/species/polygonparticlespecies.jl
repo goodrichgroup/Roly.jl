@@ -40,7 +40,6 @@ end
 dimension(::PolygonParticleSpecies) = 2
 
 graphrep(p::PolygonParticleSpecies) = p.g
-symmetrynumber(p::PolygonParticleSpecies) = 1
 nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer})

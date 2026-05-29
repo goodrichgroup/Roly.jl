@@ -22,6 +22,9 @@ export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
 export MetaParticleSpecies
 export cantile, tile_latvecs, tile_bonds
 
+export ChainLinkParticleSpecies
+
+
 include("utils.jl")
 include("pose.jl")
 include("bindingsite.jl")
@@ -33,6 +36,7 @@ include("enumeration.jl")
 include("tiling.jl")
 
 include("species/polygonparticlespecies.jl")
+include("species/chainlinkparticlespecies.jl")
 include("species/sphereparticlespecies.jl")
 include("species/metaparticlespecies.jl")
 
