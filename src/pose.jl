@@ -59,18 +59,12 @@ Base.inv(p::Pose) = let ψinv = inv(p.psi); typeof(p)(-ψinv * p.x, ψinv) end
 Base.:/(p1::Pose, p2) = p1 * inv(p2)
 Base.:\(p1, p2::Pose) = inv(p1) * p2
 
+Base.Matrix(p::Pose{D,F}) where {D,F} = [p.psi p.x; zeros(F, D)' F(1)]
+
 Base.eltype(::Type{<:Pose{D,F}}) where {D,F} = F
 
 dimension(::Pose{D}) where D = D
 dimension(::Type{<:Pose{D}}) where D = D
-
-"""
-    tomatrix(p::Pose{D,F}) where {D,F}
-
-Convert a pose `p` into a matrix of the form `[R(p.psi) p.x; 0 1]`.
-"""
-tomatrix(p::Pose{2,F}) where F = [p.psi p.x; zeros(F, 2)' F(1)]
-tomatrix(p::Pose{3,F}) where F = [p.psi p.x; zeros(F, 3)' F(1)]
 
 function Base.show(io::Core.IO, p::Pose{D,F,R}) where {D,F,R}
     if D == 2

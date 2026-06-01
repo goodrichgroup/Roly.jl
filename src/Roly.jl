@@ -6,7 +6,7 @@ using Graphs, NautyGraphs
 using ReverseSearch
 
 export Rotation, Angle2d, RotXYZ, rotation_angle, rotation_axis, SVector
-export Pose, tomatrix, dimension
+export Pose, dimension
 export BindingSite, color
 export ParticleSpecies, SpeciesAndPose, bindingsites,
        graphrep, isconvex, could_contact, overlap, setcolors!, nsites, symmetrynumber
