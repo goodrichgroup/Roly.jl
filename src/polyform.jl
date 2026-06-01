@@ -81,13 +81,12 @@ function _filter_edges(p::Polyform, ::Val{exterior}) where exterior
     return filtered_edges
 end
 
-function _vertex_to_particle_site(p::Polyform, canonical_v::Integer)
+function _vertex_to_particle_site(p::Polyform, v::Integer)
     sys = assemblysystem(p)
-    orig_v = toorig(p, canonical_v)
     for (i, part) in enumerate(p.particles)
-        orig_v in graphvertices(part, sys) || continue
+        v in graphvertices(part, sys) || continue
         for j in 1:nsites(part, sys)
-            orig_v in bindingsites(part, sys, j).vertices && return (i, j)
+            v in bindingsites(part, sys, j).vertices && return (i, j)
         end
     end
     return nothing
