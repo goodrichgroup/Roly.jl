@@ -50,9 +50,8 @@ function bondindex(poly, contact)
     vs1, vs2 = contact
     v1, v2 = first(vs1), first(vs2)
 
-    inv_canonvs = invperm(poly.canonvs)
-    v1 = inv_canonvs[v1]
-    v2 = inv_canonvs[v2]
+    v1 = tocanon(poly, v1)
+    v2 = tocanon(poly, v2)
 
     c1, c2 = label2color(sys, labs[v1]), label2color(sys, labs[v2])
     return findfirst(==(minmax(c1, c2)), bonded_colors(sys))

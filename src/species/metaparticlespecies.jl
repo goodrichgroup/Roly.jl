@@ -46,7 +46,6 @@ Wrap `poly` as a `ParticleSpecies` using only its open (unbound, non-inert) bind
 """
 function MetaParticleSpecies(poly::Polyform)
     sys = assemblysystem(poly)
-    inv_cv = invperm(canonical_vertices(poly))
     active_indices = Int[]
     k = 0
     for v in canonical_vertices(poly)
@@ -55,7 +54,7 @@ function MetaParticleSpecies(poly::Polyform)
         for j in 1:nsites(part, sys)
             k += 1
             site = bindingsites(part, sys, j)
-            isbound_vertex(poly, inv_cv[first(site.vertices)]) && continue
+            isbound_vertex(poly, tocanon(poly, first(site.vertices))) && continue
             isinert(sys, color(site)) && continue
             push!(active_indices, k)
         end
