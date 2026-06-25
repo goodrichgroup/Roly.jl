@@ -38,6 +38,7 @@ via a 180 degree rotation around their (shared) z-axes.
 """
 @inline standard_offset(b::BindingSite{<:Pose{2,F}}) where {F} = b.pose * Angle2d{F}(π)
 @inline standard_offset(b::BindingSite{<:Pose{3,F}}) where {F} =  b.pose * RotXYZ{F}(0, 0, π)
+@inline standard_offset(::Pose{D,F}) where {D,F} = Pose{D}() * (D == 2 ? Angle2d{F}(π) : RotXYZ{F}(0, 0, π))
 
 """
     color(b::BindingSite)

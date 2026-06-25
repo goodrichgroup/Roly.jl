@@ -24,7 +24,7 @@ function Pose{2,F}(; orientationtype=Angle2d) where {F}
     return Pose{2,F,orientationtype{F}}(zeros(2), orientationtype(0.0))
 end
 function Pose{3,F}(; orientationtype=RotXYZ) where {F} 
-    return  Pose{3,F,orientationtype{F}}(zeros(3), orientationtype(0.0, 0.0, 0.0))
+    return Pose{3,F,orientationtype{F}}(zeros(3), orientationtype(0.0, 0.0, 0.0))
 end
 
 """
@@ -41,14 +41,27 @@ Pose{D}(; kwargs...) where {D} = Pose{D,Float64}(; kwargs...)
 
 Create a pose from a position vector `x` and orientation `psi`.
 """
+function Pose{D,F}(x, psi) where {D, F} 
+    return Pose{D,eltype(x),typeof(psi)}(x, psi)
+end
 function Pose(x, psi)
     return Pose{length(x),eltype(x),typeof(psi)}(x, psi)
 end
 
+
+function Pose{3,F}(p::Pose{2,F}; orientationtype=RotXYZ) where F
+    return Pose(SVector{3,F}(p.x..., F(0)), orientationtype(F(0), F(0), rotation_angle(p.psi)))
+end
+function Pose{3}(p::Pose{2,F}; orientationtype=RotXYZ) where F
+    return Pose{3,F}(p; orientationtype)
+end
+
+promote_rule(::Type{<:Pose{D,F1}}, ::Type{<:Pose{D,F2}}) where {D, F1, F2} = promote_rule(F1, F2)
+
 Base.:(==)(p1::Pose, p2::Pose) = p1.x == p2.x && p1.psi == p2.psi
 Base.isapprox(p1::Pose, p2::Pose; kwargs...) = isapprox(p1.x, p2.x; kwargs...) && isapprox(p1.psi, p2.psi; kwargs...)
 
-Base.:*(p1::Pose, p2::Pose) = typeof(p1)(p1.psi * p2.x + p1.x, p1.psi * p2.psi)
+Base.:*(p1::Pose, p2::Pose) = Pose(p1.psi * p2.x + p1.x, p1.psi * p2.psi)
 Base.:*(p::Pose, v::AbstractVector) = p.psi * v + p.x
 Base.:*(R::Rotation, p::Pose) = typeof(p)(R * p.x, R * p.psi)
 Base.:*(p::Pose, R::Rotation) = typeof(p)(p.x, p.psi * R)

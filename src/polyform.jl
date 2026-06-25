@@ -60,6 +60,13 @@ end
 @inline canonical_vertices(p::Polyform) = p.canon2orig
 @inline is_leadingvertex(p::Polyform, v::Integer) = any(pt -> pt.leading_vertex == v, p.particles)
 
+
+@inline dimension(::Polyform{D}) where {D} = D
+@inline posetype(::Polyform{D,<:Particle{<:P}}) where {D,P} = P
+@inline posetype(::Type{Polyform{D,<:Particle{<:P}}}) where {D,P} = P
+@inline numtype(p::Polyform) = eltype(posetype(p))
+@inline numtype(p::Type{Polyform}) = eltype(posetype(p))
+
 # Convert between original (stable particle/site identifiers) and canonical (graph vertex) space.
 @inline tocanon(p::Polyform, v::Integer) = p.orig2canon[v]
 @inline toorig(p::Polyform, v::Integer) = p.canon2orig[v]
@@ -69,13 +76,17 @@ function _sync_orig2canonical!(poly::Polyform)
     for (i, v) in enumerate(poly.canon2orig)
         poly.orig2canon[v] = i
     end
+    return
 end
 
-@inline interior_edges(p::Polyform) = _filter_edges(p, Val(false))
-@inline exterior_edges(p::Polyform) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
-function _filter_edges(p::Polyform, ::Val{exterior}) where exterior
-    filtered_edges = Iterators.filter(edges(graphrep(p))) do (; src, dst)
-        isdouble = has_edge(graphrep(p), dst, src)
+@inline interior_edges(p) = _filter_edges(p, Val(false))
+@inline exterior_edges(p) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
+function _filter_edges(p::Polyform, v::Val{exterior}) where exterior
+    return _filter_edges(graphrep(p), v)
+end
+function _filter_edges(p::AbstractGraph, ::Val{exterior}) where exterior
+    filtered_edges = Iterators.filter(edges(p)) do (; src, dst)
+        isdouble = has_edge(p, dst, src)
         return exterior ? isdouble : !isdouble
     end
     return filtered_edges
@@ -83,6 +94,7 @@ end
 
 function _vertex_to_particle_site(p::Polyform, v::Integer)
     sys = assemblysystem(p)
+    v = toorig(p, v)
     for (i, part) in enumerate(p.particles)
         v in graphvertices(part, sys) || continue
         for j in 1:nsites(part, sys)
@@ -100,9 +112,8 @@ Return a lazy iterator of named tuples `(p1, s1, p2, s2)` for each bond in `p`.
 """
 function bonds(p::Polyform)
     return (
-        let (i, j) = _vertex_to_particle_site(p, e.src),
-            (k, l) = _vertex_to_particle_site(p, e.dst)
-            (p1=i, s1=j, p2=k, s2=l)
+        let ((i, j), (k, l)) = minmax(_vertex_to_particle_site(p, e.src), _vertex_to_particle_site(p, e.dst))
+            (particle=i, site=j) => (particle=k, site=l)
         end
         for e in exterior_edges(p)
     )

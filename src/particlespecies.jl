@@ -115,7 +115,7 @@ end
 """
     equivalent_site_indices(spcs::ParticleSpecies)
 
-Return the list of equivalent binding sites, that is equivalence classes of binding sites under the 
+Return a list of equivalent binding sites, that is equivalence classes of binding sites under the 
 symmetry of the particle species.
 """
 function equivalent_site_indices(spcs::ParticleSpecies)

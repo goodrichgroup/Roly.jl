@@ -15,9 +15,10 @@ export ACCEPT, REJECT, BREAK
 export polyenum, polygen
 export AssemblySystem, interactionmatrix, buildingblocks, 
        nspecies, nbonds, nsites, dimension,
-       bonded_colors, bonded_sites, bonded_species, isinert
+       bonded_colors, bonded_sites, bonded_species, isinert, species,
+       numtype, posetype
 
-export Polyform, canonical_id, composition, compositions, interactionmatrix, isinert, assemblysystem
+export Polyform, composition, compositions, interactionmatrix, assemblysystem, tocanon, toorig, bonds, nparticles
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
 export MetaParticleSpecies
 export cantile, tile_latvecs, tile_bonds
