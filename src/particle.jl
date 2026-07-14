@@ -31,7 +31,7 @@ Base.:*(part::Particle, p) = typeof(part)(part.pose * p, part.leading_vertex, pa
 Base.:+(p, part::Particle) = typeof(part)(p + part.pose, part.leading_vertex, part.species_index)
 Base.:+(part::Particle, p) = typeof(part)(part.pose + p, part.leading_vertex, part.species_index)
 
-graphvertices(p::Particle, sys::AssemblySystem) =
+@inline graphvertices(p::Particle, sys::AssemblySystem) =
     (1:nv(graphrep(species(sys, p.species_index)))) .+ (p.leading_vertex - 1)
 
 """

@@ -5,8 +5,7 @@ A `BindingSite` describes an anchor point at which particles can be attached tog
 
 The binding site color, together with an interaction matrix, determines whether two
 binding sites may bind. One binding site may be represented by multiple contiguous
-graph vertices and particle/polyform graph representation. The relative poses of two
-attached binding sites is given by `standard_offset`.
+graph vertices and particle/polyform graph representation.
 """
 struct BindingSite{P<:Pose, F<:Real}
     pose::P
@@ -28,11 +27,13 @@ Base.:*(p, site::BindingSite) = typeof(site)(p * site.pose, site.color, site.ver
 Base.:*(site::BindingSite, p) = typeof(site)(site.pose * p, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance)
 @inline shift_vertices(site::BindingSite, v::Integer) = typeof(site)(site.pose, site.color, site.vertices .+ v, site.touching_tolerance, site.alignment_tolerance)
 @inline shift_color(site::BindingSite, c::Integer) = typeof(site)(site.pose, site.color + c, site.vertices, site.touching_tolerance, site.alignment_tolerance)
+posetype(::BindingSite{P}) where P = P
+posetype(::Type{<:BindingSite{P}}) where P = P
 
 """
     standard_offset(b::BindingSite{<:Pose{D,F}}) where {D,F}
 
-Calculate the default offset between two attached binding sites. We employ the 
+Calculate the default offset between binding site `b` and an attached partner binding site. We employ the 
 convention that attached binding sites are "facing each other": their poses are related 
 via a 180 degree rotation around their (shared) z-axes.
 """
@@ -46,8 +47,7 @@ via a 180 degree rotation around their (shared) z-axes.
 Return the binding site's color.
 
 If the binding site comes from an `AssemblySystem`, its interactions with other
-binding sites are determined by `interactionmatrix(sys)[:, color(b)]`. A color
-of `0` indicates that the site is inert, i.e. it does not bind to any other site.
+binding sites are determined by `interactionmatrix(sys)[:, color(b)]`.
 """
 color(b::BindingSite) = b.color
 
@@ -62,7 +62,7 @@ as keyword arguments.
 """
 function istouching(b1::BindingSite, b2::BindingSite)
     return isapprox(b1.pose.x, b2.pose.x;
-                    atol = b1.touching_tolerance + b2.touching_tolerance, rtol = 0)
+                    atol=b1.touching_tolerance + b2.touching_tolerance, rtol=0)
 end
 
 """
@@ -76,7 +76,7 @@ as keyword arguments.
 """
 function isaligned(b1::BindingSite, b2::BindingSite)
     return isapprox(b1.pose.psi, standard_offset(b2).psi;
-                    atol = b1.alignment_tolerance + b2.alignment_tolerance, rtol = 0)
+                    atol=b1.alignment_tolerance + b2.alignment_tolerance, rtol = 0)
 end
 
 """

@@ -7,8 +7,8 @@ sites, represented by a directed graph.
 mutable struct Polyform{D,P<:Particle,S<:AssemblySystem,G<:AbstractNautyGraph}
     graphrep::G
     sigma::Int
-    canon2orig::Vector{Int}   # canonical vertex index → original vertex index
-    orig2canon::Vector{Int}   # original vertex index → canonical vertex index
+    canon2orig::Vector{Int}
+    orig2canon::Vector{Int}
     particles::Vector{P}
     assemblysystem::S
 end
@@ -36,12 +36,14 @@ function Polyform(sys::AssemblySystem{D}, i::Integer) where {D}
     canonize!(g)
     part = Particle(sys, i; leading_vertex=1)
     cvs = collect(vertices(g))
-    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(
-        g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys)
+    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys)
 end
 
-Base.copy(p::Polyform) = typeof(p)(copy(p.graphrep), p.sigma, copy(p.canon2orig),
-                                   copy(p.orig2canon), copy(p.particles), p.assemblysystem)
+function Base.copy(p::Polyform)
+    return typeof(p)(
+        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon), copy(p.particles), p.assemblysystem
+    )
+end
 function Base.copy!(dst::Polyform, src::Polyform)
     copy!(dst.graphrep, src.graphrep)
     dst.sigma = src.sigma
@@ -54,9 +56,7 @@ end
 
 Base.show(io::Core.IO, p::Polyform{D}) where {D} = print(io, "Polyform{$D}[n=$(nparticles(p))]")
 Base.show(io::Core.IO, ::Type{Polyform{D}}) where {D} = print(io, "Polyform{$D}")
-Base.:(==)(p1::Polyform, p2::Polyform) =
-    assemblysystem(p1) === assemblysystem(p2) && graphrep(p1) == graphrep(p2)
-
+Base.:(==)(p1::Polyform, p2::Polyform) = assemblysystem(p1) === assemblysystem(p2) && graphrep(p1) == graphrep(p2)
 
 """
     nparticles(p::Polyform)
@@ -93,7 +93,6 @@ Return the symmetry number of `p`, i.e. the size of its automorphism group.
 @inline numtype(p::Polyform) = eltype(posetype(p))
 @inline numtype(p::Type{Polyform}) = eltype(posetype(p))
 
-
 """
     tocanon(p::Polyform, v::Integer)
 
@@ -115,20 +114,19 @@ function _sync_orig2canonical!(poly::Polyform)
     for i in eachindex(poly.canon2orig)
         poly.orig2canon[poly.canon2orig[i]] = i
     end
-    return
+    return nothing
 end
 
 @inline canonical_vertices(p::Polyform) = p.canon2orig
 @inline is_leadingvertex(p::Polyform, v::Integer) = any(pt -> pt.leading_vertex == v, p.particles)
 
-@inline particle(p::Polyform, i::Integer) = p.particles[i]
+@inline particles(p::Polyform, i::Integer) = p.particles[i]
 
 # Look up the particle whose leading_vertex equals the original vertex v (O(n) scan).
 @inline function particle_from_leadingvertex(p::Polyform, v::Integer)
     i = findfirst(pt -> pt.leading_vertex == v, p.particles)
     return isnothing(i) ? nothing : p.particles[i]
 end
-
 
 """
     interior_edges(p::Polyform)
@@ -144,7 +142,6 @@ Return a lazy iterator over the external edges of `graphrep(p)`, corresponding t
 """
 @inline exterior_edges(p::Polyform) = (e for e in _filter_edges(graphrep(p), Val(true)) if e.src < e.dst)
 
-
 # TODO: assumes no double edges within a single particle's graphrep (not true for 3D particles).
 # A label-based check is needed before 3D particles work reliably.
 function _filter_edges(g::AbstractGraph, ::Val{exterior}) where {exterior}
@@ -156,6 +153,22 @@ end
 
 function isbound_vertex(p::Polyform, v::Integer)
     return any(NautyGraphs.adjrow(graphrep(p), v) .* NautyGraphs.adjcol(graphrep(p), v))
+end
+
+"""
+    bondindex(poly::Polyform, src::Integer, dst::Integer)
+
+Return the index into `bonded_colors(assemblysystem(poly))` for the bond between
+canonical graph vertices `src` and `dst`, or `nothing` if they don't form a valid
+bond type.
+"""
+function bondindex(poly::Polyform, src::Integer, dst::Integer)
+    sys = assemblysystem(poly)
+    p1, b1 = _vertex_to_particle_site(poly, src)
+    p2, b2 = _vertex_to_particle_site(poly, dst)
+    c1 = color(bindingsites(particles(poly, p1), sys, b1))
+    c2 = color(bindingsites(particles(poly, p2), sys, b2))
+    return findfirst(==(minmax(c1, c2)), bonded_colors(sys))
 end
 
 # Map a canonical graph vertex back to (particle_index, site_index).
@@ -170,7 +183,6 @@ function _vertex_to_particle_site(p::Polyform, v::Integer)
     end
     return nothing
 end
-
 
 """
     bindingsites(p::Polyform, i::Integer)
@@ -211,12 +223,12 @@ within those particles.
 """
 function bonds(p::Polyform)
     return (
-        let (lhs, rhs) = minmax(_vertex_to_particle_site(p, e.src),
-                                 _vertex_to_particle_site(p, e.dst)),
-            (p1, s1) = lhs, (p2, s2) = rhs
+        let (lhs, rhs) = minmax(_vertex_to_particle_site(p, e.src), _vertex_to_particle_site(p, e.dst)),
+            (p1, s1) = lhs,
+            (p2, s2) = rhs
+
             (particle=p1, site=s1) => (particle=p2, site=s2)
-        end
-        for e in exterior_edges(p)
+        end for e in exterior_edges(p)
     )
 end
 
@@ -237,21 +249,13 @@ function composition(p::Polyform)
         comp[part.species_index] += 1
     end
 
-    g = graphrep(p)
-    labs = labels(g)
-    bondlist = bonded_colors(sys)
-    for (; src, dst) in edges(g)
-        src > dst && continue
-        has_edge(g, dst, src) || continue
-        bond = minmax(label2color(sys, labs[src]), label2color(sys, labs[dst]))
-        i = findfirst(==(bond), bondlist)
+    for (; src, dst) in exterior_edges(p)
+        i = bondindex(p, src, dst)
         isnothing(i) || (comp[ns + i] += 1)
     end
 
     return comp
 end
-
-# ── Internal helpers for structural modification ──────────────────────────────
 
 # Compute the pose of a new particle attached at `at` via its `site_index`-th site.
 function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer, at::BindingSite; leading_vertex)
@@ -260,9 +264,14 @@ function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer
     return Particle(particle_pose, leading_vertex, species_index)
 end
 
-function _overlap_and_contacts(polyparticles::AbstractVector{<:Particle}, part::Particle,
-                                sys::AssemblySystem; allow_noninteracting=false,
-                                allow_misaligned=false, kwargs...)
+function _overlap_and_contacts(
+    polyparticles::AbstractVector{<:Particle},
+    part::Particle,
+    sys::AssemblySystem;
+    allow_noninteracting=false,
+    allow_misaligned=false,
+    kwargs...,
+)
     intmat = interactionmatrix(sys)
     contacts = NTuple{2,UnitRange{Int}}[]
 
@@ -281,10 +290,9 @@ function _overlap_and_contacts(polyparticles::AbstractVector{<:Particle}, part::
     return false, contacts
 end
 
-overlap_and_contacts(poly::Polyform, part::Particle; kwargs...) =
-    _overlap_and_contacts(poly.particles, part, assemblysystem(poly); kwargs...)
-
-# ── Structural mutation ───────────────────────────────────────────────────────
+function overlap_and_contacts(poly::Polyform, part::Particle; kwargs...)
+    return _overlap_and_contacts(poly.particles, part, assemblysystem(poly); kwargs...)
+end
 
 """
     raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc)
@@ -352,9 +360,8 @@ function lower!(poly::Polyform)
 
     sys = assemblysystem(poly)
     nv_g = nv(graphrep(poly))
-    is_target = zeros(Bool, nv_g)
-    forbidden = zeros(Bool, nv_g)
-    explored = zeros(Bool, nv_g)
+    target = zeros(Bool, nv_g)
+    visited = zeros(Bool, nv_g)
     queue = zeros(Cint, nv_g)
 
     for v in Iterators.reverse(canonical_vertices(poly))
@@ -369,7 +376,7 @@ function lower!(poly::Polyform)
         vs0 = graphvertices(part, sys)
         vs = sort!(poly.orig2canon[vs0])
 
-        are_cutvertices!(graphrep(poly), vs, is_target, forbidden, explored, queue) && continue
+        is_cutset(graphrep(poly), vs; target, visited, queue) && continue
 
         # Swap-and-pop the particle out of the vector.
         lv = leading_vertex(part)
@@ -392,10 +399,8 @@ function lower!(poly::Polyform)
         poly.sigma = convert(Int, autg.n)
         return poly
     end
-    error("invariant violated: no removable particle found in connected polyform")
+    return error("invariant violated: no removable particle found in connected polyform")
 end
-
-# ── Open site / compatible pair collection (used by enumeration) ──────────────
 
 function collect_open_bindingsites!(sites, poly::Polyform)
     sys = assemblysystem(poly)
@@ -415,7 +420,7 @@ end
 
 function collect_open_bindingsites(poly::Polyform)
     sys = assemblysystem(poly)
-    sites = BindingSite{posetype(sys), numtype(sys)}[]
+    sites = BindingSite{posetype(sys),numtype(sys)}[]
     return collect_open_bindingsites!(sites, poly)
 end
 
@@ -439,7 +444,7 @@ end
 
 function collect_compatible_pairs(poly::Polyform)
     sys = assemblysystem(poly)
-    BS = BindingSite{posetype(sys), numtype(sys)}
+    BS = BindingSite{posetype(sys),numtype(sys)}
     pairs = Tuple{BS,BindingSiteLoc}[]
     return collect_compatible_pairs!(pairs, poly)
 end

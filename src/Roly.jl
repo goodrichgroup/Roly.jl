@@ -18,12 +18,13 @@ export AssemblySystem, interactionmatrix,
        bonded_colors, bonded_sites, bonded_species, isinert, species,
        numtype, posetype
 
-export Polyform, composition, interactionmatrix, assemblysystem, bonds, nparticles
+export Polyform, composition, interactionmatrix, assemblysystem, bonds, bondindex, nparticles, interior_edges, exterior_edges
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
 export MetaParticleSpecies
-export cantile, tile_latvecs, tile_bonds
+export LatticeIter, istranslationtile, cantile
 
 export ChainLinkParticleSpecies
+export PatchyParticleSpecies, PatchyDisk
 
 
 include("utils.jl")
@@ -37,8 +38,7 @@ include("enumeration.jl")
 include("tiling.jl")
 
 include("species/polygonparticlespecies.jl")
-include("species/chainlinkparticlespecies.jl")
-include("species/sphereparticlespecies.jl")
+include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
 
 export render, polyformplot, polyformplot!

@@ -1,13 +1,22 @@
 using Test
 using Roly
-using Rotations, StaticArrays
+using Rotations, StaticArrays, LinearAlgebra
+using NautyGraphs
 
 @testset verbose=true "Roly" begin
-    # include("geometry.jl")
-    # include("assembly_system.jl")
-    # include("polyform.jl")
-    # include("utils.jl")
     include("pose.jl")
     include("bindingsite.jl")
+    include("particle.jl")
+    include("assemblysystem.jl")
+    include("polyform.jl")
     include("enumeration.jl")
+    include("utils.jl")
+    # include("tiling.jl")
+
+    @testset verbose=true "species" begin
+        include("species/polygonparticlespecies.jl")
+        include("species/patchyparticlespecies.jl")
+    end
 end;
+
+

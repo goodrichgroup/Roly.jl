@@ -29,7 +29,6 @@ struct AssemblySystem{D,PS<:ParticleSpecies}
     ncolors::Int
     _color2siteloc::Dict{Int,Vector{BindingSiteLoc}}
     _siteloc2color::Dict{BindingSiteLoc,Int}
-    _label2color::Dict{Int,Int}
     _bondlist::Vector{NTuple{2,Int}}
     _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
@@ -43,7 +42,7 @@ function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}) where
     end
 
     particlespecies = _adjust_labels_and_colors(particlespecies)
-    color2siteloc, siteloc2color, label2color = _make_bindingsite_lookuptables(particlespecies)
+    color2siteloc, siteloc2color = _make_bindingsite_lookuptables(particlespecies)
 
     nsites = length(siteloc2color)
     ncolors = length(color2siteloc)
@@ -77,7 +76,7 @@ function AssemblySystem(bindingrules, particlespecies::AbstractVector{PS}) where
     isinert_cache = BitVector(!any(intmat[:, c]) for c in 1:ncolors)
 
     return AssemblySystem{D,PS}(intmat, particlespecies, nbonds, nsites, ncolors,
-                                color2siteloc, siteloc2color, label2color,
+                                color2siteloc, siteloc2color,
                                 bondlist, bondedsites, bondedspecies,
                                 compatible_sitelocs_cache, isinert_cache)
 end
@@ -206,30 +205,12 @@ Return the (possible multiple) binding site locations associated with the bindin
 end
 
 """
-    label2color(sys::AssemblySystem, label::Integer)
-
-Return the binding site color associated with the graph representation label `label`.
-"""
-@inline function label2color(sys::AssemblySystem, label::Integer)
-    return sys._label2color[label]
-end
-
-"""
     color2species(sys::AssemblySystem, color::Integer)
 
 Return the particle species that contains the binding site with color `color`.
 """
 @inline function color2species(sys::AssemblySystem, color::Integer)
     return color2siteloc(sys, color)[1][1]
-end
-
-"""
-    label2species(sys::AssemblySystem, label::Integer)
-
-Return the particle species whose graph representation contains the label `label`.
-"""
-@inline function label2species(sys::AssemblySystem, label::Integer)
-    return color2species(sys, label2color(sys, label))
 end
 
 """
@@ -277,15 +258,15 @@ function graphrep(sys::AssemblySystem)
 
     i = 1
     for bb in species(sys)
-        a = adjacency_matrix(bb.graphrep)
+        a = adjacency_matrix(graphrep(bb))
         n = size(a, 1)
         A[i:i+n-1, i:i+n-1] .+= a
         i += n
     end
 
     vertex_labels = [zeros(Cint, ns); ones(Cint, nb)]
-    graphrep = NautyDiGraph(A; vertex_labels)
-    return graphrep
+    g = NautyDiGraph(A; vertex_labels)
+    return g
 end
 
 function compatible_sitelocs(sys::AssemblySystem, color::Integer)
@@ -297,7 +278,9 @@ Base.show(io::Core.IO, sys::AssemblySystem) = print(io, "$(dimension(sys))d Asse
 
 function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
     _checkshape(bindingrules)
-    return maximum(bindingrules[:, [1, 3]])
+    nspcs = maximum(@view bindingrules[:, [1, 3]]; init=0)
+    nspcs < 1 && throw(ArgumentError("binding rules do not not contain any bonds and cannot be used to determine species count"))
+    return nspcs
 end
 
 function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
@@ -319,7 +302,6 @@ end
 function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:ParticleSpecies})
     color2siteloc = Dict{Int,Vector{BindingSiteLoc}}()
     siteloc2color = Dict{BindingSiteLoc,Int}()
-    label2color = Dict{Int,Int}()
 
     for (spcs, ps) in enumerate(particlespecies)
         for si in 1:nsites(ps)
@@ -328,13 +310,9 @@ function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:Partic
             spcssite = (spcs, si)
             push!(get!(color2siteloc, c, BindingSiteLoc[]), spcssite)
             siteloc2color[spcssite] = c
-            for v in site.vertices
-                l = label(graphrep(ps), v)
-                haskey(label2color, l) || (label2color[l] = c)
-            end
         end
     end
-    return color2siteloc, siteloc2color, label2color
+    return color2siteloc, siteloc2color
 end
 
 function _parse_intmat(bindingrules, siteloc2color)

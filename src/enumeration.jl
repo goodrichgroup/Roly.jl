@@ -60,9 +60,9 @@ function polyenum(f, sys::AssemblySystem; maxsize=Inf, maxstrs=Inf, kwargs...)
     aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,BindingSiteLoc}[])
     rsys = RSSystem(ls!, adj!, v₀; aux)
 
-    frs = isnothing(f) ? nothing : (v, args...) -> f(v, nparticles(v), args...)
-    _, nv, maxdepth = reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs+1, kwargs...)
-    return nv-1, maxdepth
+    frs = isnothing(f) ? nothing : (v, _) -> f(v, nparticles(v))
+    result = reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs+1, kwargs...)
+    return result.nvertices - 1, result.depth_reached
 end
 polyenum(sys::AssemblySystem; kwargs...) = polyenum(nothing, sys; kwargs...)
 
@@ -73,15 +73,3 @@ function polygen(sys; kwargs...)
     polyenum(f, sys; kwargs...)
     return sort!(strs; by=Roly.nparticles)
 end
-
-
-# """
-#     polygen([f::Function], assembly_system::AssemblySystem; maxsize=Inf, maxstrs=Inf)
-#
-# Generate all structures allowed by `assembly_system` using brute-force enumeration with
-# deduplication by graph hash. Returns a list of all generated structures.
-# """
-# function polygen(f::Function, assembly_system::AssemblySystem; maxsize=Inf, maxstrs=Inf)
-#     ...
-# end
-# polygen(sys::AssemblySystem; kwargs...) = polygen((_,__)->ReverseSearch.ACCEPT, sys; kwargs...)

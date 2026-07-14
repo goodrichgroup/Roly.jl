@@ -1,4 +1,9 @@
-struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F,Pose{2,F,Angle2d{F}}}
+"""
+    PolygonParticleSpecies{F}
+
+A 2D convex regular polygon with `n` edges and one binding site per edge.
+"""
+struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F,B}
     g::NautyDiGraph
     sites::Vector{B}
     corners::Vector{SVector{2,F}}
@@ -7,6 +12,20 @@ struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F,Pose{2,F,
     isregular::Bool
     skin::F
 end
+
+"""
+    PolygonParticleSpecies(n, a=1.0; colors=1:n, labels=colors)
+
+Construct a regular `n`-gon with edge length `a`. Each edge carries one binding site.
+
+`colors` assigns interaction colors to the binding sites (used by the interaction matrix to
+specify which sites bond). `labels` assigns symmetry labels to the graph vertices that determine
+graph isomorphism: sites with equal labels are treated as equivalent under the particle's
+symmetry group, which affects both isomorphism detection and the symmetry number. By default
+`labels=colors`, so distinct colors imply distinct labels.
+To treat all sites as equivalent (e.g. for enumerating unlabeled polyforms), pass
+`labels=fill(1, n)` explicitly — note this also sets `symmetrynumber` to `n`.
+"""
 function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors) where {F<:Real}
     # TODO: this should have a constructor that takes polygon vertices and automatically creates sites on each polygon side
     r_in = convert(F, 0.5a * cot(π / n))
@@ -14,13 +33,13 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors)
 
     tol = sqrt(eps(F)) * r_out
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]
-    for (i, (c, l)) in enumerate(zip(colors, labels))
+    for (i, c) in enumerate(colors)
         ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
         x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ)))
         push!(sites, BindingSite(Pose(x, ψ), c, i:i, tol, tol / r_in))
     end
 
-    g = NautyDiGraph(cycle_digraph(n); vertex_labels=labels)
+    g = NautyDiGraph(cycle_digraph(n); vertex_labels=collect(Cint, labels))
     corners = [
         SVector{2,F}(r_out * cos(-π / 2 - (2k - 1) * π / n), r_out * sin(-π / 2 - (2k - 1) * π / n)) for k in 1:n
     ]
@@ -38,7 +57,6 @@ function Base.copy(pps::PolygonParticleSpecies)
 end
 
 dimension(::PolygonParticleSpecies) = 2
-
 graphrep(p::PolygonParticleSpecies) = p.g
 nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
@@ -51,11 +69,21 @@ function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer}
     return nothing
 end
 
-function can_skip_overlap_check(p1::PolygonParticleSpecies, p2::PolygonParticleSpecies)
-    p1.isregular && p2.isregular || return false
-    n = nsites(p1)
-    n in (3, 4, 6) || return false
-    return nsites(p2) == n
+function can_skip_overlap_check(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies})
+    spcs1, pose1 = p1
+    spcs2, pose2 = p2
+
+    norm(pose1.x - pose2.x) >= spcs1.rmax + spcs2.rmax && return true
+    spcs1.isregular && spcs2.isregular || return false
+
+    n = nsites(spcs1)
+    n in (3, 4, 6) && nsites(spcs2) == n || return false
+
+    sym_angle = 2π / n
+    θ_rel = mod(rotation_angle(pose2.psi) - rotation_angle(pose1.psi), sym_angle)
+    tol = (spcs1.skin + spcs2.skin) / spcs1.rmin
+    face_to_face = mod(π, sym_angle)
+    return θ_rel < tol || θ_rel > sym_angle - tol || abs(θ_rel - face_to_face) < tol
 end
 
 isconvex(::PolygonParticleSpecies) = true
@@ -79,7 +107,7 @@ function _SAT_overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesA
             normal = SVector(-edge[2], edge[1])
             lo1, hi1 = extrema(dot(normal, pose1 * c) for c in corners1)
             lo2, hi2 = extrema(dot(normal, pose2 * c) for c in corners2)
-            (hi2 < lo1 - skin_sum || hi1 < lo2 - skin_sum) && return false
+            (hi2 < lo1 + skin_sum || hi1 < lo2 + skin_sum) && return false
         end
     end
     return true
@@ -93,15 +121,13 @@ function could_contact(
     return norm(pose1.x - pose2.x) < spcs1.rmax + spcs2.rmax
 end
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
+    can_skip_overlap_check(p1, p2) || return _SAT_overlap(p1, p2)
     spcs1, pose1 = p1
     spcs2, pose2 = p2
-    skin_sum = spcs1.skin + spcs2.skin
-    if can_skip_overlap_check(spcs1, spcs2)
-        return norm(pose1.x - pose2.x) < (spcs1.rmin + spcs2.rmin) - skin_sum
-    else
-        return _SAT_overlap(p1, p2)
-    end
+    return norm(pose1.x - pose2.x) < (spcs1.rmin + spcs2.rmin) - (spcs1.skin + spcs2.skin)
 end
+
+_bounding_radius(ps::PolygonParticleSpecies) = ps.rmax
 
 const UnitTriangle = PolygonParticleSpecies(3)
 const UnitSquare = PolygonParticleSpecies(4)

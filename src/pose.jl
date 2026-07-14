@@ -102,3 +102,18 @@ function pol2cart(r::F, psi::Real) where {F}
     psi = convert(F, psi)
     return SVector(r * cos(psi), r * sin(psi))
 end
+
+"""
+    normal_pose(x, twist=0; orientationtype=RotXYZ)
+
+Create a pose at point `x`, whose local x axis also points outward along `x`. `twist` rotates the y,z axes about x.
+"""
+function normal_pose(x, twist=0; orientationtype=length(x) == 2 ? Angle2d : RotXYZ)
+    n = normalize(x)
+    φ = atan(n[2], n[1])
+    length(x) == 2 && return Pose(x, orientationtype(φ))
+
+    θ = acos(clamp(n[3], -1, 1))
+    R = RotZ(φ) * RotY(θ - π/2) * RotX(twist)
+    return Pose(x, orientationtype(R))
+end

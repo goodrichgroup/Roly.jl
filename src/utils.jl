@@ -1,26 +1,28 @@
-function are_cutvertices(g::AbstractNautyGraph, vs::AbstractVector{<:Integer})
-    n = nv(g)
-    return are_cutvertices!(g, vs, zeros(Bool, n), zeros(Bool, n), zeros(Bool, n), zeros(Cint, n))
-end
+"""
+    is_cutset(g, vs[; target, visited, queue])
 
-function are_cutvertices!(g::AbstractNautyGraph, vs::AbstractVector{<:Integer},
-    is_target::AbstractVector{Bool}, forbidden::AbstractVector{Bool},
-    explored::AbstractVector{Bool}, queue::AbstractVector)
+Return `true` if removing vertices `vs` from `g` disconnects the graph.
 
-    fill!(is_target, false)
-    fill!(forbidden, false)
-    forbidden[vs] .= true
+`target`, `visited`, and `queue` are buffer arrays of length `nv(g)`, which will be modified.
+"""
+function is_cutset(g::AbstractNautyGraph, vs::AbstractVector{<:Integer};
+    target::AbstractVector{Bool}=zeros(Bool, nv(g)),
+    visited::AbstractVector{Bool}=zeros(Bool, nv(g)),
+    queue::AbstractVector=zeros(Cint, nv(g)))
+
+    fill!(target, false)
+    fill!(visited, false)
+    visited[vs] .= true
     for v in vs
-        is_target .|= NautyGraphs.adjrow(g, v)
+        target .|= NautyGraphs.adjrow(g, v)
     end
-    is_target[vs] .= false
+    target[vs] .= false
 
-    n_targets = count(is_target)
+    n_targets = count(target)
     n_targets < 2 && return false
 
-    v0 = findfirst(is_target)
-    fill!(explored, false)
-    explored[v0] = true
+    v0 = findfirst(target)
+    visited[v0] = true
     n_found = 1
 
     queue[1] = v0
@@ -34,16 +36,14 @@ function are_cutvertices!(g::AbstractNautyGraph, vs::AbstractVector{<:Integer},
         outneighs = NautyGraphs.adjrow(g, v)
         for neigh in eachindex(outneighs)
             outneighs[neigh] || continue
-            forbidden[neigh] && continue
-            if !explored[neigh]
-                explored[neigh] = true
-                if is_target[neigh]
-                    n_found += 1
-                    n_found == n_targets && return false
-                end
-                queue[q_end] = neigh
-                q_end += 1
+            visited[neigh] && continue
+            visited[neigh] = true
+            if target[neigh]
+                n_found += 1
+                n_found == n_targets && return false
             end
+            queue[q_end] = neigh
+            q_end += 1
         end
     end
 

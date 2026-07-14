@@ -1,13 +1,13 @@
 """
-    ParticleSpecies{D,F,P<:Pose{D,F}}
+    ParticleSpecies{D,F,B<:BindingSite}
 
 Abstract supertype of all particle species. `D` is the spatial dimension, `F` is the
-numeric type, and `P` is the concrete `Pose` type used by the species.
+numeric type, and `B` is the concrete `BindingSite` type used by the species.
 """
-abstract type ParticleSpecies{D,F,P<:Pose{D,F}} end
+abstract type ParticleSpecies{D,F,B<:BindingSite} end
 
 """
-    numtype(::ParticleSpecies{D,F,P}) -> Type
+    numtype(::ParticleSpecies{D,F}) -> Type
 
 Return the numeric element type `F`.
 """
@@ -15,12 +15,12 @@ numtype(::ParticleSpecies{D,F}) where {D,F} = F
 numtype(::Type{<:ParticleSpecies{D,F}}) where {D,F} = F
 
 """
-    posetype(::ParticleSpecies{D,F,P}) -> Type
+    posetype(::ParticleSpecies) -> Type
 
-Return the concrete `Pose` type `P` used by the particle species.
+Return the concrete `Pose` type used by the particle species.
 """
-posetype(::ParticleSpecies{D,F,P}) where {D,F,P} = P
-posetype(::Type{<:ParticleSpecies{D,F,P}}) where {D,F,P} = P
+posetype(::ParticleSpecies{D,F,B}) where {D,F,B} = posetype(B)
+posetype(::Type{<:ParticleSpecies{D,F,B}}) where {D,F,B} = posetype(B)
 
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
@@ -64,10 +64,7 @@ function nsites(::ParticleSpecies) end
 """
     setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
 
-Assign global colors to the binding sites of particle species `p`.
-
-`colors[k]` is the global color for the `k`th binding site. Colors are assigned by the
-`AssemblySystem` upon construction and determine which binding sites may interact.
+Assign colors to the binding sites of particle species `p`.
 """
 function setcolors!(::ParticleSpecies, ::AbstractVector{<:Integer}) end
 

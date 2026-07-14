@@ -1,31 +1,61 @@
-@testset "assembly_system" begin
+using Roly: nspecies, nbonds, nsites, dimension, species,
+            interactionmatrix, bonded_colors, bonded_sites, bonded_species,
+            siteloc2color, color2siteloc, color2species, isinert, compatible_sitelocs
 
-    sys1 = AssemblySystem([1 1 2 1; 2 3 3 1], UnitSquareGeometry)
-    sys2 = AssemblySystem([3 3 2 2; 2 4 1 1], UnitSquareGeometry)
+@testset "assemblysystem" begin
+    sys = AssemblySystem([1 1 1 3; 1 2 1 4], UnitSquare)
 
-    @test rhash(sys1) == rhash(sys2)
+    @test nspecies(sys) == 1
+    @test nbonds(sys) == 2
+    @test nsites(sys) == 4
+    @test dimension(sys) == 2
+    @test length(species(sys)) == 1
+    @test species(sys, 1) === species(sys)[1]
 
-    sys3 = AssemblySystem([3 3 2 3; 2 4 1 1], UnitSquareGeometry)
+    imat = interactionmatrix(sys)
+    @test size(imat) == (4, 4)
+    @test issymmetric(imat)
 
-    @test rhash(sys1) != rhash(sys3)
-    
-    sys4 = AssemblySystem([1 1 2 1; 2 3 3 1; 1 3 1 3], UnitSquareGeometry)
-    sys5 = AssemblySystem([1 1 2 1; 2 3 3 1; 1 1 1 1], UnitSquareGeometry)
-    sys6 = AssemblySystem([1 1 2 1; 2 3 3 1; 1 2 1 2], UnitSquareGeometry)
-    sys7 = AssemblySystem([1 1 2 1; 2 3 3 1; 1 2 1 3], UnitSquareGeometry)
+    bc = bonded_colors(sys)
+    @test length(bc) == 2
+    @test all(c isa NTuple{2,Int} for c in bc)
 
-    @test rhash(sys1) != rhash(sys4)
-    @test rhash(sys1) != rhash(sys5)
-    @test rhash(sys1) != rhash(sys6)
-    @test rhash(sys1) != rhash(sys7)
+    bs = bonded_sites(sys)
+    @test length(bs) == 2
 
-    @test rhash(sys4) != rhash(sys5)
-    @test rhash(sys4) != rhash(sys6)
-    @test rhash(sys4) != rhash(sys7)
+    bsp = bonded_species(sys)
+    @test length(bsp) == 2
+    @test all(==((1, 1)), bsp)
 
-    sys8 = AssemblySystem([1 1 1 1;], UnitSquareGeometry)
-    sys9 = AssemblySystem([1 1 1 2;], UnitSquareGeometry)
+    c1 = siteloc2color(sys, (1, 1))
+    c3 = siteloc2color(sys, (1, 3))
+    @test imat[c1, c3]
+    @test color2siteloc(sys, c1) == [(1, 1)]
+    @test color2species(sys, c1) == 1
 
-    @test rhash(sys8) != rhash(sys9)
+    @test !isinert(sys, c1)
+    @test !isinert(sys, (1, 1))
 
+    @test compatible_sitelocs(sys, c1) == [(1, 3)]
+    @test compatible_sitelocs(sys, c3) == [(1, 1)]
+
+    sys1bond = AssemblySystem([1 1 1 3], UnitSquare)
+    c2 = siteloc2color(sys1bond, (1, 2))
+    @test isinert(sys1bond, c2)
+    @test isinert(sys1bond, (1, 2))
+
+    io = IOBuffer()
+    show(io, sys)
+    @test contains(String(take!(io)), "AssemblySystem")
+
+    sys1 = AssemblySystem([1 1 2 1], UnitTriangle)
+    sys2 = AssemblySystem([1 3 2 2], UnitTriangle)
+    sys3 = AssemblySystem([1 3 3 2], UnitTriangle)
+
+    g1 = graphrep(sys1)
+    g2 = graphrep(sys2)
+    g3 = graphrep(sys3)
+
+    @test g1 ≃ g2
+    @test !(g1 ≃ g3)
 end

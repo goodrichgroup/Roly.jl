@@ -1,9 +1,9 @@
-struct MetaParticleSpecies{D,F,P<:Pose{D,F},B<:BindingSite} <: ParticleSpecies{D,F,P}
+struct MetaParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,F,B}
     g::NautyDiGraph
     polyform::Polyform
     meta_sites::Vector{B}
     rmax::F
-    active_site_indices::Vector{Int}  # canonical polyform site indices of the meta-sites
+    active_site_indices::Vector{Int}  # polyform global site indices of the meta-sites
 end
 
 """
@@ -19,24 +19,34 @@ pairwise particle overlaps across two posed copies of `poly`.
 function MetaParticleSpecies(poly::Polyform{D}, site_indices::AbstractVector{<:Integer}) where {D}
     sys = assemblysystem(poly)
     F = numtype(sys)
-    P = posetype(sys)
     n = length(site_indices)
 
     raw_sites = [bindingsites(poly, i) for i in site_indices]
     B = eltype(raw_sites)
-    meta_sites = B[BindingSite(s.pose, s.color, k:k, s.touching_tolerance, s.alignment_tolerance)
-                   for (k, s) in enumerate(raw_sites)]
 
-    # TODO: n == 2 leads to a trivial cycle, which leads to issues down the road
-    g_base = n > 1 ? cycle_digraph(max(n, 3)) : SimpleDiGraph(max(n, 1))
-    g = NautyDiGraph(g_base; vertex_labels=n > 2 ? (1:n) : n == 2 ? (1:3) : 1:1)
+    orig_labels = Cint[color(s) for s in raw_sites]
+    if n == 2
+        # 2-vertex directed cycle is trivial (Z2 automorphism regardless of labels);
+        # use a 4-vertex cycle with each site spanning 2 vertices to avoid this.
+        g = NautyDiGraph(cycle_digraph(4); vertex_labels=Cint[orig_labels[1], orig_labels[1], orig_labels[2], orig_labels[2]])
+        meta_sites = B[BindingSite(raw_sites[1].pose, raw_sites[1].color, 1:2, raw_sites[1].touching_tolerance, raw_sites[1].alignment_tolerance),
+                       BindingSite(raw_sites[2].pose, raw_sites[2].color, 3:4, raw_sites[2].touching_tolerance, raw_sites[2].alignment_tolerance)]
+    else
+        g = if n <= 1
+            NautyDiGraph(SimpleDiGraph(n); vertex_labels=fill(Cint(1), n))
+        else
+            NautyDiGraph(cycle_digraph(n); vertex_labels=orig_labels)
+        end
+        meta_sites = B[BindingSite(s.pose, s.color, k:k, s.touching_tolerance, s.alignment_tolerance)
+                       for (k, s) in enumerate(raw_sites)]
+    end
 
     rmax = maximum(
         norm(part.pose.x) + _bounding_radius(species(sys, part.species_index))
         for part in poly.particles; init=zero(F))
 
-    return MetaParticleSpecies{D,F,P,B}(g, copy(poly), meta_sites, convert(F, rmax),
-                                        collect(Int, site_indices))
+    return MetaParticleSpecies{D,F,B}(g, copy(poly), meta_sites, convert(F, rmax),
+                                      collect(Int, site_indices))
 end
 
 """
@@ -48,8 +58,8 @@ function MetaParticleSpecies(poly::Polyform)
     sys = assemblysystem(poly)
     active_indices = Int[]
     k = 0
-    for v in canonical_vertices(poly)
-        part = particle(poly, v)
+    for orig_v in canonical_vertices(poly)
+        part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
         for j in 1:nsites(part, sys)
             k += 1
@@ -61,9 +71,6 @@ function MetaParticleSpecies(poly::Polyform)
     end
     return MetaParticleSpecies(poly, active_indices)
 end
-
-_bounding_radius(ps::PolygonParticleSpecies) = ps.rmax
-_bounding_radius(ps::SphereParticleSpecies) = ps.r
 
 Base.show(io::Core.IO, ps::MetaParticleSpecies{D}) where {D} =
     print(io, "$(D)d MetaParticleSpecies with $(nsites(ps)) meta-sites")
@@ -83,6 +90,7 @@ function setcolors!(ps::MetaParticleSpecies, colors::AbstractVector{<:Integer})
         s = ps.meta_sites[k]
         ps.meta_sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance)
     end
+    return nothing
 end
 
 function could_contact(p1::SpeciesAndPose{<:MetaParticleSpecies},
@@ -118,7 +126,8 @@ interact if and only if their original binding site colors interacted.
 function AssemblySystem(polys::AbstractVector{<:Polyform})
     isempty(polys) && throw(ArgumentError("polys must not be empty"))
     orig_sys = assemblysystem(first(polys))
-    any(!=(orig_sys), assemblysystem(p) for p in polys) && throw(ArgumentError("polyforms do not come from the same assembly system"))
+    any(!=(orig_sys), assemblysystem(p) for p in polys) &&
+        throw(ArgumentError("polyforms do not come from the same assembly system"))
     orig_intmat = interactionmatrix(orig_sys)
 
     meta_species = [MetaParticleSpecies(poly) for poly in polys]
@@ -140,15 +149,16 @@ function AssemblySystem(polys::AbstractVector{<:Polyform})
     return AssemblySystem(bonds, meta_species)
 end
 
-function original_assemblysystem(sys::AssemblySystem{D, <:MetaParticleSpecies}) where D
+function original_assemblysystem(sys::AssemblySystem{D,<:MetaParticleSpecies}) where {D}
     return assemblysystem(species(sys, 1).polyform)
 end
 
 function metacolor2origcolor(::AssemblySystem, c::Integer)
     return c
 end
-function metacolor2origcolor(sys::AssemblySystem{D, <:MetaParticleSpecies}, c::Integer) where D
+function metacolor2origcolor(sys::AssemblySystem{D,<:MetaParticleSpecies}, c::Integer) where {D}
     siteloc = first(color2siteloc(sys, c))
     spcs = species(sys, siteloc[1])
-    return color(bindingsites(spcs.polyform, siteloc[2]))
+    orig_site_idx = spcs.active_site_indices[siteloc[2]]
+    return color(bindingsites(spcs.polyform, orig_site_idx))
 end
