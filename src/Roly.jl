@@ -20,10 +20,6 @@ export AssemblySystem, interactionmatrix,
 
 export Polyform, composition, interactionmatrix, assemblysystem, bonds, bondindex, nparticles, interior_edges, exterior_edges
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
-export MetaParticleSpecies
-export LatticeIter, istranslationtile, cantile
-
-export ChainLinkParticleSpecies
 export PatchyParticleSpecies, PatchyDisk
 
 
@@ -39,7 +35,6 @@ include("tiling.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
-include("species/metaparticlespecies.jl")
 
 export render, polyformplot, polyformplot!
 

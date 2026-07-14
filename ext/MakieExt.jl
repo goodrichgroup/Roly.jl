@@ -59,6 +59,5 @@ end
 include("palette.jl")
 include("plot_polygonparticle.jl")
 include("plot_patchyparticle.jl")
-include("plot_metaparticle.jl")
 
 end # module
