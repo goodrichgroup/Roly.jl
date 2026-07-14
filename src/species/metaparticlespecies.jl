@@ -3,7 +3,7 @@ struct MetaParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,F,B}
     polyform::Polyform
     meta_sites::Vector{B}
     rmax::F
-    active_site_indices::Vector{Int}  # polyform global site indices of the meta-sites
+    active_site_indices::Vector{Int}
 end
 
 """
@@ -24,18 +24,22 @@ function MetaParticleSpecies(poly::Polyform{D}, site_indices::AbstractVector{<:I
     raw_sites = [bindingsites(poly, i) for i in site_indices]
     B = eltype(raw_sites)
 
-    orig_labels = Cint[color(s) for s in raw_sites]
+    # Symmetry labels from the underlying polyform graph: two meta-sites with the same
+    # label are in equivalent positions under the polyform's automorphism group.
+    poly_graph_labels = labels(graphrep(poly))
+    site_labels = Cint[poly_graph_labels[tocanon(poly, first(s.vertices))] for s in raw_sites]
+
     if n == 2
         # 2-vertex directed cycle is trivial (Z2 automorphism regardless of labels);
         # use a 4-vertex cycle with each site spanning 2 vertices to avoid this.
-        g = NautyDiGraph(cycle_digraph(4); vertex_labels=Cint[orig_labels[1], orig_labels[1], orig_labels[2], orig_labels[2]])
+        g = NautyDiGraph(cycle_digraph(4); vertex_labels=Cint[site_labels[1], site_labels[1], site_labels[2], site_labels[2]])
         meta_sites = B[BindingSite(raw_sites[1].pose, raw_sites[1].color, 1:2, raw_sites[1].touching_tolerance, raw_sites[1].alignment_tolerance),
                        BindingSite(raw_sites[2].pose, raw_sites[2].color, 3:4, raw_sites[2].touching_tolerance, raw_sites[2].alignment_tolerance)]
     else
         g = if n <= 1
-            NautyDiGraph(SimpleDiGraph(n); vertex_labels=fill(Cint(1), n))
+            NautyDiGraph(SimpleDiGraph(n); vertex_labels=site_labels)
         else
-            NautyDiGraph(cycle_digraph(n); vertex_labels=orig_labels)
+            NautyDiGraph(cycle_digraph(n); vertex_labels=site_labels)
         end
         meta_sites = B[BindingSite(s.pose, s.color, k:k, s.touching_tolerance, s.alignment_tolerance)
                        for (k, s) in enumerate(raw_sites)]
