@@ -31,7 +31,6 @@ include("assemblysystem.jl")
 include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
-include("tiling.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/patchyparticlespecies.jl")

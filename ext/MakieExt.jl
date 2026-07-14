@@ -2,7 +2,7 @@ module MakieExt
 
 using Roly
 using Makie
-import Roly: species, assemblysystem, canonical_vertices, particle, polyformplot, polyformplot!, render
+import Roly: species, assemblysystem, canonical_vertices, polyformplot, polyformplot!, render
 
 @recipe PolyformPlot (poly, ) begin
     assemblysystem = nothing

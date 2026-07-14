@@ -1,7 +1,7 @@
 using Roly: Polyform, nparticles, nsites, assemblysystem, symmetrynumber, dimension,
             bonds, bondindex, composition, interior_edges, exterior_edges, tocanon, toorig,
-            AssemblySystem, UnitSquare, nbonds, raise!, lower!, bindingsites,
-            collect_open_bindingsites, collect_compatible_pairs
+            AssemblySystem, UnitSquare, nbonds, raise!, lower!, bindingsites, graphrep,
+            collect_open_bindingsites, collect_compatible_pairs, isbound_vertex, particle_from_leadingvertex
 
 @testset "polyform" begin
     sys = AssemblySystem([1 1 1 3; 1 2 1 4], UnitSquare)
@@ -70,4 +70,23 @@ using Roly: Polyform, nparticles, nsites, assemblysystem, symmetrynumber, dimens
     lower!(di)
     @test nparticles(di) == 0
     @test isnothing(lower!(di))
+
+    ### Check raise / remove equality
+    sys = AssemblySystem([1 1 1 4; 1 4 2 2; 1 1 3 2; 1 1 3 4; 2 1 3 3; 2 1 3 1], UnitSquare)
+    poly = polygen(sys)[end]
+
+    poly_raise = copy(poly)
+    lower!(poly_raise)
+
+    compatible_pairs = collect_compatible_pairs(poly_raise)
+    site, siteloc = first(compatible_pairs)
+    i = 1
+    while ismissing(raise!(poly_raise, compatible_pairs[i]...))
+        i += 1
+        site_siteloc = compatible_pairs[i]
+    end
+
+    @test poly == poly_raise
+    @test poly_raise.canon2orig == poly.canon2orig
+    @test poly_raise.orig2canon == poly.orig2canon
 end

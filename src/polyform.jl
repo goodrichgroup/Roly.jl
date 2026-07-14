@@ -109,7 +109,8 @@ to the corresponding stable original vertex index.
 """
 @inline toorig(p::Polyform, v::Integer) = p.canon2orig[v]
 
-function _sync_orig2canonical!(poly::Polyform)
+function _apply_perm!(poly::Polyform, perm)
+    poly.canon2orig .= @view poly.canon2orig[perm]
     resize!(poly.orig2canon, length(poly.canon2orig))
     for i in eachindex(poly.canon2orig)
         poly.orig2canon[poly.canon2orig[i]] = i
@@ -257,12 +258,6 @@ function composition(p::Polyform)
     return comp
 end
 
-# Compute the pose of a new particle attached at `at` via its `site_index`-th site.
-function attach(ps::ParticleSpecies, species_index::Integer, site_index::Integer, at::BindingSite; leading_vertex)
-    site = bindingsites(ps, site_index)
-    particle_pose = standard_offset(at) * inv(site.pose)
-    return Particle(particle_pose, leading_vertex, species_index)
-end
 
 function _overlap_and_contacts(
     polyparticles::AbstractVector{<:Particle},
@@ -300,15 +295,14 @@ end
 Attach a new particle to `poly` at the open binding site `site`, with the species
 and site index given by `siteloc`. Returns `poly` on success, or `missing` if the
 attachment is geometrically forbidden (overlap or misaligned contact).
-
-Mutates `poly` in place and re-canonicalizes the graph.
 """
 function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwargs...)
     sys = assemblysystem(poly)
     species_index, site_index = siteloc
     particle_species = species(sys, species_index)
     leading_vertex = nv(graphrep(poly)) + 1
-    attached_particle = attach(particle_species, species_index, site_index, site; leading_vertex)
+    particle_pose = standard_offset(site) * inv(bindingsites(particle_species, site_index).pose)
+    attached_particle = Particle(particle_pose, leading_vertex, species_index)
 
     has_overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
     has_overlap && return missing
@@ -330,8 +324,7 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwar
 
     append!(poly.canon2orig, graphvertices(attached_particle, sys))
     perm, autg = nauty(graphrep(poly); canonize=true)
-    poly.canon2orig .= @view poly.canon2orig[perm]
-    _sync_orig2canonical!(poly)
+    _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
 
     return poly
@@ -373,33 +366,40 @@ function lower!(poly::Polyform)
         end
 
         part = particle_from_leadingvertex(poly, v)
-        vs0 = graphvertices(part, sys)
-        vs = sort!(poly.orig2canon[vs0])
+        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) && continue
 
-        is_cutset(graphrep(poly), vs; target, visited, queue) && continue
-
-        # Swap-and-pop the particle out of the vector.
-        lv = leading_vertex(part)
-        idx = findfirst(pt -> pt.leading_vertex == lv, poly.particles)
-        last_idx = lastindex(poly.particles)
-        idx < last_idx && (poly.particles[idx] = poly.particles[last_idx])
-        pop!(poly.particles)
-
-        rem_vertices!(graphrep(poly), vs)
-        deleteat!(poly.canon2orig, vs)
-
-        # Adjust original vertex indices for the removed range.
-        for i in eachindex(poly.canon2orig)
-            poly.canon2orig[i] -= searchsortedlast(vs0, poly.canon2orig[i])
-        end
-
-        perm, autg = nauty(graphrep(poly); canonize=true)
-        poly.canon2orig .= @view perm[poly.canon2orig]
-        _sync_orig2canonical!(poly)
-        poly.sigma = convert(Int, autg.n)
-        return poly
+        return _remove_particle!(poly, part)
     end
     return error("invariant violated: no removable particle found in connected polyform")
+end
+
+"""
+    _remove_particle!(poly::Polyform, part::Particle)
+
+Remove particle `part` from `poly`. Does not check for connectedness before.
+"""
+function _remove_particle!(poly::Polyform, part::Particle)
+    sys = assemblysystem(poly)
+    vs0 = graphvertices(part, sys)
+    vs = sort!(poly.orig2canon[vs0])
+
+    lv = leading_vertex(part)
+    idx = findfirst(pt -> pt.leading_vertex == lv, poly.particles)
+    last_idx = lastindex(poly.particles)
+    idx < last_idx && (poly.particles[idx] = poly.particles[last_idx])
+    pop!(poly.particles)
+
+    rem_vertices!(graphrep(poly), vs)
+    deleteat!(poly.canon2orig, vs)
+
+    for i in eachindex(poly.canon2orig)
+        poly.canon2orig[i] -= searchsortedlast(vs0, poly.canon2orig[i])
+    end
+
+    perm, autg = nauty(graphrep(poly); canonize=true)
+    _apply_perm!(poly, perm)
+    poly.sigma = convert(Int, autg.n)
+    return poly
 end
 
 function collect_open_bindingsites!(sites, poly::Polyform)
