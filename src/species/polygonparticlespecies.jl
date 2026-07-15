@@ -3,7 +3,7 @@
 
 A 2D convex regular polygon with `n` edges and one binding site per edge.
 """
-struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,F,B}
+struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,B}
     g::NautyDiGraph
     sites::Vector{B}
     corners::Vector{SVector{2,F}}
@@ -56,7 +56,7 @@ function Base.copy(pps::PolygonParticleSpecies)
     )
 end
 
-dimension(::PolygonParticleSpecies) = 2
+
 graphrep(p::PolygonParticleSpecies) = p.g
 nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
@@ -113,13 +113,7 @@ function _SAT_overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesA
     return true
 end
 
-function could_contact(
-    p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...
-)
-    spcs1, pose1 = p1
-    spcs2, pose2 = p2
-    return norm(pose1.x - pose2.x) < spcs1.rmax + spcs2.rmax
-end
+
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
     can_skip_overlap_check(p1, p2) || return _SAT_overlap(p1, p2)
     spcs1, pose1 = p1
@@ -127,7 +121,7 @@ function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPos
     return norm(pose1.x - pose2.x) < (spcs1.rmin + spcs2.rmin) - (spcs1.skin + spcs2.skin)
 end
 
-_bounding_radius(ps::PolygonParticleSpecies) = ps.rmax
+bounding_radius(ps::PolygonParticleSpecies) = ps.rmax
 
 const UnitTriangle = PolygonParticleSpecies(3)
 const UnitSquare = PolygonParticleSpecies(4)

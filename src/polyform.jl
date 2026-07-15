@@ -89,9 +89,9 @@ Return the symmetry number of `p`, i.e. the size of its automorphism group.
 @inline graphrep(p::Polyform) = p.graphrep
 @inline dimension(::Polyform{D}) where {D} = D
 @inline posetype(::Polyform{D,<:Particle{<:P}}) where {D,P} = P
-@inline posetype(::Type{Polyform{D,<:Particle{<:P}}}) where {D,P} = P
+@inline posetype(::Type{<:Polyform{D,<:Particle{<:P}}}) where {D,P} = P
 @inline numtype(p::Polyform) = eltype(posetype(p))
-@inline numtype(p::Type{Polyform}) = eltype(posetype(p))
+@inline numtype(::Type{<:Polyform{D,<:Particle{<:P}}}) where {D,P} = eltype(P)
 
 """
     tocanon(p::Polyform, v::Integer)
@@ -258,43 +258,12 @@ function composition(p::Polyform)
     return comp
 end
 
-
-function _overlap_and_contacts(
-    polyparticles::AbstractVector{<:Particle},
-    part::Particle,
-    sys::AssemblySystem;
-    allow_noninteracting=false,
-    allow_misaligned=false,
-    kwargs...,
-)
-    intmat = interactionmatrix(sys)
-    contacts = NTuple{2,UnitRange{Int}}[]
-
-    for polypart in polyparticles
-        could_contact(polypart, part, sys) || continue
-        overlap(polypart, part, sys) && return true, nothing
-
-        for b1 in bindingsites(polypart, sys), b2 in bindingsites(part, sys)
-            istouching(b1, b2) || continue
-            interacting = intmat[color(b1), color(b2)]
-            !allow_noninteracting && !interacting && return true, nothing
-            !allow_misaligned && !isaligned(b1, b2) && return true, nothing
-            push!(contacts, (b1.vertices, b2.vertices))
-        end
-    end
-    return false, contacts
-end
-
-function overlap_and_contacts(poly::Polyform, part::Particle; kwargs...)
-    return _overlap_and_contacts(poly.particles, part, assemblysystem(poly); kwargs...)
-end
-
 """
     raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc)
 
-Attach a new particle to `poly` at the open binding site `site`, with the species
-and site index given by `siteloc`. Returns `poly` on success, or `missing` if the
-attachment is geometrically forbidden (overlap or misaligned contact).
+Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`. 
+
+Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
 function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwargs...)
     sys = assemblysystem(poly)
@@ -333,11 +302,9 @@ end
 """
     lower!(poly::Polyform)
 
-Remove one particle from `poly`, choosing the last removable particle in
-reverse canonical order (i.e. the particle whose removal keeps the polyform
-connected). Returns `poly` on success, `nothing` if `poly` is already empty.
+Remove the last particle from `poly`, following canonical ordering.
 
-Mutates `poly` in place and re-canonicalizes the graph.
+Returns `poly` on success, `nothing` if `poly` is already empty.
 """
 function lower!(poly::Polyform)
     n = nparticles(poly)
@@ -357,6 +324,7 @@ function lower!(poly::Polyform)
     visited = zeros(Bool, nv_g)
     queue = zeros(Cint, nv_g)
 
+    part = nothing
     for v in Iterators.reverse(canonical_vertices(poly))
         # Walk backward from v to find the leading vertex of its particle.
         for k in v:-1:1
@@ -366,11 +334,11 @@ function lower!(poly::Polyform)
         end
 
         part = particle_from_leadingvertex(poly, v)
-        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) && continue
-
-        return _remove_particle!(poly, part)
+        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) || break
+        part = nothing
     end
-    return error("invariant violated: no removable particle found in connected polyform")
+    isnothing(part) && error("Internal error: no removable particle found in connected polyform. Please file an issue.")
+    return _remove_particle!(poly, part)
 end
 
 """
@@ -400,6 +368,36 @@ function _remove_particle!(poly::Polyform, part::Particle)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
     return poly
+end
+
+function _overlap_and_contacts(
+    polyparticles::AbstractVector{<:Particle},
+    part::Particle,
+    sys::AssemblySystem;
+    allow_noninteracting=false,
+    allow_misaligned=false,
+    kwargs...,
+)
+    intmat = interactionmatrix(sys)
+    contacts = NTuple{2,UnitRange{Int}}[]
+
+    for polypart in polyparticles
+        could_contact(polypart, part, sys) || continue
+        overlap(polypart, part, sys) && return true, nothing
+
+        for b1 in bindingsites(polypart, sys), b2 in bindingsites(part, sys)
+            istouching(b1, b2) || continue
+            interacting = intmat[color(b1), color(b2)]
+            !allow_noninteracting && !interacting && return true, nothing
+            !allow_misaligned && !isaligned(b1, b2) && return true, nothing
+            push!(contacts, (b1.vertices, b2.vertices))
+        end
+    end
+    return false, contacts
+end
+
+function overlap_and_contacts(poly::Polyform, part::Particle; kwargs...)
+    return _overlap_and_contacts(poly.particles, part, assemblysystem(poly); kwargs...)
 end
 
 function collect_open_bindingsites!(sites, poly::Polyform)

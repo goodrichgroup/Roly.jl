@@ -1,26 +1,26 @@
 """
-    ParticleSpecies{D,F,B<:BindingSite}
+    ParticleSpecies{D,B<:BindingSite}
 
-Abstract supertype of all particle species. `D` is the spatial dimension, `F` is the
-numeric type, and `B` is the concrete `BindingSite` type used by the species.
+Abstract supertype of all particle species. `D` is the spatial dimension and `B` is the
+concrete `BindingSite` type.
 """
-abstract type ParticleSpecies{D,F,B<:BindingSite} end
-
-"""
-    numtype(::ParticleSpecies{D,F}) -> Type
-
-Return the numeric element type `F`.
-"""
-numtype(::ParticleSpecies{D,F}) where {D,F} = F
-numtype(::Type{<:ParticleSpecies{D,F}}) where {D,F} = F
+abstract type ParticleSpecies{D,B<:BindingSite} end
 
 """
-    posetype(::ParticleSpecies) -> Type
+    numtype(::ParticleSpecies)
+
+Return the numeric element type, derived from the `BindingSite` type parameter.
+"""
+numtype(::ParticleSpecies{D,B}) where {D,B} = eltype(posetype(B))
+numtype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = eltype(posetype(B))
+
+"""
+    posetype(::ParticleSpecies)
 
 Return the concrete `Pose` type used by the particle species.
 """
-posetype(::ParticleSpecies{D,F,B}) where {D,F,B} = posetype(B)
-posetype(::Type{<:ParticleSpecies{D,F,B}}) where {D,F,B} = posetype(B)
+posetype(::ParticleSpecies{D,B}) where {D,B} = posetype(B)
+posetype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = posetype(B)
 
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
@@ -29,7 +29,7 @@ const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
 Return the `i`th binding site of particle species `p`.
 """
-function bindingsites(::ParticleSpecies, ::Integer) end
+function bindingsites end
 
 """
     bindingsites(p::ParticleSpecies)
@@ -45,28 +45,28 @@ end
 
 Return the spatial dimension a particle of species `p` lives in.
 """
-function dimension(::ParticleSpecies) end
+dimension(::ParticleSpecies{D}) where {D} = D
 
 """
     graphrep(p::ParticleSpecies)
 
 Return the graph representation of the particle species `p`.
 """
-function graphrep(::ParticleSpecies) end
+function graphrep end
 
 """
     nsites(p::ParticleSpecies)
 
 Return the number of binding sites of a particle of species `p`.
 """
-function nsites(::ParticleSpecies) end
+function nsites end
 
 """
     setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
 
 Assign colors to the binding sites of particle species `p`.
 """
-function setcolors!(::ParticleSpecies, ::AbstractVector{<:Integer}) end
+function setcolors! end
 
 """
     isconvex(::ParticleSpecies)
@@ -74,9 +74,16 @@ function setcolors!(::ParticleSpecies, ::AbstractVector{<:Integer}) end
 Return true if the particle species has a convex shape, which enables minor optimizations when checking
 for overlaps.
 """
-function isconvex(::ParticleSpecies) 
+function isconvex(::ParticleSpecies)
     return false
 end
+
+"""
+    bounding_radius(p::ParticleSpecies)
+
+Return the radius of a bounding sphere centred at the particle's pose origin.
+"""
+function bounding_radius end
 
 """
     could_contact(p1::SpeciesAndPose, p2::SpeciesAndPose)
@@ -87,14 +94,17 @@ This should be a quick and efficient pre-check; a value of `true` does not neces
 contact has occured. If `false`, however, it is assumed that contact is impossible and no
 further contact checks will be performed.
 """
-function could_contact(::SpeciesAndPose, ::SpeciesAndPose; kwargs...) end
+function could_contact(p1::SpeciesAndPose, p2::SpeciesAndPose; kwargs...)
+    (s1, pose1), (s2, pose2) = p1, p2
+    return norm(pose1.x - pose2.x) < bounding_radius(s1) + bounding_radius(s2)
+end
 
 """
     overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)
 
 Return `true` if the particle species at their respective poses are overlapping.
 """
-function overlap(::SpeciesAndPose, ::SpeciesAndPose; kwargs...) end
+function overlap end
 
 """
     symmetrynumber(p::ParticleSpecies)

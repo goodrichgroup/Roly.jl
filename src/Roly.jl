@@ -5,20 +5,31 @@ using Base.Iterators, DataStructures
 using Graphs, NautyGraphs
 using ReverseSearch
 
+# Geometry primitives
+export Pose, dimension, numtype, posetype
 export Rotation, Angle2d, RotXYZ, rotation_angle, rotation_axis, SVector
-export Pose, dimension
-export BindingSite, color
-export ParticleSpecies, SpeciesAndPose, bindingsites,
-       graphrep, isconvex, could_contact, overlap, setcolors!, nsites, symmetrynumber
 
+# Binding sites
+export BindingSite, color
+
+# Particle species
+export ParticleSpecies, SpeciesAndPose
+export nsites, bindingsites, graphrep, isconvex, symmetrynumber
+export bounding_radius, could_contact, overlap
+
+# Assembly system
+export AssemblySystem, interactionmatrix
+export nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, isinert, species
+
+# Polyforms
+export Polyform, nparticles, assemblysystem, composition
+export bonds, bondindex, interior_edges, exterior_edges
+
+# Enumeration
 export ACCEPT, REJECT, BREAK
 export polyenum, polygen
-export AssemblySystem, interactionmatrix,
-       nspecies, nbonds, nsites, dimension,
-       bonded_colors, bonded_sites, bonded_species, isinert, species,
-       numtype, posetype
 
-export Polyform, composition, interactionmatrix, assemblysystem, bonds, bondindex, nparticles, interior_edges, exterior_edges
+# Species
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
 export PatchyParticleSpecies, PatchyDisk
 

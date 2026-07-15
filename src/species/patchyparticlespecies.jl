@@ -3,7 +3,7 @@
 
 A `D`-dimensional sphere of radius `r` with binding sites on its surface (a disk in 2D).
 """
-struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,F,B}
+struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,B}
     g::NautyDiGraph
     sites::Vector{B}
     r::F
@@ -61,7 +61,7 @@ end
 Base.copy(ps::PatchyParticleSpecies) =
     typeof(ps)(copy(ps.g), copy(ps.sites), ps.r, ps.skin)
 
-dimension(::PatchyParticleSpecies{D}) where {D} = D
+
 graphrep(ps::PatchyParticleSpecies) = ps.g
 nsites(ps::PatchyParticleSpecies) = length(ps.sites)
 bindingsites(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
@@ -90,4 +90,4 @@ function overlap(
     return norm(pose1.x - pose2.x) < (spcs1.r + spcs2.r) - (spcs1.skin + spcs2.skin)
 end
 
-_bounding_radius(ps::PatchyParticleSpecies) = ps.r
+bounding_radius(ps::PatchyParticleSpecies) = ps.r

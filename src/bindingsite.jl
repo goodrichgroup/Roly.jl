@@ -39,7 +39,7 @@ via a 180 degree rotation around their (shared) z-axes.
 """
 @inline standard_offset(b::BindingSite{<:Pose{2,F}}) where {F} = b.pose * Angle2d{F}(π)
 @inline standard_offset(b::BindingSite{<:Pose{3,F}}) where {F} =  b.pose * RotXYZ{F}(0, 0, π)
-@inline standard_offset(::Pose{D,F}) where {D,F} = Pose{D}() * (D == 2 ? Angle2d{F}(π) : RotXYZ{F}(0, 0, π))
+@inline standard_offset(::Pose{D,F,R}) where {D,F,R} = Pose{D,F,R}() * (D == 2 ? Angle2d{F}(π) : RotXYZ{F}(0, 0, π))
 
 """
     color(b::BindingSite)
@@ -52,13 +52,10 @@ binding sites are determined by `interactionmatrix(sys)[:, color(b)]`.
 color(b::BindingSite) = b.color
 
 """
-    istouching(b1::BindingSite, b2::BindingSite; kwargs...)
+    istouching(b1::BindingSite, b2::BindingSite)
 
 Check whether the translational components of the binding sites' poses
-are approximately equal. 
-
-Absolute (`atol`) and relative (`rtol`) tolerances should be supplied
-as keyword arguments.
+are approximately equal.
 """
 function istouching(b1::BindingSite, b2::BindingSite)
     return isapprox(b1.pose.x, b2.pose.x;
@@ -66,13 +63,10 @@ function istouching(b1::BindingSite, b2::BindingSite)
 end
 
 """
-    isaligned(b1::BindingSite, b2::BindingSite; kwargs...)
+    isaligned(b1::BindingSite, b2::BindingSite)
 
 Check whether the orientation components of the binding sites' poses
 differ by a standard offset.
-
-Absolute (`atol`) and relative (`rtol`) tolerances should be supplied
-as keyword arguments.
 """
 function isaligned(b1::BindingSite, b2::BindingSite)
     return isapprox(b1.pose.psi, standard_offset(b2).psi;
@@ -80,12 +74,9 @@ function isaligned(b1::BindingSite, b2::BindingSite)
 end
 
 """
-    isincontact(b1::BindingSite, b2::BindingSite; kwargs...)
+    isincontact(b1::BindingSite, b2::BindingSite)
 
-Check whether the binding sites' are touching and aligned.
-
-Absolute (`atol`) and relative (`rtol`) tolerances should be supplied
-as keyword arguments.
+Check whether the binding sites are touching and aligned.
 """
 function isincontact(b1::BindingSite, b2::BindingSite)
     return istouching(b1, b2) && isaligned(b1, b2)
