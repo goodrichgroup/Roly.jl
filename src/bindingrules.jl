@@ -6,13 +6,13 @@ Indicates the location of a binding site in the format `(species_index, site_ind
 const BindingSiteLoc = NTuple{2,Int}
 
 """
-    BindingRules(bindingrules, particlespecies)
+    BindingRules(bonds, particlespecies)
 
 An `BindingRules` consists of a list of particle species and their binding rules. The structures (polyforms)
 that satify the binding rules without any particle overlaps are the _allowed structures_ of an assembly system, and can be enumerated or 
 iterated over using `polygen` or `polyenum`, respectively.
 
-The binding rules are specified by the matrix `bindingrules`, where every row of the matrix defines a valid bond between particle species.
+The binding rules are specified by the matrix `bonds`, where every row of the matrix defines a valid bond between particle species.
 A bonds is specified in the format `[species1 site1 species2 site2]`. For example, if binding site 3 of particle species 1 binds to site 4 of
 particle species 2, the corresponding bond would read `[1 3 2 4;]`. The ordering of binding sites depends on the building block, for 
 polygonal building blocks, sites are numbered in clockwise order.
@@ -35,7 +35,7 @@ struct BindingRules{D,PS<:ParticleSpecies}
     _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
     _isinert::BitVector
 end
-function BindingRules(bindingrules, particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
+function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
     D = dimension(first(particlespecies))
     for ps in particlespecies
         dimension(ps) != D && throw(ArgumentError("particlespecies do not all have the same dimension"))
@@ -47,7 +47,7 @@ function BindingRules(bindingrules, particlespecies::AbstractVector{PS}) where {
     nsites = length(siteloc2color)
     ncolors = length(color2siteloc)
 
-    intmat = _parse_intmat(bindingrules, siteloc2color)
+    intmat = _parse_intmat(bonds, siteloc2color)
     bondlist = map(findall(intmat)) do cartidx
         (cartidx[1], cartidx[2])
     end
@@ -80,10 +80,10 @@ function BindingRules(bindingrules, particlespecies::AbstractVector{PS}) where {
                                 bondlist, bondedsites, bondedspecies,
                                 compatible_sitelocs_cache, isinert_cache)
 end
-function BindingRules(bindingrules, particlespecies::ParticleSpecies)
-    nspcs = _extract_nspecies(bindingrules)
+function BindingRules(bonds, particlespecies::ParticleSpecies)
+    nspcs = _extract_nspecies(bonds)
     particlespecies = [particlespecies for _ in 1:nspcs]
-    return BindingRules(bindingrules, particlespecies)
+    return BindingRules(bonds, particlespecies)
 end
 
 
@@ -276,9 +276,9 @@ end
 Base.show(io::Core.IO, sys::BindingRules) = print(io, "$(dimension(sys))d BindingRules[n=$(nspecies(sys)), k=$(nbonds(sys))]")
 
 
-function _extract_nspecies(bindingrules::AbstractMatrix{<:Integer})
-    _checkshape(bindingrules)
-    nspcs = maximum(@view bindingrules[:, [1, 3]]; init=0)
+function _extract_nspecies(bonds::AbstractMatrix{<:Integer})
+    _checkshape(bonds)
+    nspcs = maximum(@view bonds[:, [1, 3]]; init=0)
     nspcs < 1 && throw(ArgumentError("binding rules do not not contain any bonds and cannot be used to determine species count"))
     return nspcs
 end
@@ -315,12 +315,12 @@ function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:Partic
     return color2siteloc, siteloc2color
 end
 
-function _parse_intmat(bindingrules, siteloc2color)
-    return _intmat_from_bonds(bindingrules, siteloc2color)
+function _parse_intmat(bonds, siteloc2color)
+    return _intmat_from_bonds(bonds, siteloc2color)
 end
-function _parse_intmat(bindingrules::AbstractMatrix{<:Integer}, siteloc2color)
-    _checkshape(bindingrules)
-    return _intmat_from_bonds(eachrow(bindingrules), siteloc2color)
+function _parse_intmat(bonds::AbstractMatrix{<:Integer}, siteloc2color)
+    _checkshape(bonds)
+    return _intmat_from_bonds(eachrow(bonds), siteloc2color)
 end
 function _intmat_from_bonds(bonds, siteloc2color)
     ncolors = length(siteloc2color)
@@ -334,13 +334,13 @@ function _intmat_from_bonds(bonds, siteloc2color)
     return Symmetric(intmat)
 end
 
-function _checkshape(bindingrules::AbstractMatrix{<:Integer})
-    mustbe4 = size(bindingrules, 2)
+function _checkshape(bonds::AbstractMatrix{<:Integer})
+    mustbe4 = size(bonds, 2)
     mustbe4 != 4 && throw(ArgumentError("bonds must be defined in the form [spcs1 site1 spcs2 site2]"))
     return
 end
-function _checkshape(bindingrules::AbstractVector{AbstractVector{<:Integer}})
-    mustbe4 = length(bindingrules[1])
+function _checkshape(bonds::AbstractVector{AbstractVector{<:Integer}})
+    mustbe4 = length(bonds[1])
     mustbe4 != 4 && throw(ArgumentError("bonds must be defined in the form [spcs1 site1 spcs2 site2]"))
     return
 end
