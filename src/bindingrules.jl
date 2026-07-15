@@ -8,18 +8,11 @@ const BindingSiteLoc = NTuple{2,Int}
 """
     BindingRules(bonds, particlespecies)
 
-An `BindingRules` consists of a list of particle species and their binding rules. The structures (polyforms)
-that satify the binding rules without any particle overlaps are the _allowed structures_ of an assembly system, and can be enumerated or 
-iterated over using `polygen` or `polyenum`, respectively.
+An `BindingRules` consists of a list of particle species and their allowed bonds. 
 
 The binding rules are specified by the matrix `bonds`, where every row of the matrix defines a valid bond between particle species.
 A bonds is specified in the format `[species1 site1 species2 site2]`. For example, if binding site 3 of particle species 1 binds to site 4 of
-particle species 2, the corresponding bond would read `[1 3 2 4;]`. The ordering of binding sites depends on the building block, for 
-polygonal building blocks, sites are numbered in clockwise order.
-
-Even without enumerating the allowed structures, it is possible to determine whether two assembly systems lead to the same set of allowed structures.
-If this is the case, then the two systems are identical up a relabeling and/or rotating the building blocks -- they are isomorphic.
-This can be checked by comparing the `rhash`es of different assembly systems; if the hashes are equal, the systems are isomorphic. 
+particle species 2, the corresponding bond would read `[1 3 2 4;]`. The ordering of binding sites depends on the specific particle species.
 """
 struct BindingRules{D,PS<:ParticleSpecies}
     intmat::Symmetric{Bool,Matrix{Bool}}

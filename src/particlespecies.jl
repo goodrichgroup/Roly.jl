@@ -6,6 +6,8 @@ concrete `BindingSite` type.
 """
 abstract type ParticleSpecies{D,B<:BindingSite} end
 
+const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
+
 """
     numtype(::ParticleSpecies)
 
@@ -21,8 +23,6 @@ Return the concrete `Pose` type used by the particle species.
 """
 posetype(::ParticleSpecies{D,B}) where {D,B} = posetype(B)
 posetype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = posetype(B)
-
-const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
 """
     bindingsites(p::ParticleSpecies, i::Integer)
@@ -117,15 +117,4 @@ of `graphrep(p)`.
 function symmetrynumber(p::ParticleSpecies)
     _, autg = nauty(graphrep(p))
     return convert(Int, autg.n)
-end
-
-"""
-    equivalent_site_indices(spcs::ParticleSpecies)
-
-Return a list of equivalent binding sites, that is equivalence classes of binding sites under the 
-symmetry of the particle species.
-"""
-function equivalent_site_indices(spcs::ParticleSpecies)
-    symmetrynumber(spcs) == 1 && return [[i] for i in 1:nsites(spcs)]
-    throw(ErrorException("building blocks with symmetry are not yet implemented"))
 end

@@ -27,7 +27,6 @@ To treat all sites as equivalent (e.g. for enumerating unlabeled polyforms), pas
 `labels=fill(1, n)` explicitly — note this also sets `symmetrynumber` to `n`.
 """
 function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors) where {F<:Real}
-    # TODO: this should have a constructor that takes polygon vertices and automatically creates sites on each polygon side
     r_in = convert(F, 0.5a * cot(π / n))
     r_out = convert(F, 0.5a * csc(π / n))
 
