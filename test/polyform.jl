@@ -1,10 +1,10 @@
-using Roly: Polyform, nparticles, nsites, assemblysystem, symmetrynumber, dimension,
+using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimension,
             bonds, bondindex, composition, interior_edges, exterior_edges, tocanon, toorig,
-            AssemblySystem, UnitSquare, nbonds, raise!, lower!, bindingsites, graphrep,
+            BindingRules, UnitSquare, nbonds, raise!, lower!, bindingsites, graphrep,
             collect_open_bindingsites, collect_compatible_pairs, isbound_vertex, particle_from_leadingvertex
 
 @testset "polyform" begin
-    sys = AssemblySystem([1 1 1 3; 1 2 1 4], UnitSquare)
+    sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
     empty_poly = Polyform(sys)
     @test nparticles(empty_poly) == 0
@@ -14,7 +14,7 @@ using Roly: Polyform, nparticles, nsites, assemblysystem, symmetrynumber, dimens
     @test nparticles(mono) == 1
     @test nsites(mono) == 4
     @test dimension(mono) == 2
-    @test assemblysystem(mono) === sys
+    @test bindingrules(mono) === sys
     @test symmetrynumber(mono) == 1
 
     @test mono == Polyform(sys, 1)
@@ -72,7 +72,7 @@ using Roly: Polyform, nparticles, nsites, assemblysystem, symmetrynumber, dimens
     @test isnothing(lower!(di))
 
     ### Check raise / remove equality
-    sys = AssemblySystem([1 1 1 4; 1 4 2 2; 1 1 3 2; 1 1 3 4; 2 1 3 3; 2 1 3 1], UnitSquare)
+    sys = BindingRules([1 1 1 4; 1 4 2 2; 1 1 3 2; 1 1 3 4; 2 1 3 3; 2 1 3 1], UnitSquare)
     poly = polygen(sys)[end]
 
     poly_raise = copy(poly)

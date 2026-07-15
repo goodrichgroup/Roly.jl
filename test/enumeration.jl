@@ -1,12 +1,12 @@
 @testset "enumeration" begin
-    I16 = AssemblySystem(
+    I16 = BindingRules(
         [1 3 2 3;
          2 1 4 1;
          2 2 3 2;
          3 1 4 1],
         UnitTriangle)
 
-    I137 = AssemblySystem(
+    I137 = BindingRules(
         [1 2 2 1;
          1 3 3 1;
          1 3 3 2;
@@ -17,7 +17,7 @@
          1 2 5 1], 
         UnitTriangle)
 
-    Icyc = AssemblySystem(
+    Icyc = BindingRules(
         [1 3 2 3;
          2 2 3 2;
          3 3 1 1;
@@ -41,7 +41,7 @@
     # @test nstrs_137_gen == 137
     # @test nstrs_cyc_gen == 283
 
-    I_polymino = AssemblySystem(
+    I_polymino = BindingRules(
         [1 1 1 3;
          1 2 1 4], 
          PolygonParticleSpecies(4, 1.0; labels=[1,1,1,1]))
@@ -50,7 +50,7 @@
     n_polyminoes = [1, 1, 2, 7, 18, 60, 196, 704, 2500]
     n_polyminoes_cumulative = cumsum(n_polyminoes)
 
-    I_polyiamond = AssemblySystem(
+    I_polyiamond = BindingRules(
             [1 1 1 1;
              1 2 1 2;
              1 3 1 3], 
@@ -60,7 +60,7 @@
     n_polyiamonds = [1, 1, 1, 4, 6, 19, 43, 120, 307, 866]
     n_polyiamonds_cumulative = cumsum(n_polyiamonds)
 
-    # I_polycube = AssemblySystem(
+    # I_polycube = BindingRules(
     #     [1 1 1 1; 
     #      1 2 1 2;
     #      1 3 1 3;

@@ -1,6 +1,6 @@
 using Roly: BindingSite, shift_vertices, shift_color, isaligned, istouching, isincontact, color, standard_offset
 
-@testset "bindingsite" begin
+@testset "binding site" begin
     tol = sqrt(eps(Float64))
     b = BindingSite(Pose{2}(), 1, 1:1, tol, tol)
 

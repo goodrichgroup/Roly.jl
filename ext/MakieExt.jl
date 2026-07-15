@@ -2,10 +2,10 @@ module MakieExt
 
 using Roly
 using Makie
-import Roly: species, assemblysystem, canonical_vertices, polyformplot, polyformplot!, render
+import Roly: species, bindingrules, canonical_vertices, polyformplot, polyformplot!, render
 
 @recipe PolyformPlot (poly, ) begin
-    assemblysystem = nothing
+    bindingrules = nothing
     pose = nothing
     Makie.mixin_generic_plot_attributes()...
 end
@@ -46,7 +46,7 @@ end
 Draw all particles of `poly` onto `ax`, coloring inert sites with `INERT_COLOR`.
 """
 function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
 
     for part in poly.particles
         ps = species(sys, part.species_index)

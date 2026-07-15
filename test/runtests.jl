@@ -7,7 +7,7 @@ using NautyGraphs
     include("pose.jl")
     include("bindingsite.jl")
     include("particle.jl")
-    include("assemblysystem.jl")
+    include("bindingrules.jl")
     include("polyform.jl")
     include("enumeration.jl")
     include("utils.jl")

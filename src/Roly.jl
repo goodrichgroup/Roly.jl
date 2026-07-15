@@ -18,11 +18,11 @@ export nsites, bindingsites, graphrep, isconvex, symmetrynumber
 export bounding_radius, could_contact, overlap
 
 # Assembly system
-export AssemblySystem, interactionmatrix
+export BindingRules, interactionmatrix
 export nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, isinert, species
 
 # Polyforms
-export Polyform, nparticles, assemblysystem, composition
+export Polyform, nparticles, bindingrules, composition
 export bonds, bondindex, interior_edges, exterior_edges
 
 # Enumeration
@@ -38,7 +38,7 @@ include("utils.jl")
 include("pose.jl")
 include("bindingsite.jl")
 include("particlespecies.jl")
-include("assemblysystem.jl")
+include("bindingrules.jl")
 include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")

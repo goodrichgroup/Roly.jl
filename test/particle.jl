@@ -1,7 +1,7 @@
 using Roly: Particle, graphvertices, leading_vertex, species_index
 
 @testset "particle" begin
-    sys = AssemblySystem([1 1 1 3; 1 2 1 4], UnitSquare)
+    sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
     part = Particle(sys, 1; leading_vertex=1)
     @test leading_vertex(part) == 1

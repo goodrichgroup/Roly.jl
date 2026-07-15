@@ -3,7 +3,7 @@ using Roly: nspecies, nbonds, nsites, dimension, species,
             siteloc2color, color2siteloc, color2species, isinert, compatible_sitelocs
 
 @testset "assemblysystem" begin
-    sys = AssemblySystem([1 1 1 3; 1 2 1 4], UnitSquare)
+    sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
     @test nspecies(sys) == 1
     @test nbonds(sys) == 2
@@ -39,18 +39,18 @@ using Roly: nspecies, nbonds, nsites, dimension, species,
     @test compatible_sitelocs(sys, c1) == [(1, 3)]
     @test compatible_sitelocs(sys, c3) == [(1, 1)]
 
-    sys1bond = AssemblySystem([1 1 1 3], UnitSquare)
+    sys1bond = BindingRules([1 1 1 3], UnitSquare)
     c2 = siteloc2color(sys1bond, (1, 2))
     @test isinert(sys1bond, c2)
     @test isinert(sys1bond, (1, 2))
 
     io = IOBuffer()
     show(io, sys)
-    @test contains(String(take!(io)), "AssemblySystem")
+    @test contains(String(take!(io)), "BindingRules")
 
-    sys1 = AssemblySystem([1 1 2 1], UnitTriangle)
-    sys2 = AssemblySystem([1 3 2 2], UnitTriangle)
-    sys3 = AssemblySystem([1 3 3 2], UnitTriangle)
+    sys1 = BindingRules([1 1 2 1], UnitTriangle)
+    sys2 = BindingRules([1 3 2 2], UnitTriangle)
+    sys3 = BindingRules([1 3 3 2], UnitTriangle)
 
     g1 = graphrep(sys1)
     g2 = graphrep(sys2)

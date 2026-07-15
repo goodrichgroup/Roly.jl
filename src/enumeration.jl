@@ -13,8 +13,8 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
     ### TODO: exploit that canonical labels are in order of color (Nauty User Guide p.4)
     ### to filter possible offspring by the color of the particle that would be removed
     if nparticles(v) == 0
-        j > nspecies(assemblysystem(v)) && return nothing
-        return copy!(u, Polyform(assemblysystem(v), j))
+        j > nspecies(bindingrules(v)) && return nothing
+        return copy!(u, Polyform(bindingrules(v), j))
     end
 
     j == 1 && collect_compatible_pairs!(aux.pairs, v)
@@ -34,7 +34,7 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
 end
 
 """
-    polyenum([f], assembly_system::AssemblySystem; maxsize=Inf, maxstrs=Inf, kwargs...)
+    polyenum([f], assembly_system::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
 
 Iterate over all structures (polyforms) allowed by `assembly_system` using _reverse-search_.
 Structures are generated up to size `maxsize`, and the enumeration terminates after `maxstrs`
@@ -54,7 +54,7 @@ All other keyword arguments are passed to the underlying `reversesearch` routine
 
 Returns `(num_structures, largest_size)`.
 """
-function polyenum(f, sys::AssemblySystem; maxsize=Inf, maxstrs=Inf, kwargs...)
+function polyenum(f, sys::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
     v₀ = Polyform(sys)
     BS = BindingSite{posetype(sys), numtype(sys)}
     aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,BindingSiteLoc}[])
@@ -64,7 +64,7 @@ function polyenum(f, sys::AssemblySystem; maxsize=Inf, maxstrs=Inf, kwargs...)
     result = reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs+1, kwargs...)
     return result.nvertices - 1, result.depth_reached
 end
-polyenum(sys::AssemblySystem; kwargs...) = polyenum(nothing, sys; kwargs...)
+polyenum(sys::BindingRules; kwargs...) = polyenum(nothing, sys; kwargs...)
 
 function polygen(sys; kwargs...)
     v₀ = Polyform(sys)

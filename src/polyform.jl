@@ -4,32 +4,32 @@
 A `Polyform` is an aggregate of particles connected at binding
 sites, represented by a directed graph.
 """
-mutable struct Polyform{D,P<:Particle,S<:AssemblySystem,G<:AbstractNautyGraph}
+mutable struct Polyform{D,P<:Particle,S<:BindingRules,G<:AbstractNautyGraph}
     graphrep::G
     sigma::Int
     canon2orig::Vector{Int}
     orig2canon::Vector{Int}
     particles::Vector{P}
-    assemblysystem::S
+    bindingrules::S
 end
 
 """
-    Polyform(sys::AssemblySystem{D}) where {D}
+    Polyform(sys::BindingRules{D}) where {D}
 
 Create an empty polyform containing no particles.
 """
-function Polyform(sys::AssemblySystem{D}) where {D}
+function Polyform(sys::BindingRules{D}) where {D}
     P = posetype(sys)
     g = NautyDiGraph(0)
     return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, 1, Int[], Int[], Particle{P}[], sys)
 end
 
 """
-    Polyform(sys::AssemblySystem{D}, i::Integer) where {D}
+    Polyform(sys::BindingRules{D}, i::Integer) where {D}
 
 Create a single-particle polyform, consisting of species `i` of `sys`.
 """
-function Polyform(sys::AssemblySystem{D}, i::Integer) where {D}
+function Polyform(sys::BindingRules{D}, i::Integer) where {D}
     P = posetype(sys)
     ps = species(sys, i)
     g = copy(graphrep(ps))
@@ -41,7 +41,7 @@ end
 
 function Base.copy(p::Polyform)
     return typeof(p)(
-        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon), copy(p.particles), p.assemblysystem
+        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon), copy(p.particles), p.bindingrules
     )
 end
 function Base.copy!(dst::Polyform, src::Polyform)
@@ -50,13 +50,13 @@ function Base.copy!(dst::Polyform, src::Polyform)
     copy!(dst.canon2orig, src.canon2orig)
     copy!(dst.orig2canon, src.orig2canon)
     copy!(dst.particles, src.particles)
-    dst.assemblysystem = src.assemblysystem
+    dst.bindingrules = src.bindingrules
     return dst
 end
 
 Base.show(io::Core.IO, p::Polyform{D}) where {D} = print(io, "Polyform{$D}[n=$(nparticles(p))]")
 Base.show(io::Core.IO, ::Type{Polyform{D}}) where {D} = print(io, "Polyform{$D}")
-Base.:(==)(p1::Polyform, p2::Polyform) = assemblysystem(p1) === assemblysystem(p2) && graphrep(p1) == graphrep(p2)
+Base.:(==)(p1::Polyform, p2::Polyform) = bindingrules(p1) === bindingrules(p2) && graphrep(p1) == graphrep(p2)
 
 """
     nparticles(p::Polyform)
@@ -70,14 +70,14 @@ Return the number of particles in `p`.
 
 Return the total number of binding sites across all particles in `p`, including bound sites.
 """
-@inline nsites(p::Polyform) = sum(prt -> nsites(prt, p.assemblysystem), p.particles; init=0)
+@inline nsites(p::Polyform) = sum(prt -> nsites(prt, p.bindingrules), p.particles; init=0)
 
 """
-    assemblysystem(p::Polyform)
+    bindingrules(p::Polyform)
 
-Return the `AssemblySystem` that `p` belongs to.
+Return the `BindingRules` that `p` belongs to.
 """
-@inline assemblysystem(p::Polyform) = p.assemblysystem
+@inline bindingrules(p::Polyform) = p.bindingrules
 
 """
     symmetrynumber(p::Polyform)
@@ -159,12 +159,12 @@ end
 """
     bondindex(poly::Polyform, src::Integer, dst::Integer)
 
-Return the index into `bonded_colors(assemblysystem(poly))` for the bond between
+Return the index into `bonded_colors(bindingrules(poly))` for the bond between
 canonical graph vertices `src` and `dst`, or `nothing` if they don't form a valid
 bond type.
 """
 function bondindex(poly::Polyform, src::Integer, dst::Integer)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     p1, b1 = _vertex_to_particle_site(poly, src)
     p2, b2 = _vertex_to_particle_site(poly, dst)
     c1 = color(bindingsites(particles(poly, p1), sys, b1))
@@ -174,7 +174,7 @@ end
 
 # Map a canonical graph vertex back to (particle_index, site_index).
 function _vertex_to_particle_site(p::Polyform, v::Integer)
-    sys = assemblysystem(p)
+    sys = bindingrules(p)
     orig_v = toorig(p, v)
     for (i, part) in enumerate(p.particles)
         orig_v in graphvertices(part, sys) || continue
@@ -192,7 +192,7 @@ Return the `i`-th binding site of `p`. The ordering is determined by the canonic
 graph labeling and is therefore deterministic across equivalent polyforms.
 """
 function bindingsites(p::Polyform, i::Integer)
-    sys = assemblysystem(p)
+    sys = bindingrules(p)
     k = 0
     for v in canonical_vertices(p)
         prtcl = particle_from_leadingvertex(p, v)
@@ -238,10 +238,10 @@ end
 
 Return the composition vector of `p`: counts of each particle species (indices
 `1:nspecies(sys)`) followed by counts of each bond type (indices `nspecies+1:end`).
-Bond types are ordered as in `bonded_colors(assemblysystem(p))`.
+Bond types are ordered as in `bonded_colors(bindingrules(p))`.
 """
 function composition(p::Polyform)
-    sys = assemblysystem(p)
+    sys = bindingrules(p)
     ns = nspecies(sys)
     nb = nbonds(sys)
     comp = zeros(Int, ns + nb)
@@ -266,7 +266,7 @@ Attach a new particle to `poly` at the open binding site `site`, with the specie
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
 function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwargs...)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     species_index, site_index = siteloc
     particle_species = species(sys, species_index)
     leading_vertex = nv(graphrep(poly)) + 1
@@ -318,7 +318,7 @@ function lower!(poly::Polyform)
         return poly
     end
 
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     nv_g = nv(graphrep(poly))
     target = zeros(Bool, nv_g)
     visited = zeros(Bool, nv_g)
@@ -347,7 +347,7 @@ end
 Remove particle `part` from `poly`. Does not check for connectedness before.
 """
 function _remove_particle!(poly::Polyform, part::Particle)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     vs0 = graphvertices(part, sys)
     vs = sort!(poly.orig2canon[vs0])
 
@@ -373,7 +373,7 @@ end
 function _overlap_and_contacts(
     polyparticles::AbstractVector{<:Particle},
     part::Particle,
-    sys::AssemblySystem;
+    sys::BindingRules;
     allow_noninteracting=false,
     allow_misaligned=false,
     kwargs...,
@@ -397,11 +397,11 @@ function _overlap_and_contacts(
 end
 
 function overlap_and_contacts(poly::Polyform, part::Particle; kwargs...)
-    return _overlap_and_contacts(poly.particles, part, assemblysystem(poly); kwargs...)
+    return _overlap_and_contacts(poly.particles, part, bindingrules(poly); kwargs...)
 end
 
 function collect_open_bindingsites!(sites, poly::Polyform)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     empty!(sites)
     for orig_v in canonical_vertices(poly)
         part = particle_from_leadingvertex(poly, orig_v)
@@ -417,13 +417,13 @@ function collect_open_bindingsites!(sites, poly::Polyform)
 end
 
 function collect_open_bindingsites(poly::Polyform)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     sites = BindingSite{posetype(sys),numtype(sys)}[]
     return collect_open_bindingsites!(sites, poly)
 end
 
 function collect_compatible_pairs!(pairs, poly::Polyform)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     empty!(pairs)
     for orig_v in canonical_vertices(poly)
         part = particle_from_leadingvertex(poly, orig_v)
@@ -441,7 +441,7 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
 end
 
 function collect_compatible_pairs(poly::Polyform)
-    sys = assemblysystem(poly)
+    sys = bindingrules(poly)
     BS = BindingSite{posetype(sys),numtype(sys)}
     pairs = Tuple{BS,BindingSiteLoc}[]
     return collect_compatible_pairs!(pairs, poly)
