@@ -19,7 +19,7 @@ export bounding_radius, could_contact, overlap
 
 # Assembly system
 export BindingRules, interactionmatrix
-export nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, isinert, species
+export ncolors, nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, isinert, species
 
 # Polyforms
 export Polyform, nparticles, bindingrules, composition
