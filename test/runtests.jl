@@ -1,6 +1,6 @@
 using Test
 using Roly
-using Rotations, StaticArrays, LinearAlgebra
+using Rotations, StaticArrays, LinearAlgebra, Random
 using NautyGraphs
 
 @testset verbose=true "Roly" begin

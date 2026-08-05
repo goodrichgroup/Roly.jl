@@ -87,4 +87,62 @@
     # @test nstrs_polymino_gen == n_polyminoes_cumulative
     # @test nstrs_polyiamond_gen == n_polyiamonds_cumulative
     # @test nstrs_polycube_gen == n_polycubes_cumulative
+
+    # Count polyforms
+    @test polyenum(I16).status == Finished
+    @test polyenum(I_polymino; maxsize=6).status == MaxDepthReached
+    @test polyenum(I_polymino; maxstrs=50).status == MaxVerticesReached
+
+    # Small enough to enumerate exactly, so no estimation should happen at all.
+    c = countpolyforms(I137)
+    @test c.exact
+    @test c.n == 137
+    @test c.uncertainty == 0.0
+    @test !c.size_truncated
+
+    # Capped by maxsize, but still exactly enumerated up to that cap.
+    c = countpolyforms(I_polymino; maxsize=6)
+    @test c.exact
+    @test c.n == n_polyminoes_cumulative[6]
+    @test c.size_truncated
+    @test c.largest_size == 6
+
+    # Polyominoes are unbounded, so a count without a maxsize should error.
+    @test_throws ArgumentError countpolyforms(I_polymino; exact_budget=500)
+
+    for maxsamples in (300, 3000)
+        c = countpolyforms(I_polymino; maxsize=9, exact_budget=500, maxsamples, rng=Xoshiro(7))
+        @test c.n >= 285 # we should get at least this many from the exact budget
+        @test abs(c.n - n_polyminoes_cumulative[9]) / n_polyminoes_cumulative[9] < 0.5
+    end
+
+    # Estimation. The tolerance is deliberately loose: sweeping 200 seeds of this configuration
+    # gives a median relative error of 1.7% and a worst case of 6.9%, so 25% is not a fit to the
+    # seed below but headroom against the estimator's heavy tail.
+    c = countpolyforms(I_polymino; maxsize=9, exact_budget=500, ntrials=5, rng=Xoshiro(1))
+    @test !c.exact
+    @test c.size_truncated
+    @test c.largest_size == 9
+    @test c.n >= 285 # we should get at least this many from the exact budget
+    @test abs(c.n - n_polyminoes_cumulative[9]) / n_polyminoes_cumulative[9] < 0.25
+    @test length(c.trials) == 5
+    @test sum(c.trials) / 5 ≈ c.n
+
+    # Counts per size
+    counts, _, status = Roly._count_upto_budget(Icyc; maxsize=12, budget=40)
+    @test status == MaxVerticesReached
+    @test counts == [4, 9, 15, 22, 31]
+    @test let counts_per_size = diff([0; counts]); counts_per_size[end] / counts_per_size[end-1] end ≈ 9 / 7
+
+    # A thinning probability with p*B < 1 makes the estimate collapse towards zero while
+    # reporting a small spread, so the default heuristic must stay on the p*B > 1 side.
+    for (sys, budget) in ((I_polymino, 500), (Icyc, 40))
+        persize = diff([0; Roly._count_upto_budget(sys; maxsize=12, budget)[1]])
+        branching = persize[end] / persize[end-1]
+        @test clamp(1.2 / branching, eps(), 0.95) * branching >= 1
+    end
+
+    # A budget too small to reach size 2 is raised to one that can, instead of failing.
+    c = countpolyforms(I_polymino; maxsize=9, exact_budget=1, rng=Xoshiro(5))
+    @test c.n >= 4
 end;

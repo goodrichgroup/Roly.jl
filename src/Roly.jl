@@ -1,6 +1,6 @@
 module Roly
 
-using LinearAlgebra, StaticArrays, SparseArrays, Rotations
+using LinearAlgebra, StaticArrays, SparseArrays, Rotations, Statistics, Random
 using Base.Iterators, DataStructures
 using Graphs, NautyGraphs
 using ReverseSearch
@@ -27,7 +27,8 @@ export bonds, bondindex, interior_edges, exterior_edges
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
-export polyenum, polygen
+export RSStatus, Finished, MaxVerticesReached, MaxDepthReached, BreakTriggered
+export polyenum, polygen, countpolyforms, PolyformCount
 
 # Species
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
