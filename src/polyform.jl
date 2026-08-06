@@ -234,6 +234,14 @@ function bonds(p::Polyform)
 end
 
 """
+    nbonds(p::Polyform)
+
+Return the number of bonds in `p`. Note that `nbonds(::BindingRules)` instead counts how many
+*kinds* of bond a set of rules allows.
+"""
+nbonds(p::Polyform) = count(Returns(true), exterior_edges(p))
+
+"""
     composition(p::Polyform)
 
 Return the composition vector of `p`: counts of each particle species (indices

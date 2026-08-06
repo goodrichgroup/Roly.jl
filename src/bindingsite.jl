@@ -32,14 +32,17 @@ posetype(::Type{<:BindingSite{P}}) where P = P
 
 """
     standard_offset(b::BindingSite{<:Pose{D,F}}) where {D,F}
+    standard_offset(p::Pose{D,F})
+    standard_rotation(::Type{F}, ::Val{D})
 
-Calculate the default offset between binding site `b` and an attached partner binding site. We employ the 
-convention that attached binding sites are "facing each other": their poses are related 
-via a 180 degree rotation around their (shared) z-axes.
+Calculate the default offset between binding site `b` and an attached partner binding site. We employ the
+convention that attached binding sites are "facing each other": their poses are related
+via a 180 degree rotation around their (shared) z-axes. `standard_rotation` is that rotation on its own.
 """
-@inline standard_offset(b::BindingSite{<:Pose{2,F}}) where {F} = b.pose * Angle2d{F}(π)
-@inline standard_offset(b::BindingSite{<:Pose{3,F}}) where {F} =  b.pose * RotXYZ{F}(0, 0, π)
-@inline standard_offset(::Pose{D,F,R}) where {D,F,R} = Pose{D,F,R}() * (D == 2 ? Angle2d{F}(π) : RotXYZ{F}(0, 0, π))
+@inline standard_rotation(::Type{F}, ::Val{2}) where {F} = Angle2d{F}(π)
+@inline standard_rotation(::Type{F}, ::Val{3}) where {F} = RotXYZ{F}(0, 0, π)
+@inline standard_offset(b::BindingSite{<:Pose{D,F}}) where {D,F} = b.pose * standard_rotation(F, Val(D))
+@inline standard_offset(p::Pose{D,F}) where {D,F} = p * standard_rotation(F, Val(D))
 
 """
     color(b::BindingSite)
