@@ -1,5 +1,7 @@
 # Roly.jl
 
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://goodrichgroup.github.io/Roly.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://goodrichgroup.github.io/Roly.jl/dev/)
 [![Build Status](https://github.com/goodrichgroup/Roly.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/goodrichgroup/Roly.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/goodrichgroup/Roly.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/goodrichgroup/Roly.jl)
 
