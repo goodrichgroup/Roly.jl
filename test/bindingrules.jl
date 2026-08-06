@@ -2,7 +2,7 @@ using Roly: nspecies, nbonds, nsites, dimension, species,
             interactionmatrix, bonded_colors, bonded_sites, bonded_species,
             siteloc2color, color2siteloc, color2species, isinert, compatible_sitelocs
 
-@testset "assemblysystem" begin
+@testset "bindingrules" begin
     sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
     @test nspecies(sys) == 1
