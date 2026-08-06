@@ -1,60 +1,71 @@
 # Roly.jl
 
-[![Build Status](https://github.com/mxhbl/Roly.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mxhbl/Roly.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/mxhbl/Roly.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/mxhbl/Roly.jl)
+[![Build Status](https://github.com/goodrichgrp/Roly.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/goodrichgrp/Roly.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/goodrichgrp/Roly.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/goodrichgrp/Roly.jl)
 
 
-Roly.jl (_<ins>R</ins>everse-Search P<ins>oly</ins>form Enumerator_) is a Julia package for the enumeration of arbitrary polyforms via [reverse search](https://en.wikipedia.org/wiki/Reverse-search_algorithm). It makes it possible to exhaustively enumerate structures composed out of a set of arbitrarily shaped building blocks in 2D or 3D and provides an interface to define your own building block geometries and binding rules. Roly.jl is under active development, and breaking changes can occur at any time. Because of its depencencies, Roly.jl currently does not work on Windows.
+Roly.jl (_<ins>R</ins>everse-Search P<ins>oly</ins>form Enumerator_) is a Julia package for the enumeration of arbitrary polyforms via [reverse search](https://en.wikipedia.org/wiki/Reverse-search_algorithm). It makes it possible to exhaustively enumerate polyforms (aggregates formed by connecting arbitrarily shaped building blocks at their binding sites) in 2D or 3D and provides an interface to define your own building block geometries and binding rules. Roly.jl is under active development, and breaking changes can occur at any time. Because of its dependencies, Roly.jl currently does not work on Windows.
 
 ## Installation
-To install Roly.jl and directly from your Julia REPL, first press `]` to enter Pkg mode, and then run
+To install Roly.jl directly from your Julia REPL, first press `]` to enter Pkg mode, and then run
 ```
-pkg> add https://github.com/mxhbl/Roly.jl
+pkg> add https://github.com/goodrichgrp/Roly.jl
 ```
 
 ## Basic Usage
-Structure enumeration in Roly.jl starts from an `AssemblySystem`, which is a list of building block geometries together with an interaction matrix that specificies which binding sites are allowed to bind to each other.
-The allowed structures can then be enumerated with the function `polyenum`, or generated and stored with `polygen`.
+Enumeration in Roly.jl starts from a `BindingRules` object, which is a list of building block geometries together with an interaction matrix that specifies which binding sites are allowed to bind to each other.
+The allowed polyforms can then be enumerated with `polyenum`, generated and stored with `polygen`, or counted (exactly or approximately) with `countpolyforms`.
 
-### Assembly System Definition
-To illustrate the basic process, let's construct an assembly system consisting of four species of triangular building blocks. You can define the binding rules via a list of bonds, where every bond is specified in the form `[species_i site_i species_j site_j]`. For example, `[1 3 2 3]` indicates that site 3 of species 1 is allowed to bind to site 3 of species 2. Roly already comes with definitions for simple polygonal and polyhedral building block geometries, allowing us to specify triangular building blocks via a `UnitTriangleGeometry`. The `AssemblySystem` constructor takes either a list of geometries or a single geometry if all building blocks are identically shaped.
-```
+### Defining Binding Rules
+To illustrate the basic process, let's construct a system consisting of four species of triangular building blocks. Binding rules are defined as a list of bonds, where every bond is specified in the form `[species_i site_i species_j site_j]`. For example, `[1 3 2 3]` indicates that site 3 of species 1 is allowed to bind to site 3 of species 2. Roly already comes with definitions for simple polygonal building block geometries, including `UnitTriangle`, `UnitSquare`, and `UnitHexagon`. The `BindingRules` constructor takes either a list of geometries or a single geometry if all building blocks are identically shaped.
+```julia
 using Roly
 
 bonds = [1 3 2 3;
          2 2 3 2;
          2 1 4 1;
          3 1 4 1]
-asys = AssemblySystem(bonds, UnitTriangleGeometry)
+sys = BindingRules(bonds, UnitTriangle)
 ```
 
-### Enumeration of Structures
-Once you have defined an assembly system, you can use `polyenum` to enumerate all possible structures:
+### Enumeration
+Once you have defined a set of binding rules, use `polyenum` to enumerate all allowed polyforms:
+```julia
+result = polyenum(sys; maxsize=20, maxstrs=100_000)
+result.nstructures   # number of polyforms found
+result.largest_size  # size of the largest polyform found
+result.status        # Finished, MaxDepthReached, MaxVerticesReached, or BreakTriggered
 ```
-n_strs, largest_strsize = polyenum(asys; maxsize=20, maxstrs=100_000)
+The simple system we have chosen here only allows 16 different polyforms to form. In general however, the number of polyforms might be unbounded, so it is advisable to always impose either a maximal size (`maxsize`) or a maximal count (`maxstrs`). To store all polyforms in memory for further processing, use `polygen`, which returns a list sorted by size:
+```julia
+strs = polygen(sys; maxsize=20, maxstrs=100_000)
 ```
-The simple system we have chosen here only allows 16 different structures to form. In general however, the number of structures might be unbounded and it is advisable to always impose either a maximal structure size (`maxsize`), or maximal number of structures (`maxstrs`) to be enumerated. In addition, `polyenum` allows the user to pass a function for processing and selectively rejecting structures.
 
-### Generation of Structures
-If you want to store all possible structures in memory for further processing, it is often more convenient to use `polygen`, which simply returns a list of structures:
+### Counting
+To count polyforms without storing them — or to get an estimate when full enumeration is too expensive — use `countpolyforms`:
+```julia
+c = countpolyforms(sys)
+c.n            # count (exact or estimated mean)
+c.exact        # true if the count is exact
+c.uncertainty  # standard error of the estimate (0 if exact)
 ```
-strs = polygen(asys; maxsize=20, maxstrs=100_000)
-```
+`countpolyforms` enumerates exactly up to a configurable budget and switches to importance-sampled estimation beyond it. Pass `maxsize` for systems that allow unbounded growth.
 
 ### Incorporating constraints
-It is often desirable to impose additional constraints that the generated structures should satisfy. For example, say we only want to generate structures with at most one particle of species 4:
+It is often desirable to impose additional constraints on generated polyforms. For example, to enumerate only polyforms with at most one particle of species 4:
+```julia
+constraint(s, n) = composition(s)[4] <= 1 ? ACCEPT : REJECT
+polyenum(constraint, sys)
 ```
-constraint(s) = composition(s, asys)[4] <= 1
-filtered_strs = polygen(constraint, asys) # polyenum works similarly
-```
-Warning: To ensure well-defined behavior, if a structure `s` violates the constraint, all larger structures `s'` that can be generated by adding particles to `s` must also violate the constraint.
+Warning: To ensure well-defined behavior, if a polyform `s` violates the constraint, all larger polyforms that can be generated by adding particles to `s` must also violate the constraint.
 
 ### Visualization
-To visualize 2D structures, use [RolyVis.jl](https://github.com/mxhbl/RolyVis.jl):
+Roly.jl provides a [Makie](https://docs.makie.org) extension for 2D visualization. Load any Makie backend to activate it:
+```julia
+using GLMakie  # or CairoMakie, WGLMakie, ...
+render(s)      # display a single polyform
 ```
-using RolyVis
-draw_polyforms(strs, asys, "filename.pdf//png")
-```
+`polyformplot!` can be used to draw polyforms onto an existing Makie axis.
 
 ## Citation
 If you use Roly.jl in your work, please cite [our paper](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.134.058204) below:
