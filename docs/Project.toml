@@ -1,0 +1,6 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Roly = "1621a601-f9d4-49dc-b032-1328811fec3a"
+
+[compat]
+Documenter = "1"

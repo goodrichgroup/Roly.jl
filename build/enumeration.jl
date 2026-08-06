@@ -68,12 +68,6 @@ function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
 end
 polyenum(sys::BindingRules; kwargs...) = polyenum(nothing, sys; kwargs...)
 
-"""
-    polygen(sys::BindingRules; kwargs...)
-
-Enumerate all polyforms allowed by `sys` and return them as a `Vector`, sorted by number
-of particles. Keyword arguments are forwarded to [`polyenum`](@ref).
-"""
 function polygen(sys; kwargs...)
     v₀ = Polyform(sys)
     strs = typeof(v₀)[]
