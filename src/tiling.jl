@@ -175,3 +175,4 @@ search is exhausted without finding one, or `missing` if the search reached
 `maxtilesize` without a definitive answer.
 """
 cantile(poly::Polyform; kwargs...) = cantile([poly]; kwargs...)
+
