@@ -36,13 +36,6 @@ function PatchyParticleSpecies(
     return PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol)
 end
 
-"""
-    PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
-
-A 2D disk of radius `r` with one binding site placed at each angle in `angles` (radians,
-measured counterclockwise from the +x axis). `colors` and `labels` optionally override the
-default per-site color and vertex label assignments.
-"""
 function PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
     F = float(eltype(angles))
     r = F(r)

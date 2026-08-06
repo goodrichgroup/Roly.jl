@@ -122,23 +122,6 @@ end
 
 bounding_radius(ps::PolygonParticleSpecies) = ps.rmax
 
-"""
-    UnitTriangle
-
-An equilateral triangle with unit-length edges and one binding site per edge.
-"""
 const UnitTriangle = PolygonParticleSpecies(3)
-
-"""
-    UnitSquare
-
-A square with unit-length edges and one binding site per edge.
-"""
 const UnitSquare = PolygonParticleSpecies(4)
-
-"""
-    UnitHexagon
-
-A regular hexagon with unit-length edges and one binding site per edge.
-"""
 const UnitHexagon = PolygonParticleSpecies(6)
