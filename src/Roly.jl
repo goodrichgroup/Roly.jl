@@ -47,6 +47,9 @@ include("enumeration.jl")
 include("species/polygonparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 
+include("ruleeditor.jl")
+export ruleeditor
+
 export render, polyformplot, polyformplot!
 
 function render end

@@ -77,3 +77,9 @@ polygen
 countpolyforms
 PolyformCount
 ```
+
+## Interactive rule editor
+
+```@docs
+ruleeditor
+```

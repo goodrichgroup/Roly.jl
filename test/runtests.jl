@@ -11,6 +11,7 @@ using NautyGraphs
     include("polyform.jl")
     include("enumeration.jl")
     include("utils.jl")
+    include("ruleeditor.jl")
 
     @testset verbose=true "species" begin
         include("species/polygonparticlespecies.jl")
