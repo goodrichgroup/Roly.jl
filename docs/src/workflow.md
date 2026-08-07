@@ -22,13 +22,13 @@ Roly ships with a few built-in species: [`UnitTriangle`](@ref), [`UnitSquare`](@
 
 ## Sketching rules interactively
 
-Instead of writing the bonds matrix by hand, you can construct one geometrically with [`ruleeditor`](@ref) — a small terminal editor that lets you place particles on a lattice and infers the binding rules from every pair of touching sites:
+Instead of writing the bonds matrix by hand, you can construct one geometrically with [`ruleeditor`](@ref) — a small terminal editor that lets you place building blocks on a lattice and infers the binding rules from every pair of touching sites:
 
 ```julia
 sys = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
 ```
 
-Each species is drawn in its own color (matching the Makie extension's palette) and the arrow inside each tile shows where site 1 points. Arrow keys move the cursor, `Enter` places a particle, `Space` erases, `r`/`R` rotate, digits `1`–`9` add and switch between species, `q` accepts. A typical session with two adjacent squares of species 1 and one of species 2 looks like:
+Arrow keys move the cursor, `Enter` places a particle, `Space` erases, `r`/`R` rotate, digits `1`–`9` add and switch between species, `q` accepts. A typical session looks like this:
 
 ```
 ┌ Editor ──────────┐┌ Particles ──────────────────────────┐
