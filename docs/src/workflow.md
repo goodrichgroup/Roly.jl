@@ -18,7 +18,7 @@ julia> sys = BindingRules(bonds, UnitTriangle)
 
 If all building blocks share the same shape, pass a single species. Otherwise, pass a vector of species — one per row-index used in `bonds`.
 
-Roly ships with a few built-in species: [`UnitTriangle`](@ref), [`UnitSquare`](@ref), [`UnitHexagon`](@ref) (regular polygons), [`PolygonParticleSpecies`](@ref) (arbitrary regular polygons), and [`PatchyParticleSpecies`](@ref)/[`PatchyDisk`](@ref) (disks or spheres with binding sites on their surface). See the [custom species page](custom_species.md) to define your own.
+Roly ships with a few built-in species. In 2D: [`UnitTriangle`](@ref), [`UnitSquare`](@ref), [`UnitHexagon`](@ref) and [`PolygonParticleSpecies`](@ref) (regular polygons), and [`PatchyDisk`](@ref) (a disk with binding sites on its rim). In 3D: [`UnitTetrahedron`](@ref), [`UnitCube`](@ref), [`UnitOctahedron`](@ref), [`UnitDodecahedron`](@ref), [`UnitIcosahedron`](@ref), [`UnitPyramid`](@ref), [`UnitPrism`](@ref), [`UnitAntiprism`](@ref) and [`PolyhedronParticleSpecies`](@ref) (convex polyhedra with one binding site per face), and [`PatchySphere`](@ref) (a sphere whose patches inherit a polyhedron's rotation group). See the [custom species page](custom_species.md) to define your own.
 
 ## Enumerating polyforms
 

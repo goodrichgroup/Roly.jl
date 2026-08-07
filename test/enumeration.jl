@@ -60,33 +60,57 @@
     n_polyiamonds = [1, 1, 1, 4, 6, 19, 43, 120, 307, 866]
     n_polyiamonds_cumulative = cumsum(n_polyiamonds)
 
-    # I_polycube = BindingRules(
-    #     [1 1 1 1; 
-    #      1 2 1 2;
-    #      1 3 1 3;
-    #      1 4 1 4;
-    #      1 5 1 5;
-    #      1 6 1 6], UnitCubeGeometry, [ones(Int, 24)])
+    # 3D lattice animals. Each of these needs ring closures to work — the first polycube with
+    # a ring is the 2x2 square tetracube, the first polyiamond the six-triangle hexagon — so
+    # they exercise the twist conventions of `_align_mates` and `_align_axis` end to end.
+    #
+    # The planar cases come out *free* rather than one-sided: a flat assembly can be turned
+    # over by a rotation about an axis in its plane, which is a rigid motion in 3D, so mirror
+    # images are the same structure. That is the 3D answer, and differs from the 2D species
+    # above, where reflections are not available.
+    sidefaces(p) = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) < 1e-8]
+    opposite(p, i) = findfirst(j -> isapprox(dot(Roly.facenormal(p, i), Roly.facenormal(p, j)), -1;
+                                             atol=1e-8), 1:nfaces(p))
+    rules(shp, pairs, labels) = BindingRules(
+        reduce(vcat, [[1 p[1] 1 p[2]] for p in pairs]), PolyhedronParticleSpecies(shp; labels)
+    )
 
-    # # Number of one-sided polycubes (https://oeis.org/A006534)
-    # n_polycubes = [1, 1, 2, 8, 29, 166, 1023]
-    # n_polycubes_cumulative = cumsum(n_polycubes)
+    lattice_animals = [
+        # Cubes bonded on all six faces fill space: polycubes up to rotation.
+        ("polycubes (https://oeis.org/A000162)",
+         rules(Cube(), unique([minmax(i, opposite(Cube(), i)) for i in 1:6]), fill(1, 6)),
+         [1, 1, 2, 8, 29, 166, 1023]),
+        # Restricted to the four side faces the cubes tile a plane: free polyominoes.
+        ("polyominoes (https://oeis.org/A000105)",
+         rules(Cube(), unique([minmax(i, opposite(Cube(), i)) for i in sidefaces(Cube())]), fill(1, 6)),
+         [1, 1, 2, 5, 12, 35, 108]),
+        # Triangular prisms tile a plane, but neighbouring triangles are related by a π
+        # rotation rather than a translation, which is what `_align_axis` sets up.
+        ("polyiamonds (https://oeis.org/A000577)",
+         rules(Prism(3), [(i, i) for i in sidefaces(Prism(3))], geometriclabels(Prism(3))),
+         [1, 1, 1, 3, 4, 12, 24]),
+        # Hexagonal prisms tile a plane by translation: free polyhexes.
+        ("polyhexes (https://oeis.org/A000228)",
+         rules(Prism(6), unique([minmax(i, opposite(Prism(6), i)) for i in sidefaces(Prism(6))]),
+               geometriclabels(Prism(6))),
+         [1, 1, 3, 7, 22, 82, 333]),
+    ]
+
+    for (name, sys, want) in lattice_animals
+        @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
+    end
 
     nstrs_polymino_enum = [polyenum(I_polymino, maxsize=i)[1] for i in 1:length(n_polyminoes_cumulative)]
     nstrs_polyiamond_enum = [polyenum(I_polyiamond, maxsize=i)[1] for i in 1:length(n_polyiamonds_cumulative)]
-    # nstrs_polycube_enum = [polyenum(I_polycube, maxsize=i)[1] for i in 1:length(n_polycubes_cumulative)]
 
     @test nstrs_polymino_enum == n_polyminoes_cumulative
     @test nstrs_polyiamond_enum == n_polyiamonds_cumulative
-    # @test nstrs_polycube_enum == n_polycubes_cumulative
 
     # nstrs_polymino_gen = [length(polygen(I_polymino, maxsize=i)) for i in 1:length(n_polyminoes_cumulative)]
     # nstrs_polyiamond_gen = [length(polygen(I_polyiamond, maxsize=i)) for i in 1:length(n_polyiamonds_cumulative)]
-    # nstrs_polycube_gen = [length(polygen(I_polycube, maxsize=i)) for i in 1:length(n_polycubes_cumulative)]
 
     # @test nstrs_polymino_gen == n_polyminoes_cumulative
     # @test nstrs_polyiamond_gen == n_polyiamonds_cumulative
-    # @test nstrs_polycube_gen == n_polycubes_cumulative
 
     # Count polyforms
     @test polyenum(I16).status == Finished

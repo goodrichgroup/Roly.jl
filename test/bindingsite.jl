@@ -1,4 +1,6 @@
-using Roly: BindingSite, shift_vertices, shift_color, isaligned, istouching, isincontact, color, standard_offset
+using Roly: BindingSite, shift_vertices, shift_color, isaligned, istouching, isincontact, color,
+            standard_offset, contact_pairing
+using Graphs, NautyGraphs
 
 @testset "binding site" begin
     tol = sqrt(eps(Float64))
@@ -49,4 +51,42 @@ using Roly: BindingSite, shift_vertices, shift_color, isaligned, istouching, isi
     @test !istouching(b1_3d, b3_3d)
     @test isaligned(b1_3d, b3_3d)
     @test !isincontact(b1_3d, b3_3d)
+
+    ### contact_pairing
+    # Equal-sized sites are matched by the full counter-rotating bijection, anchored on the
+    # first vertex of each range: that is the pair whose polyhedron edges coincide.
+    @test collect(contact_pairing(1:1, 5:5)) == [1 => 5]
+    @test collect(contact_pairing(1:2, 5:6)) == [1 => 5, 2 => 6]
+    @test collect(contact_pairing(1:4, 11:14)) == [1 => 11, 2 => 14, 3 => 13, 4 => 12]
+
+    # Sites of different sizes are joined only where their vertices land at the same angle:
+    # gcd(k1, k2) pairs. Coprime sizes leave just the anchor.
+    @test collect(contact_pairing(1:6, 11:13)) == [1 => 11, 3 => 13, 5 => 12]
+    @test collect(contact_pairing(1:4, 11:16)) == [1 => 11, 3 => 14]
+    @test collect(contact_pairing(1:4, 11:15)) == [1 => 11]
+    for (k1, k2) in [(1, 1), (2, 4), (6, 3), (4, 6), (12, 8), (4, 5), (5, 5), (7, 3)]
+        @test length(collect(contact_pairing(1:k1, 11:(10 + k2)))) == gcd(k1, k2)
+        @test first(contact_pairing(1:k1, 11:(10 + k2))) == (1 => 11)
+    end
+
+    # The point of the partial matching: a bond keeps the symmetry the two sites have in
+    # common. Joining a k1-fold site to a k2-fold one must leave gcd(k1, k2) turns, since a
+    # rotation about the bond axis has to be a symmetry of both.
+    function dimer_symmetrynumber(k1, k2)
+        g = NautyDiGraph(k1 + k2; vertex_labels=Cint[fill(1, k1); fill(2, k2)])
+        for i in 1:k1
+            add_edge!(g, i, mod1(i + 1, k1))
+        end
+        for j in 1:k2
+            add_edge!(g, k1 + j, k1 + mod1(j + 1, k2))
+        end
+        for (a, b) in contact_pairing(1:k1, (k1 + 1):(k1 + k2))
+            add_edge!(g, a, b)
+            add_edge!(g, b, a)
+        end
+        return convert(Int, nauty(g)[2].n)
+    end
+    for (k1, k2) in [(3, 3), (4, 4), (6, 6), (6, 3), (3, 6), (4, 6), (6, 4), (12, 8), (8, 6), (4, 5)]
+        @test dimer_symmetrynumber(k1, k2) == gcd(k1, k2)
+    end
 end

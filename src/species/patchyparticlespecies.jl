@@ -13,7 +13,7 @@ end
 """
     PatchyParticleSpecies(g, r, poses; colors=eachindex(poses))
 
-General constructor. `g` must have ≥ 3 vertices and contain a directed cycle; vertex labels
+General constructor. `g` must have one vertex per patch; vertex labels
 must be pre-set on `g`. Site `i` occupies graph vertex `i` (`vertices = i:i`). For truncated
 sites (multiple graph vertices per site) build the graph and `BindingSite`s manually.
 """
@@ -50,16 +50,55 @@ function PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
     tol = sqrt(eps(F)) * r
     positions = [SVector(r * cos(F(phi)), r * sin(F(phi))) for phi in angles]
 
-    if n == 2
-        g = NautyDiGraph(cycle_digraph(4); vertex_labels=[labels[1], labels[1], labels[2], labels[2]])
-        sites = [BindingSite(normal_pose(positions[1], F(0)), colors[1], 1:2, tol, tol / r),
-                 BindingSite(normal_pose(positions[2], F(0)), colors[2], 3:4, tol, tol / r)]
-    else
-        g = NautyDiGraph(cycle_digraph(n); vertex_labels=labels)
-        sites = [BindingSite(normal_pose(positions[i], F(0)), colors[i], i:i, tol, tol / r) for i in 1:n]
-    end
+    g, ranges = cycleencoding(n; labels)
+    sites = [BindingSite(normal_pose(positions[i], F(0)), colors[i], ranges[i], tol, tol / r) for i in 1:n]
     return PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol)
 end
+
+"""
+    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), labels=colors, encoding=:auto)
+    PatchySphere(sym::Symbol, n=0, r=1; kwargs...)
+
+A 3D sphere of radius `r` carrying one patch per face of `p`, so that the patches inherit the
+solid's rotation group. The second form names a rotation group instead of a solid, resolved
+by [`Polyhedron`](@ref): `PatchySphere(:T)`, `PatchySphere(:O)`, `PatchySphere(:D, 5)`.
+
+Patches sit where the face centroid directions pierce the sphere, and share the graph
+encoding, the labelling rules and the binding site frame convention of
+[`PolyhedronParticleSpecies`](@ref) — so a polyhedron species and a patchy sphere built from
+the same solid have interchangeable encodings and can share one set of `BindingRules`.
+"""
+function PatchySphere(
+    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), labels=colors, encoding::Symbol=:auto
+) where {F}
+    n = nfaces(p)
+    length(colors) == n ||
+        throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
+    encoding in (:auto, :dart, :cycle) ||
+        throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
+
+    usecycle = encoding === :cycle || (encoding === :auto && allunique(labels))
+    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(p; labels)
+
+    r = F(r)
+    tol = sqrt(eps(F)) * r
+    P = Pose{3,F,RotMatrix3{F}}
+    sites = Vector{BindingSite{P,F}}(undef, n)
+    for i in 1:n
+        c = facecentroid(p, i)
+        # On a sphere the patch normal has to be radial, so the frame is built from the
+        # centroid direction and the tangential part of the direction to the first edge.
+        ex = normalize(c)
+        v = edgemidpoint(p, i, 1) - c
+        ez = normalize(v - dot(v, ex) * ex)
+        psi = RotMatrix3{F}(hcat(ex, cross(ez, ex), ez))
+        sites[i] = BindingSite(P(r * ex, psi), colors[i], ranges[i], tol, tol / r)
+    end
+    return PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol)
+end
+
+PatchySphere(sym::Symbol, n::Integer=0, r::Real=1; a=1.0, kwargs...) =
+    PatchySphere(Polyhedron(sym, n; a), r; kwargs...)
 
 function Base.show(io::Core.IO, ps::PatchyParticleSpecies{D}) where {D}
     return print(io, "$(D)d PatchyParticleSpecies with $(nsites(ps)) sites")

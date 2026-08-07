@@ -6,6 +6,7 @@ using NautyGraphs
 @testset verbose=true "Roly" begin
     include("pose.jl")
     include("bindingsite.jl")
+    include("polyhedron.jl")
     include("particle.jl")
     include("bindingrules.jl")
     include("polyform.jl")
@@ -14,6 +15,7 @@ using NautyGraphs
 
     @testset verbose=true "species" begin
         include("species/polygonparticlespecies.jl")
+        include("species/polyhedronparticlespecies.jl")
         include("species/patchyparticlespecies.jl")
     end
 end;

@@ -56,10 +56,12 @@ the second particle's face runs the other way round. So the vertices are matched
 vertex pair whose polyhedron edges coincide, by the convention that a binding site's local
 z axis points at the midpoint of its face's first edge.
 
-Sites of *different* sizes have no such bijection — a 4-vertex site and a 5-vertex one, say —
-so only the two reference vertices are joined. That is the pair the full matching agrees on
-anyway, and it is enough: it pins the relative twist, because a site's vertices are already
-rigidly ordered by its own directed cycle. Such a bond simply carries less redundancy.
+Sites of *different* sizes are joined only where their vertices land at the same angle about
+the bond axis: `gcd(k1, k2)` pairs, stepping `k1 ÷ gcd` through one range and `k2 ÷ gcd`
+backwards through the other. That is what preserves the bond's residual symmetry. A site
+with `k` vertices is invariant under turns by `2π/k`, so the bond is invariant under the
+turns common to both — `C_k1 ∩ C_k2 = C_gcd(k1,k2)`. Binding a 6-fold site to a 3-fold one
+keeps 3-fold symmetry, and the three links are what let nauty see it.
 
 For sites of one or two vertices this is the identity pairing, so 2D species and patchy
 particles are unaffected. This is the single place where the bond convention is defined;
@@ -67,8 +69,9 @@ a species needing a different registry would change it here.
 """
 @inline function contact_pairing(vs1::UnitRange{Int}, vs2::UnitRange{Int})
     k1, k2 = length(vs1), length(vs2)
-    n = k1 == k2 ? k1 : 1
-    return (vs1[i] => vs2[mod1(2 - i, k2)] for i in 1:n)
+    g = gcd(k1, k2)
+    step1, step2 = k1 ÷ g, k2 ÷ g
+    return (vs1[1 + m * step1] => vs2[mod1(1 - m * step2, k2)] for m in 0:(g - 1))
 end
 
 """

@@ -14,6 +14,34 @@ posetype
 ```@docs
 BindingSite
 color
+contact_pairing
+```
+
+## Polyhedra and graph encodings
+
+```@docs
+Polyhedron
+corners
+faces
+facevertices
+nfaces
+nedges
+facecentroid
+facenormal
+edgemidpoint
+rotationgroup
+geometriclabels
+dartencoding
+cycleencoding
+sitegraph
+Tetrahedron
+Cube
+Octahedron
+Dodecahedron
+Icosahedron
+Pyramid
+Prism
+Antiprism
 ```
 
 ## Particle species
@@ -37,8 +65,19 @@ PolygonParticleSpecies
 UnitTriangle
 UnitSquare
 UnitHexagon
+PolyhedronParticleSpecies
+shape
+UnitTetrahedron
+UnitCube
+UnitOctahedron
+UnitDodecahedron
+UnitIcosahedron
+UnitPyramid
+UnitPrism
+UnitAntiprism
 PatchyParticleSpecies
 PatchyDisk
+PatchySphere
 ```
 
 ## Binding rules

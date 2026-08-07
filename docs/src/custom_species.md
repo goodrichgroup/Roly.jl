@@ -30,9 +30,9 @@ The following methods have generic fallbacks that you can override:
 
 Each particle species carries a directed graph (`graphrep(ps)`) that captures the *combinatorial* structure of its binding sites, independent of geometry. Roly uses it to detect polyform isomorphism via [nauty](https://pallini.di.uniroma1.it/) and to canonically order the vertices of an assembled polyform.
 
-**Requirements.** The graph must have at least 3 vertices and contain a directed cycle. The most common choice is a directed cycle of `n` vertices, one vertex per binding site, with site `i` occupying vertex `i`. Each `BindingSite` records which vertex range it covers via its `vertices` field, so `BindingSite(pose, color, i:i, ...)` places one site on vertex `i`.
+**Requirements.** Every automorphism of the graph must correspond to a symmetry of the particle, and the site partition must be respected. The most common choice is a directed cycle of `n` vertices, one vertex per binding site, with site `i` occupying vertex `i` — [`cycleencoding`](@ref) builds exactly this, for any `n >= 1`. Each `BindingSite` records which vertex range it covers via its `vertices` field, so `BindingSite(pose, color, i:i, ...)` places one site on vertex `i`.
 
-**Species with fewer than 3 sites.** If your particle has only 1 or 2 binding sites, use a 4-vertex directed cycle and group the vertices into pairs, each pair representing one binding site. The 2-patch branch of the built-in `PatchyDisk` in `src/species/patchyparticlespecies.jl` is an example of this pattern.
+**Sites spanning several vertices.** A site may occupy a contiguous *range* of vertices rather than a single one, which is how 3D species encode the twist of a face: [`dartencoding`](@ref) gives each face of a polyhedron a directed cycle of its own. When a site spans several vertices, make sure the graph structure still pins the site boundaries down — otherwise an automorphism can slide a site onto a straddling set of vertices and the symmetry number comes out too large. In `dartencoding` the bond-pairing edges are bidirectional while the face-cycle arcs are not, so the two classes cannot mix and the faces are preserved as blocks.
 
 ## A worked example: rectangle
 

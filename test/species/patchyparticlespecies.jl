@@ -41,9 +41,11 @@ using Roly:
     ps2 = PatchyDisk([0.0, π])
     @test nsites(ps2) == 2
     @test dimension(ps2) == 2
-    @test nv(graphrep(ps2)) == 4
-    @test bindingsites(ps2, 1).vertices == 1:2
-    @test bindingsites(ps2, 2).vertices == 3:4
+    @test nv(graphrep(ps2)) == 2
+    @test bindingsites(ps2, 1).vertices == 1:1
+    @test bindingsites(ps2, 2).vertices == 2:2
+    # Two equivalent patches give a symmetry number of 2. The old 4-cycle padding reported 4.
+    @test symmetrynumber(PatchyDisk([0.0, π]; labels=[1, 1])) == 2
     @test bindingsites(ps2, 1).pose.x ≈ SVector(1.0, 0.0) atol = 1e-10
     @test bindingsites(ps2, 2).pose.x ≈ SVector(-1.0, 0.0) atol = 1e-10
 
@@ -92,4 +94,59 @@ using Roly:
     @test overlap(pd => id, pd => close)
     @test !overlap(pd => id, pd => bonded)
     @test !overlap(pd => id, pd => far)
+end
+
+@testset "PatchySphere" begin
+    using Roly: PatchySphere, Polyhedron, Tetrahedron, Cube, Dodecahedron, Prism,
+                nfaces, facecentroid, geometriclabels, rotationgroup, symmetrynumber,
+                graphrep, edgemidpoint
+    using LinearAlgebra: normalize, dot, det, norm
+
+    for (name, shp, np, order) in [("T", Tetrahedron(), 4, 12), ("O", Cube(), 6, 24),
+                                   ("I", Dodecahedron(), 12, 60), ("D5", Prism(5), 7, 10)]
+        ps = PatchySphere(shp, 2.0)
+        @test dimension(ps) == 3
+        @test nsites(ps) == np
+        @test numtype(ps) === Float64
+
+        # Patches sit on the sphere, along the face centroid directions.
+        for i in 1:np
+            b = bindingsites(ps, i)
+            @test isapprox(norm(b.pose.x), 2.0)
+            @test isapprox(normalize(b.pose.x), normalize(facecentroid(shp, i)); atol=1e-10)
+            # On a sphere the patch normal is radial, and local z is the tangential part
+            # of the direction to the face's first edge.
+            @test isapprox(b.pose.psi[:, 1], normalize(b.pose.x); atol=1e-10)
+            @test isapprox(dot(b.pose.psi[:, 3], b.pose.psi[:, 1]), 0; atol=1e-10)
+            @test isapprox(det(b.pose.psi), 1; atol=1e-10)
+        end
+
+        # Same labelling rules and the same graph as the polyhedron species.
+        @test symmetrynumber(ps) == 1
+        @test symmetrynumber(PatchySphere(shp, 2.0; labels=geometriclabels(shp))) == order
+        @test order == length(rotationgroup(shp))
+        @test nv(graphrep(ps)) == np
+        @test nv(graphrep(PatchySphere(shp, 2.0; encoding=:dart))) == 2 * Roly.nedges(shp)
+    end
+
+    # Naming a rotation group resolves to the same solid Polyhedron(sym) gives.
+    @test nsites(PatchySphere(:T)) == 4
+    @test nsites(PatchySphere(:O)) == 6
+    @test nsites(PatchySphere(:I)) == 12
+    @test nsites(PatchySphere(:D, 5)) == 7
+    @test nsites(PatchySphere(:C, 6)) == 7
+    @test_throws ArgumentError PatchySphere(:X)
+    @test_throws ArgumentError PatchySphere(Cube(); encoding=:nonsense)
+    @test_throws ArgumentError PatchySphere(Cube(); colors=1:5)
+
+    # Spheres overlap by radius alone.
+    ps = PatchySphere(:O, 0, 1.0)
+    id = Pose{3,Float64,RotMatrix3{Float64}}(SVector(0.0, 0.0, 0.0), one(RotMatrix3{Float64}))
+    apart(d) = Pose{3,Float64,RotMatrix3{Float64}}(SVector(d, 0.0, 0.0), one(RotMatrix3{Float64}))
+    @test overlap(ps => id, ps => id)
+    @test overlap(ps => id, ps => apart(1.5))
+    @test !overlap(ps => id, ps => apart(2.0))
+    # Patchy particles skip the bounding-sphere pre-check, since it would just repeat the
+    # overlap test, so could_contact is unconditionally true.
+    @test could_contact(ps => id, ps => apart(50.0))
 end
