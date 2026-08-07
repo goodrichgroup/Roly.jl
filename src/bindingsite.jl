@@ -45,6 +45,33 @@ via a 180 degree rotation around their (shared) z-axes. `standard_rotation` is t
 @inline standard_offset(p::Pose{D,F}) where {D,F} = p * standard_rotation(F, Val(D))
 
 """
+    contact_pairing(vs1::UnitRange, vs2::UnitRange)
+
+Return the pairs of graph vertices to join when two bonding binding sites occupy the vertex
+ranges `vs1` and `vs2`.
+
+Gluing two faces together reverses their orientation: seen from outside the first particle,
+the second particle's face runs the other way round. So the vertices are matched
+*counter-rotating*, with the first vertex of each range as the fixed point — that is the
+vertex pair whose polyhedron edges coincide, by the convention that a binding site's local
+z axis points at the midpoint of its face's first edge.
+
+Sites of *different* sizes have no such bijection — a 4-vertex site and a 5-vertex one, say —
+so only the two reference vertices are joined. That is the pair the full matching agrees on
+anyway, and it is enough: it pins the relative twist, because a site's vertices are already
+rigidly ordered by its own directed cycle. Such a bond simply carries less redundancy.
+
+For sites of one or two vertices this is the identity pairing, so 2D species and patchy
+particles are unaffected. This is the single place where the bond convention is defined;
+a species needing a different registry would change it here.
+"""
+@inline function contact_pairing(vs1::UnitRange{Int}, vs2::UnitRange{Int})
+    k1, k2 = length(vs1), length(vs2)
+    n = k1 == k2 ? k1 : 1
+    return (vs1[i] => vs2[mod1(2 - i, k2)] for i in 1:n)
+end
+
+"""
     color(b::BindingSite)
 
 Return the binding site's color.

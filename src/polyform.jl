@@ -33,9 +33,8 @@ function Polyform(sys::BindingRules{D}, i::Integer) where {D}
     P = posetype(sys)
     ps = species(sys, i)
     g = copy(graphrep(ps))
-    canonize!(g)
     part = Particle(sys, i; leading_vertex=1)
-    cvs = collect(vertices(g))
+    cvs = convert(Vector{Int}, canonize!(g))
     return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys)
 end
 
@@ -134,26 +133,55 @@ end
 
 Return a lazy iterator over the internal particle edges of `graphrep(p)`.
 """
-@inline interior_edges(p::Polyform) = _filter_edges(graphrep(p), Val(false))
+@inline interior_edges(p::Polyform) = _filter_edges(p, Val(false))
 
 """
     exterior_edges(p::Polyform)
 
 Return a lazy iterator over the external edges of `graphrep(p)`, corresponding to bonds in `p`.
 """
-@inline exterior_edges(p::Polyform) = (e for e in _filter_edges(graphrep(p), Val(true)) if e.src < e.dst)
+@inline exterior_edges(p::Polyform) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
 
-# TODO: assumes no double edges within a single particle's graphrep (not true for 3D particles).
-# A label-based check is needed before 3D particles work reliably.
-function _filter_edges(g::AbstractGraph, ::Val{exterior}) where {exterior}
-    return Iterators.filter(edges(g)) do (; src, dst)
-        isdouble = has_edge(g, dst, src)
-        return exterior ? isdouble : !isdouble
+"""
+    _same_particle(p::Polyform, u::Integer, v::Integer)
+
+Return `true` if the original graph vertices `u` and `v` belong to the same particle.
+
+Each particle owns a contiguous block of original vertices starting at its leading vertex, so
+`u` and `v` are split apart exactly when some leading vertex falls between them. Testing for
+that directly avoids assuming anything about the order of `p.particles`, which `lower!` does
+not preserve, and needs no sorted copy.
+"""
+@inline function _same_particle(p::Polyform, u::Integer, v::Integer)
+    lo, hi = minmax(u, v)
+    return !any(pt -> lo < leading_vertex(pt) <= hi, p.particles)
+end
+
+# An edge is a bond exactly when its endpoints belong to different particles
+function _filter_edges(p::Polyform, ::Val{exterior}) where {exterior}
+    return Iterators.filter(edges(graphrep(p))) do (; src, dst)
+        same = _same_particle(p, toorig(p, src), toorig(p, dst))
+        return exterior ? !same : same
     end
 end
 
-function isbound_vertex(p::Polyform, v::Integer)
-    return any(NautyGraphs.adjrow(graphrep(p), v) .* NautyGraphs.adjcol(graphrep(p), v))
+"""
+    _isbound_vertex(p::Polyform, part::Particle, v::Integer)
+
+Return `true` if the original graph vertex `v` of particle `part` is bonded to another
+particle, i.e. if it has a neighbour outside `part`'s own block of vertices.
+
+Internal: `part` has to be passed in because the caller already has it, and looking it up
+again from `v` would be the expensive half of the check.
+"""
+function _isbound_vertex(p::Polyform, part::Particle, v::Integer)
+    own = graphvertices(part, bindingrules(p))
+    neighs = NautyGraphs.adjrow(graphrep(p), tocanon(p, v))
+    for w in eachindex(neighs)
+        neighs[w] || continue
+        toorig(p, w) in own || return true
+    end
+    return false
 end
 
 """
@@ -293,7 +321,7 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwar
     end
 
     for (vs1, vs2) in contacting_vertices
-        for (v1, v2) in zip(vs1, vs2)
+        for (v1, v2) in contact_pairing(vs1, vs2)
             add_edge!(graphrep(poly), tocanon(poly, v1), v2)
             add_edge!(graphrep(poly), v2, tocanon(poly, v1))
         end
@@ -368,8 +396,17 @@ function _remove_particle!(poly::Polyform, part::Particle)
     rem_vertices!(graphrep(poly), vs)
     deleteat!(poly.canon2orig, vs)
 
+    # Deleting the block compacts the original vertex numbering: everything that sat above it
+    # slides down by the block's size. That goes for the canonical vertex map *and* for the
+    # surviving particles — without the latter their `leading_vertex`, and hence every
+    # `BindingSite.vertices` range derived from it, points past the end of the graph and the
+    # next bond is attached to the wrong vertices.
     for i in eachindex(poly.canon2orig)
-        poly.canon2orig[i] -= searchsortedlast(vs0, poly.canon2orig[i])
+        poly.canon2orig[i] > last(vs0) && (poly.canon2orig[i] -= length(vs0))
+    end
+    for i in eachindex(poly.particles)
+        leading_vertex(poly.particles[i]) > last(vs0) || continue
+        poly.particles[i] = shift_leadingvertex(poly.particles[i], -length(vs0))
     end
 
     perm, autg = nauty(graphrep(poly); canonize=true)
@@ -416,7 +453,7 @@ function collect_open_bindingsites!(sites, poly::Polyform)
         isnothing(part) && continue
         for k in 1:nsites(part, sys)
             site = bindingsites(part, sys, k)
-            isbound_vertex(poly, tocanon(poly, first(site.vertices))) && continue
+            _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
             push!(sites, site)
         end
@@ -438,7 +475,7 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
         isnothing(part) && continue
         for k in 1:nsites(part, sys)
             site = bindingsites(part, sys, k)
-            isbound_vertex(poly, tocanon(poly, first(site.vertices))) && continue
+            _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
             for siteloc in compatible_sitelocs(sys, color(site))
                 push!(pairs, (site, siteloc))
