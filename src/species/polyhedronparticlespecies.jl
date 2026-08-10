@@ -17,42 +17,10 @@ end
 """
     PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), labels=colors, encoding=:auto)
 
-Build a particle from the polyhedron `p`, with one binding site at the centroid of each face.
+Build a particle species from the polyhedron `p`, with one binding site at each face centroid.
 
 `colors` assigns interaction colors to the binding sites, `labels` the symmetry labels that
-determine graph isomorphism, exactly as for [`PolygonParticleSpecies`](@ref). Faces sharing a
-label are treated as equivalent, which sets the symmetry number: pass
-`labels=geometriclabels(p)` to recover the solid's full rotation group, or leave the default
-for all faces distinct.
-
-With `encoding=:auto` the graph encoding is chosen from the labels. All labels distinct means
-no rotation can preserve them, so the cheap [`cycleencoding`](@ref) is provably equivalent and
-is used; any repeated label needs the full [`dartencoding`](@ref), which is what carries the
-rotation group. For a cube that is 6 vertices versus 24. Pass `encoding=:dart` or
-`encoding=:cycle` to override.
-
-Binding site frames follow the package convention that the outward normal is the site's local
-x axis. The local z axis is fixed to point from the face centroid at the midpoint of the
-face's first edge, which is what makes the twist of a face-to-face bond well defined: since
-the standard bond rotation preserves local z, two bonded faces meet with their first edges
-coincident.
-
-!!! note "One registry per face pair"
-    Two faces bond in a single relative twist (see [`standard_offset`](@ref)), not in all `k`
-    of them. Which twist that is follows from the site frames, so it is a modelling choice,
-    and `Polyhedron` makes the one that lets a solid assemble into its own tiling:
-
-    - faces related by a **translation** are given the same local z, so the bond between them
-      is a pure translation and loops of such bonds compose to the identity;
-    - faces with no translation mate get their local z along the solid's **principal axis**,
-      so their bonds are π rotations about one shared axis and loops of even length compose
-      to the identity.
-
-    Between them these cover every space-filling solid in the library — cubes enumerate as
-    polycubes (A000162), triangular prisms as polyiamonds (A000577), hexagonal prisms as
-    polyhexes (A000228). A solid that tiles only by rotations about *several* axes, and a
-    face pair that is neither of the above, still get one twist out of `k`; to use another,
-    add a species whose site poses are rotated accordingly.
+determine graph isomorphism. Faces sharing a label are treated as equivalent, which sets the symmetry number.
 """
 function PolyhedronParticleSpecies(
     p::Polyhedron{F}; colors=1:nfaces(p), labels=colors, encoding::Symbol=:auto
@@ -171,8 +139,7 @@ function overlap(
     spcs1, pose1 = p1
     spcs2, pose2 = p2
     d = norm(pose1.x - pose2.x)
-    # Cheap bounds first: the bounding spheres cannot reach, or the inscribed spheres must
-    # already intersect.
+    # check outer and inner spheres first 
     d >= spcs1.rmax + spcs2.rmax && return false
     d < (spcs1.rmin + spcs2.rmin) - (spcs1.skin + spcs2.skin) && return true
     return _SAT_overlap(p1, p2)

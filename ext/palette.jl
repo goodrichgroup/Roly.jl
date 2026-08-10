@@ -17,3 +17,31 @@ function species_palette(spcs_index::Int, n::Int)
     base = DEFAULT_COLORS[mod1(spcs_index, length(DEFAULT_COLORS))]
     return cgrad(base, n; categorical=true)
 end
+
+"""
+    _resolve_colors(spcs, species_index, sys, site_color)
+
+Work out which palette a species is drawn in and what color each of its sites gets.
+
+`species_index` selects the palette; when it is `nothing` it is looked up in `sys`, falling
+back to `1`. `site_color` is an optional callback `(species_index, site_index) -> color`
+that overrides both the palette and the greying of inert sites.
+
+Returns `(species_index, palette, sitecolors)`.
+"""
+function _resolve_colors(spcs, species_index, sys, site_color)
+    n = nsites(spcs)
+    if isnothing(species_index)
+        species_index = isnothing(sys) ? 1 : something(findfirst(==(spcs), species(sys)), 1)
+    end
+    pal = species_palette(species_index, n)
+
+    if isnothing(site_color)
+        site_color = if isnothing(sys)
+            (_, i) -> pal[i]
+        else
+            (_, i) -> isinert(sys, (species_index, i)) ? INERT_COLOR : pal[i]
+        end
+    end
+    return species_index, pal, [site_color(species_index, i) for i in 1:n]
+end

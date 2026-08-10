@@ -198,7 +198,8 @@ function _derive_faces(corners::Vector{SVector{3,F}}) where {F}
         norm(nrm) < atol && continue
         nrm = normalize(nrm)
         d = dot(nrm, corners[i])
-        # Point the normal away from the interior.
+        # Point the normal away from the interior
+        # nrm'(c_i - c_0) > 0 => nrm'c_i > nrm'c_0, otherwise flip
         dot(nrm, center) > d && ((nrm, d) = (-nrm, -d))
         # Supporting plane of the hull?
         all(c -> dot(nrm, c) <= d + atol, corners) || continue
@@ -354,7 +355,10 @@ function rotationgroup(p::Polyhedron{F}) where {F}
     Mref = dartframe(1, 1)
     group = RotMatrix3{F}[]
     for i in 1:nfaces(p), k in 1:facedegree(p, i)
+        # every potential symmetry rotation maps the ref frame to some other dartframe, and is therefore
+        # given by the matrix
         R = dartframe(i, k) * transpose(Mref)
+        # R is a symmetry if every corners is mapped to some other corner
         all(c -> any(c2 -> isapprox(R * c, c2; atol), cs), cs) || continue
         push!(group, RotMatrix3{F}(R))
     end
@@ -368,7 +372,7 @@ Return one label per face, grouping faces that are equivalent under [`rotationgr
 
 Passing these to [`dartencoding`](@ref) yields the solid's true rotation group, whereas
 `labels=fill(1, nfaces(p))` yields the *combinatorial* symmetry of the face lattice, which
-can be larger: `Pyramid(3)` is combinatorially a tetrahedron and would report 12 instead of
+can be larger. For example, `Pyramid(3)` is combinatorially a tetrahedron and would report 12 instead of
 its actual 3.
 """
 function geometriclabels(p::Polyhedron)
@@ -405,10 +409,6 @@ function _facesummary(p::Polyhedron)
     return "(" * join(("$(count(i -> facedegree(p, i) == d, 1:nfaces(p)))×$d-gon" for d in degs), ", ") * ")"
 end
 
-################################################################################
-# Graph encodings
-################################################################################
-
 """
     dartencoding(p::Polyhedron; labels=1:nfaces(p))
 
@@ -421,19 +421,17 @@ A *dart* is one corner of one face, so a face of degree `k` owns `k` darts and t
    winding, and
 2. a bidirectional edge joining the two darts that sit on each shared polyhedron edge.
 
-The automorphism group of the result is the solid's proper rotation group — the directed face
-cycles are what exclude reflections, exactly as the directed cycle does for a polygon in 2D.
+The automorphism group of the resulting `g` is the polyhedron's rotational symmetry group.
 `labels` assigns one symmetry label per face, inherited by that face's darts: all labels
 distinct gives a symmetry number of 1, all labels equal gives the full rotation group, and
 merging some faces gives the subgroup preserving that labelling.
-
-Only `faces(p)` is used; the corner positions play no role.
 """
 function dartencoding(p::Polyhedron; labels=1:nfaces(p))
     fs = faces(p)
     length(labels) == length(fs) ||
         throw(ArgumentError("expected $(length(fs)) labels, one per face, got $(length(labels))"))
 
+    # graph vertices for each face of the polyhedron
     ranges = Vector{UnitRange{Int}}(undef, length(fs))
     o = 0
     for (i, f) in enumerate(fs)
@@ -445,7 +443,7 @@ function dartencoding(p::Polyhedron; labels=1:nfaces(p))
     g = NautyDiGraph(o; vertex_labels)
 
     # Dart k of face i sits on the directed edge f[k] -> f[k+1]. Its partner is the dart of
-    # the adjacent face carrying the reversed edge; _check_winding guarantees it exists.
+    # the adjacent face carrying the reversed edge
     dart_of_edge = Dict{Tuple{Int,Int},Int}()
     for (i, f) in enumerate(fs), k in eachindex(f)
         dart_of_edge[(f[k], f[mod1(k + 1, length(f))])] = first(ranges[i]) + k - 1
@@ -469,22 +467,12 @@ end
 """
     cycleencoding(nsites; labels=1:nsites)
 
-Return `(g, ranges)`, the sparse encoding of a particle with `nsites` binding sites: a single
+Return `(g, ranges)`, the cycle encoding of a particle with `nsites` binding sites: a single
 directed cycle carrying one vertex per site.
 
 This is the 2D polygon encoding, and it is also valid in 3D whenever all `labels` are
-distinct — no rotation can then preserve the labelling, so the symmetry number is 1 whatever
-structure the graph has internally, and it is far cheaper than [`dartencoding`](@ref) (6
-vertices instead of 24 for a cube). It is *not* valid when labels are shared: an all-equal
-6-cycle has a symmetry number of 6, where a cube needs 24.
-
-One vertex per site for every `nsites >= 1`. Two sites give a 2-cycle, which is a pair of
-opposite arcs — that used to be barred, because bonds were told apart from a particle's own
-edges by being bidirectional, and a 2-cycle inside a particle would have been misread as a
-bond. Bonds are now recognised by joining different particles, so the workaround of padding
-fewer than three sites out to a 4-cycle is no longer needed. It was also wrong: two
-equivalent sites padded to a 4-cycle report a symmetry number of 4, where the particle's
-symmetry is 2.
+distinct: no rotation can then preserve the labelling, so the symmetry number is 1 whatever
+structure the graph has internally. It is *not* valid when labels are shared.
 """
 function cycleencoding(nsites::Integer; labels=1:nsites)
     length(labels) == nsites ||
@@ -498,7 +486,7 @@ end
 """
     Polyhedron(sym::Symbol, n=0; a=1.0)
 
-Return a solid realizing the proper rotation group named by `sym`, with edge length `a`:
+Return a polyhedron realizing the proper rotation group named by `sym`, with edge length `a`:
 
 | `sym` | group   | solid           | order |
 |:------|:--------|:----------------|:------|
@@ -675,16 +663,10 @@ end
 """
     site_symmetry(ps::ParticleSpecies)
 
-Return the number of proper rotations about the particle origin that permute the binding
-sites of `ps` while preserving their symmetry labels — the particle's actual rotational
-symmetry, read off the site arrangement alone and independent of how its graph was built.
+Return the number of rotations that permute the binding sites of `ps` while preserving their symmetry labels.
 
 Return `nothing` if the arrangement's symmetry is continuous rather than finite, which
 happens when every site direction is collinear (one site, or two antipodal ones).
-
-A rotation is pinned by the images of one site direction in 2D and two non-parallel ones in
-3D, so the candidates are the sites (2D) or the ordered pairs of sites (3D), and each
-symmetry arises from exactly one candidate.
 """
 function site_symmetry(ps::ParticleSpecies)
     n = nsites(ps)
