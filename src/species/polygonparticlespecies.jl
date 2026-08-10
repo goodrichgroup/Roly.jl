@@ -31,18 +31,20 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors)
     r_out = convert(F, 0.5a * csc(π / n))
 
     tol = sqrt(eps(F)) * r_out
+    g, ranges = cycleencoding(n; labels)
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]
     for (i, c) in enumerate(colors)
         ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
         x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ)))
-        push!(sites, BindingSite(Pose(x, ψ), c, i:i, tol, tol / r_in))
+        push!(sites, BindingSite(Pose(x, ψ), c, ranges[i], tol, tol / r_in))
     end
 
-    g = NautyDiGraph(cycle_digraph(n); vertex_labels=collect(Cint, labels))
     corners = [
         SVector{2,F}(r_out * cos(-π / 2 - (2k - 1) * π / n), r_out * sin(-π / 2 - (2k - 1) * π / n)) for k in 1:n
     ]
-    return PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, true, tol)
+    return _check_encoding(
+        PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, true, tol)
+    )
 end
 
 function Base.show(io::Core.IO, ps::PolygonParticleSpecies)

@@ -6,7 +6,7 @@ using NautyGraphs
 @testset verbose=true "Roly" begin
     include("pose.jl")
     include("bindingsite.jl")
-    include("polyhedron.jl")
+    include("encoding.jl")
     include("particle.jl")
     include("bindingrules.jl")
     include("polyform.jl")

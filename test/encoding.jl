@@ -7,7 +7,7 @@ using Roly: Polyhedron, Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron
             rotationgroup, geometriclabels, dartencoding, cycleencoding, sitegraph
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
 
-@testset "polyhedron" begin
+@testset "encoding" begin
     symnum(g) = convert(Int, nauty(g)[2].n)
     solids = [
         ("Tetrahedron", Tetrahedron(), 4, 6, 4, 12),

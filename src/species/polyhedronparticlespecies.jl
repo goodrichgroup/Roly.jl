@@ -80,9 +80,9 @@ function PolyhedronParticleSpecies(
         sites[i] = BindingSite(P(x, psi), colors[i], ranges[i], tol, tol / rmin)
     end
 
-    return PolyhedronParticleSpecies{F,eltype(sites)}(
+    return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
         g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol
-    )
+    ))
 end
 
 # Separating axis candidates contributed by the edges. Only the direction matters, and only

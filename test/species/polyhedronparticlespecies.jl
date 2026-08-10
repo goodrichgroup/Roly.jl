@@ -6,7 +6,8 @@ using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron
             geometriclabels, rotationgroup, inradius, edgemidpoint,
             nsites, dimension, isconvex, numtype, bindingsites, graphrep, setcolors!, color,
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
-            collect_compatible_pairs, tocanon, toorig, BindingRules, Polyform, nbonds
+            collect_compatible_pairs, tocanon, toorig, BindingRules, Polyform, nbonds,
+            site_symmetry, PatchySphere
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
 
 @testset "PolyhedronParticleSpecies" begin
@@ -68,7 +69,9 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
 
     for (name, shp) in [("Cube", Cube()), ("Prism(4,h=2)", Prism(4, 1.0; h=2.0)),
                         ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3))]
-        ps = PolyhedronParticleSpecies(shp; labels=fill(1, nfaces(shp)))
+        # Geometric labels, not all-equal: a box is combinatorially a cube, and calling its
+        # six faces equivalent claims a symmetry it does not have (the constructor rejects it).
+        ps = PolyhedronParticleSpecies(shp; labels=geometriclabels(shp))
         pairs = aligned(shp)
         # A prism tiles by translation, so every antiparallel pair is a mated pair.
         @test !isempty(pairs)
@@ -107,6 +110,40 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
         @test symmetrynumber(PolyhedronParticleSpecies(shp)) == 1
         @test symmetrynumber(PolyhedronParticleSpecies(shp; encoding=:dart)) == 1
     end
+
+    ### Encoding validation
+    # A species is a correct encoding exactly when its graph's symmetry number equals the
+    # rotational symmetry of its site arrangement. The constructors enforce this, so every
+    # species built above already satisfies it; check it explicitly across the library.
+    for (_, ps, shp, _, order) in solids
+        # Distinct labels: both encodings describe the arrangement, and both give 1.
+        for enc in (:auto, :dart, :cycle)
+            distinct = PolyhedronParticleSpecies(shp; encoding=enc)
+            @test symmetrynumber(distinct) == site_symmetry(distinct) == 1
+        end
+        # Repeated labels: only the dart encoding carries the rotation group, and forcing the
+        # sparse one is now rejected rather than silently reporting the cyclic order.
+        geo = PolyhedronParticleSpecies(shp; encoding=:dart, labels=geometriclabels(shp))
+        @test symmetrynumber(geo) == site_symmetry(geo) == order
+        order == nfaces(shp) ||
+            @test_throws ArgumentError PolyhedronParticleSpecies(shp; encoding=:cycle,
+                                                                 labels=geometriclabels(shp))
+    end
+    for (shp, order) in [(Tetrahedron(), 12), (Cube(), 24), (Dodecahedron(), 60), (Prism(5), 10)]
+        sphere = PatchySphere(shp, 1.0; labels=geometriclabels(shp))
+        @test symmetrynumber(sphere) == site_symmetry(sphere) == order
+    end
+
+    # And it has teeth. Declaring a pyramid's base equivalent to its sides claims the
+    # tetrahedral 12 for an arrangement that only has 3.
+    @test_throws ArgumentError PolyhedronParticleSpecies(Pyramid(3); labels=fill(1, 4))
+    # The sparse encoding imposes a cyclic order, which is not the symmetry of a tetrahedral
+    # or octahedral patch arrangement: it claims n where the truth is |G|. This is the failure
+    # that using `cycleencoding`/`dartencoding` does *not* rule out on its own.
+    @test_throws ArgumentError PatchySphere(Tetrahedron(), 1.0; labels=fill(1, 4), encoding=:cycle)
+    @test_throws ArgumentError PatchySphere(Cube(), 1.0; labels=fill(1, 6), encoding=:cycle)
+    # The dart encoding is the one that describes them.
+    @test symmetrynumber(PatchySphere(Tetrahedron(), 1.0; labels=fill(1, 4), encoding=:dart)) == 12
 
     # A cube with the two caps distinguished from the four sides keeps the 4-fold axis
     # and the 2-fold axes through it: D_4, of order 8.

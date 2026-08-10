@@ -150,3 +150,30 @@ end
     # overlap test, so could_contact is unconditionally true.
     @test could_contact(ps => id, ps => apart(50.0))
 end
+
+@testset "encoding validation" begin
+    using Roly: PatchyDisk, PatchyParticleSpecies, site_symmetry, symmetrynumber
+    using Graphs: cycle_digraph
+    using NautyGraphs: NautyDiGraph
+
+    # Evenly spaced identical patches really do have that symmetry, so they build.
+    @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; labels=[1, 1, 1])) == 3
+    @test site_symmetry(PatchyDisk([0.0, 2π / 3, 4π / 3]; labels=[1, 1, 1])) == 3
+    @test symmetrynumber(PatchyDisk([0.0, π]; labels=[1, 1])) == 2
+    @test site_symmetry(PatchyDisk([0.0, π]; labels=[1, 1])) == 2
+
+    # Unevenly spaced ones do not: calling them equivalent claims a 3-fold symmetry the disk
+    # does not have, and the constructor rejects it.
+    @test_throws ArgumentError PatchyDisk([0.0, 0.5, 3.0]; labels=[1, 1, 1])
+    # With distinct labels the same arrangement is fine.
+    @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0])) == 1
+
+    # The general constructor lets you supply any graph you like, but it still has to describe
+    # the arrangement: three unevenly spaced patches called equivalent is rejected.
+    uneven = [SVector(cos(t), sin(t)) for t in (0.0, 0.5, 3.0)]
+    @test_throws ArgumentError PatchyParticleSpecies(
+        NautyDiGraph(cycle_digraph(3); vertex_labels=Cint[1, 1, 1]), 1.0, uneven)
+    # Labelled to match, the same hand-built graph is accepted.
+    ok = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3); vertex_labels=Cint[1, 2, 3]), 1.0, uneven)
+    @test symmetrynumber(ok) == site_symmetry(ok) == 1
+end

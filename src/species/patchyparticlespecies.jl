@@ -13,8 +13,9 @@ end
 """
     PatchyParticleSpecies(g, r, poses; colors=eachindex(poses))
 
-General constructor. `g` must have one vertex per patch; vertex labels
-must be pre-set on `g`. Site `i` occupies graph vertex `i` (`vertices = i:i`). For truncated
+General constructor. `g` must have one vertex per patch; vertex labels must be pre-set on
+`g`, and its automorphism group must match the symmetry of `patch_positions` — the graph is
+yours to build, but [`_check_encoding`](@ref) still verifies it describes the arrangement. Site `i` occupies graph vertex `i` (`vertices = i:i`). For truncated
 sites (multiple graph vertices per site) build the graph and `BindingSite`s manually.
 """
 function PatchyParticleSpecies(
@@ -33,7 +34,7 @@ function PatchyParticleSpecies(
         BindingSite(normal_pose(patch_positions[i], patch_twists[i]), colors[i], i:i, tol, tol / r) for
         i in eachindex(patch_positions, patch_twists, colors)
     ]
-    return PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol)
+    return _check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
 end
 
 """
@@ -52,7 +53,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
 
     g, ranges = cycleencoding(n; labels)
     sites = [BindingSite(normal_pose(positions[i], F(0)), colors[i], ranges[i], tol, tol / r) for i in 1:n]
-    return PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol)
+    return _check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
 end
 
 """
@@ -94,7 +95,7 @@ function PatchySphere(
         psi = RotMatrix3{F}(hcat(ex, cross(ez, ex), ez))
         sites[i] = BindingSite(P(r * ex, psi), colors[i], ranges[i], tol, tol / r)
     end
-    return PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol)
+    return _check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
 
 PatchySphere(sym::Symbol, n::Integer=0, r::Real=1; a=1.0, kwargs...) =

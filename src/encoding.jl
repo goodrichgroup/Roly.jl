@@ -667,3 +667,78 @@ function Antiprism(n::Integer, a::Real=1.0)
     end
     return Polyhedron(cs)
 end
+
+################################################################################
+# Encoding validation
+################################################################################
+
+"""
+    site_symmetry(ps::ParticleSpecies)
+
+Return the number of proper rotations about the particle origin that permute the binding
+sites of `ps` while preserving their symmetry labels — the particle's actual rotational
+symmetry, read off the site arrangement alone and independent of how its graph was built.
+
+Return `nothing` if the arrangement's symmetry is continuous rather than finite, which
+happens when every site direction is collinear (one site, or two antipodal ones).
+
+A rotation is pinned by the images of one site direction in 2D and two non-parallel ones in
+3D, so the candidates are the sites (2D) or the ordered pairs of sites (3D), and each
+symmetry arises from exactly one candidate.
+"""
+function site_symmetry(ps::ParticleSpecies)
+    n = nsites(ps)
+    xs = [bindingsites(ps, i).pose.x for i in 1:n]
+    labs = [labels(graphrep(ps))[first(bindingsites(ps, i).vertices)] for i in 1:n]
+    atol = sqrt(eps(numtype(ps))) * maximum(norm, xs)
+
+    permutes_sites(Q) = all(1:n) do i
+        any(j -> labs[j] == labs[i] && isapprox(Q * xs[i], xs[j]; atol), 1:n)
+    end
+
+    if dimension(ps) == 2
+        siteangle(i) = atan(xs[i][2], xs[i][1])
+        return count(a -> labs[a] == labs[1] && permutes_sites(Angle2d(siteangle(a) - siteangle(1))), 1:n)
+    end
+
+    frame(i, j) = (u = normalize(xs[i]); w = normalize(cross(xs[i], xs[j])); hcat(u, w, cross(u, w)))
+    b = findfirst(i -> norm(cross(xs[1], xs[i])) > atol, 1:n)
+    isnothing(b) && return nothing        # collinear: a whole axis of rotations preserves it
+    F = frame(1, b)
+
+    return count(Iterators.product(1:n, 1:n)) do (a, c)
+        labs[a] == labs[1] && labs[c] == labs[b] || return false
+        norm(cross(xs[a], xs[c])) > atol || return false
+        return permutes_sites(frame(a, c) * transpose(F))
+    end
+end
+
+"""
+    _check_encoding(ps::ParticleSpecies)
+
+Throw if `ps`'s graph claims a different symmetry than its binding sites actually have.
+
+`symmetrynumber(ps) == site_symmetry(ps)` is what makes a graph a correct encoding of a
+particle, and it does *not* follow from having used [`cycleencoding`](@ref) or
+[`dartencoding`](@ref) — either can be applied to an arrangement it does not describe. Too
+large a symmetry number merges structures that are really distinct; too small a one splits
+structures that are really the same. Both corrupt enumeration silently, so the species
+constructors that build their own graph check here instead.
+
+Skipped when [`site_symmetry`](@ref) is `nothing`, i.e. when the arrangement's symmetry is
+continuous and no finite graph can represent it.
+"""
+function _check_encoding(ps::ParticleSpecies)
+    geometric = site_symmetry(ps)
+    isnothing(geometric) && return ps
+    graph = symmetrynumber(ps)
+    graph == geometric || throw(ArgumentError(
+        "graph encoding claims a symmetry number of $graph, but the binding sites of this " *
+        "$(dimension(ps))d species have a rotational symmetry of $geometric. " *
+        (graph > geometric ?
+         "The labels declare sites equivalent that no rotation maps onto each other." :
+         "The graph distinguishes sites that a rotation does map onto each other; the " *
+         "encoding does not describe this site arrangement.")
+    ))
+    return ps
+end

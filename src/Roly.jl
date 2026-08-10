@@ -16,7 +16,7 @@ export BindingSite, color, contact_pairing
 export Polyhedron, corners, faces, facevertices, nfaces, nedges
 export facecentroid, facecentroids, facenormal, facenormals, edgemidpoint
 export dartencoding, cycleencoding, sitegraph
-export rotationgroup, geometriclabels
+export rotationgroup, geometriclabels, site_symmetry
 export Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron, Pyramid, Prism, Antiprism
 
 # Particle species
@@ -49,7 +49,7 @@ include("utils.jl")
 include("pose.jl")
 include("bindingsite.jl")
 include("particlespecies.jl")
-include("polyhedron.jl")
+include("encoding.jl")
 include("bindingrules.jl")
 include("particle.jl")
 include("polyform.jl")
