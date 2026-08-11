@@ -725,31 +725,99 @@ one `(site, turn)` pair that could receive site 1. That also means the answer is
 a frame has no continuous stabiliser, so even a single site, or two antipodal ones, give a
 definite count.
 """
-function site_symmetry(ps::ParticleSpecies)
-    n = nsites(ps)
-    poses = [bindingsites(ps, i).pose for i in 1:n]
-    ks = [bindingsites(ps, i).gauge for i in 1:n]
-    labs = [labels(graphrep(ps))[first(bindingsites(ps, i).vertices)] for i in 1:n]
+site_symmetry(ps::ParticleSpecies) = length(_site_symmetries(_sitedata(ps)...))
 
-    tol = sqrt(eps(numtype(ps)))
+# Poses, gauges and the key each site is matched by. `site_symmetry` keys on the graph's
+# labels, since it asks what the graph claims; `siteorbits` keys on colors, since it asks what
+# the arrangement is.
+function _sitedata(ps::ParticleSpecies)
+    n = nsites(ps)
+    sites = [bindingsites(ps, i) for i in 1:n]
+    labs = labels(graphrep(ps))
+    return ([s.pose for s in sites], [s.gauge for s in sites],
+            [labs[first(s.vertices)] for s in sites])
+end
+
+"""
+    _site_symmetries(poses, gauges, keys)
+
+Return the site permutations induced by the rotations about the particle origin that carry
+every site onto one with the same `keys` entry, matching position and orientation.
+"""
+function _site_symmetries(poses, gauges, keys)
+    n = length(poses)
+    tol = sqrt(eps(eltype(typeof(first(poses)))))
     atol = tol * maximum(norm(p.x) for p in poses)
 
-    maps_sites(Q) = all(1:n) do i
-        any(1:n) do j
-            labs[j] == labs[i] &&
-                isapprox(Q * poses[i].x, poses[j].x; atol) &&
-                any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _siteturns(poses[j].psi, ks[j]))
+    function permutation(Q)
+        perm = zeros(Int, n)
+        for i in 1:n
+            j = findfirst(1:n) do j
+                keys[j] == keys[i] &&
+                    isapprox(Q * poses[i].x, poses[j].x; atol) &&
+                    any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol),
+                        _siteturns(poses[j].psi, gauges[j]))
+            end
+            isnothing(j) && return nothing
+            perm[i] = j
         end
+        return perm
     end
 
-    sym = 0
+    perms = Vector{Int}[]
     for a in 1:n
-        labs[a] == labs[1] || continue
-        for psi in _siteturns(poses[a].psi, ks[a])
-            maps_sites(psi * inv(poses[1].psi)) && (sym += 1)
+        keys[a] == keys[1] || continue
+        for psi in _siteturns(poses[a].psi, gauges[a])
+            perm = permutation(psi * inv(poses[1].psi))
+            isnothing(perm) || push!(perms, perm)
         end
     end
-    return sym
+    return perms
+end
+
+"""
+    siteorbits(poses, gauges, colors)
+
+Group the sites into the orbits of the rotations that preserve the *colored* arrangement, and
+return one orbit index per site.
+
+This is the labelling a species should carry: two sites are interchangeable exactly when some
+rotation of the particle carries one onto the other and they are the same color. Deriving it
+means labels never have to be given — placing colors on sites is the physical statement, and
+the symmetry follows from the geometry. It also makes the labelling automatically no finer than
+the coloring, so a graph can never merge two sites that bond differently.
+"""
+function siteorbits(poses, gauges, colors)
+    n = length(poses)
+    orbit = collect(1:n)
+    for perm in _site_symmetries(poses, gauges, colors), i in 1:n
+        lo, hi = minmax(orbit[i], orbit[perm[i]])
+        hi == lo && continue
+        replace!(orbit, hi => lo)
+    end
+    # Compact to 1:k so the result can be used as graph labels directly.
+    ids = sort!(unique(orbit))
+    return [searchsortedfirst(ids, o) for o in orbit]
+end
+
+"""
+    _relabel!(ps::ParticleSpecies)
+
+Rederive `ps`'s graph labels from its site colors and geometry, in place.
+
+Called whenever a species is recolored: labels are a function of the coloring, so leaving them
+alone would let a recolored species keep a symmetry it no longer has.
+"""
+function _relabel!(ps::ParticleSpecies)
+    n = nsites(ps)
+    sites = [bindingsites(ps, i) for i in 1:n]
+    orbits = siteorbits([s.pose for s in sites], [s.gauge for s in sites], [color(s) for s in sites])
+    labs = labels(graphrep(ps))
+    for i in 1:n, v in sites[i].vertices
+        labs[v] = orbits[i]
+    end
+    setlabels!(graphrep(ps), labs)
+    return ps
 end
 
 """

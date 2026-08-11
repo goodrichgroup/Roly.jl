@@ -168,12 +168,17 @@ end
     # With distinct labels the same arrangement is fine.
     @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0])) == 1
 
-    # The general constructor lets you supply any graph you like, but it still has to describe
-    # the arrangement: three unevenly spaced patches called equivalent is rejected.
+    # The general constructor takes the graph's structure but derives its labels, so a
+    # labelling that does not describe the arrangement cannot be supplied in the first place:
+    # three unevenly spaced patches come out distinct however the graph was labelled.
     uneven = [SVector(cos(t), sin(t)) for t in (0.0, 0.5, 3.0)]
-    @test_throws ArgumentError PatchyParticleSpecies(
-        NautyDiGraph(cycle_digraph(3); vertex_labels=Cint[1, 1, 1]), 1.0, uneven)
-    # Labelled to match, the same hand-built graph is accepted.
-    ok = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3); vertex_labels=Cint[1, 2, 3]), 1.0, uneven)
-    @test symmetrynumber(ok) == site_symmetry(ok) == 1
+    for labs in (Cint[1, 1, 1], Cint[1, 2, 3])
+        ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3); vertex_labels=labs), 1.0, uneven)
+        @test symmetrynumber(ps) == site_symmetry(ps) == 1
+        @test labels(graphrep(ps)) == Cint[1, 2, 3]
+    end
+    # Evenly spaced patches of one color are equivalent, and the derivation finds that too.
+    even = [SVector(cos(t), sin(t)) for t in (0.0, 2π / 3, 4π / 3)]
+    ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3))
+    @test symmetrynumber(ps) == site_symmetry(ps) == 3
 end

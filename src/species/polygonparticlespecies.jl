@@ -14,29 +14,34 @@ struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,B}
 end
 
 """
-    PolygonParticleSpecies(n, a=1.0; colors=1:n, labels=colors)
+    PolygonParticleSpecies(n, a=1.0; colors=1:n)
 
 Construct a regular `n`-gon with edge length `a`. Each edge carries one binding site.
 
-`colors` assigns interaction colors to the binding sites (used by the interaction matrix to
-specify which sites bond). `labels` assigns symmetry labels to the graph vertices that determine
-graph isomorphism: sites with equal labels are treated as equivalent under the particle's
-symmetry group, which affects both isomorphism detection and the symmetry number. By default
-`labels=colors`, so distinct colors imply distinct labels.
-To treat all sites as equivalent (e.g. for enumerating unlabeled polyforms), pass
-`labels=fill(1, n)` explicitly — note this also sets `symmetrynumber` to `n`.
+`colors` assigns interaction colors to the binding sites, which is what the interaction matrix
+uses to decide which sites bond. It is also all that needs saying: the particle's symmetry
+follows from it, since two edges are interchangeable exactly when a rotation carries one onto
+the other and they are the same color (see [`siteorbits`](@ref)).
+
+So the default `colors=1:n` gives every edge its own identity and a symmetry number of 1, while
+`colors=fill(1, n)` makes all edges the same sticky stuff and gives the full `n`.
 """
-function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors) where {F<:Real}
+function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=nothing) where {F<:Real}
     r_in = convert(F, 0.5a * cot(π / n))
     r_out = convert(F, 0.5a * csc(π / n))
 
     tol = sqrt(eps(F)) * r_out
+    poses = map(1:n) do i
+        ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
+        Pose(SVector{2,F}(pol2cart(r_in, rotation_angle(ψ))), ψ)
+    end
+    # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
+    labels = something(labels, siteorbits(poses, ones(Int, n), collect(colors)))
+
     g, ranges = cycleencoding(n; labels)
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]
     for (i, c) in enumerate(colors)
-        ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
-        x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ)))
-        push!(sites, BindingSite(Pose(x, ψ), c, ranges[i], tol, tol / r_in, 1))
+        push!(sites, BindingSite(poses[i], c, ranges[i], tol, tol / r_in, 1))
     end
 
     corners = [

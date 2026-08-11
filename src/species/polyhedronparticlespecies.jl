@@ -15,15 +15,22 @@ struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
 end
 
 """
-    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), labels=colors, encoding=:auto)
+    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), encoding=:auto)
 
 Build a particle species from the polyhedron `p`, with one binding site at each face centroid.
 
-`colors` assigns interaction colors to the binding sites, `labels` the symmetry labels that
-determine graph isomorphism. Faces sharing a label are treated as equivalent, which sets the symmetry number.
+`colors` assigns interaction colors to the binding sites, and is all that needs saying: the
+particle's symmetry follows from it, since two faces are interchangeable exactly when a
+rotation of the solid carries one onto the other and they are the same color (see
+[`siteorbits`](@ref)).
+
+So `colors=1:nfaces(p)` gives every face its own identity and a symmetry number of 1;
+`colors=fill(1, nfaces(p))` makes them all alike and recovers the solid's full rotation group;
+and colouring the caps of a cube apart from its sides leaves the subgroup that preserves that
+split.
 """
 function PolyhedronParticleSpecies(
-    p::Polyhedron{F}; colors=1:nfaces(p), labels=colors, encoding::Symbol=:auto
+    p::Polyhedron{F}; colors=1:nfaces(p), labels=nothing, encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
     length(colors) == n ||
@@ -31,22 +38,24 @@ function PolyhedronParticleSpecies(
     encoding in (:auto, :dart, :cycle) ||
         throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
 
-    usecycle = encoding === :cycle || (encoding === :auto && allunique(labels))
-    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(p; labels)
-
     rmin = inradius(p)
     rmax = bounding_radius(p)
     tol = sqrt(eps(F)) * rmax
 
     P = Pose{3,F,RotMatrix3{F}}
-    sites = Vector{BindingSite{P,F}}(undef, n)
-    for i in 1:n
+    poses = map(1:n) do i
         x = facecentroid(p, i)
         ex = facenormal(p, i)
         ez = normalize(edgemidpoint(p, i, 1) - x)
-        psi = RotMatrix3{F}(hcat(ex, cross(ez, ex), ez))
-        sites[i] = BindingSite(P(x, psi), colors[i], ranges[i], tol, tol / rmin, facegauge(p, i))
+        P(x, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
     end
+    gauges = facegauge(p)
+    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+
+    usecycle = encoding === :cycle || (encoding === :auto && allunique(labels))
+    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(p; labels)
+
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / rmin, gauges[i]) for i in 1:n]
 
     return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
         g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol

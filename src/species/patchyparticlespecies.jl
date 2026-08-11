@@ -13,10 +13,17 @@ end
 """
     PatchyParticleSpecies(g, r, poses; colors=eachindex(poses))
 
-General constructor. `g` must have one vertex per patch; vertex labels must be pre-set on
-`g`, and its automorphism group must match the symmetry of `patch_positions` — the graph is
-yours to build, but [`_check_encoding`](@ref) still verifies it describes the arrangement. Site `i` occupies graph vertex `i` (`vertices = i:i`). For truncated
-sites (multiple graph vertices per site) build the graph and `BindingSite`s manually.
+General constructor, and the expert path: you supply the graph's *structure*, one vertex per
+patch, and its automorphism group must match the symmetry of `patch_positions`.
+[`_check_encoding`](@ref) verifies that it does. Site `i` occupies graph vertex `i`
+(`vertices = i:i`); for truncated sites (several graph vertices per site) build the graph and
+`BindingSite`s by hand.
+
+Vertex labels are *not* yours to set — they are derived from `colors` and the patch geometry
+like every other species, and whatever `g` arrives with is overwritten. What the graph
+contributes is the resolution one vertex per patch can carry, which is why a patch arrangement
+with a genuine 3D rotation group cannot be encoded this way at all: a single vertex per site
+has no room for it, which is what [`dartencoding`](@ref) exists to provide.
 """
 function PatchyParticleSpecies(
     g::NautyDiGraph,
@@ -34,30 +41,37 @@ function PatchyParticleSpecies(
         BindingSite(normal_pose(patch_positions[i], patch_twists[i]), colors[i], i:i, tol, tol / r, 1) for
         i in eachindex(patch_positions, patch_twists, colors)
     ]
-    return _check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
+    ps = PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol)
+    return _check_encoding(_relabel!(ps))
 end
 
 """
-    PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
+    PatchyDisk(angles, r=1; colors=1:length(angles))
 
 A 2D disk of radius `r` with one binding site placed at each angle in `angles` (radians,
-measured counterclockwise from the +x axis). `colors` and `labels` optionally override the
-default per-site color and vertex label assignments.
+measured counterclockwise from the +x axis).
+
+`colors` assigns interaction colors to the patches, and the symmetry follows from it: two
+patches are interchangeable exactly when a rotation carries one onto the other and they are the
+same color (see [`siteorbits`](@ref)).
 """
-function PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
+function PatchyDisk(angles, r=1; colors=1:length(angles), labels=nothing)
     F = float(eltype(angles))
     r = F(r)
     n = length(angles)
     tol = sqrt(eps(F)) * r
     positions = [SVector(r * cos(F(phi)), r * sin(F(phi))) for phi in angles]
+    poses = [normal_pose(positions[i], F(0)) for i in 1:n]
+    # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
+    labels = something(labels, siteorbits(poses, ones(Int, n), collect(colors)))
 
     g, ranges = cycleencoding(n; labels)
-    sites = [BindingSite(normal_pose(positions[i], F(0)), colors[i], ranges[i], tol, tol / r, length(ranges[i])) for i in 1:n]
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1) for i in 1:n]
     return _check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
 end
 
 """
-    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), labels=colors, encoding=:auto)
+    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), encoding=:auto)
     PatchySphere(sym::Symbol, n=0, r=1; kwargs...)
 
 A 3D sphere of radius `r` carrying one patch per face of `p`, so that the patches inherit the
@@ -70,7 +84,7 @@ encoding, the labelling rules and the binding site frame convention of
 the same solid have interchangeable encodings and can share one set of `BindingRules`.
 """
 function PatchySphere(
-    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), labels=colors, encoding::Symbol=:auto
+    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), labels=nothing, encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
     length(colors) == n ||
@@ -78,23 +92,26 @@ function PatchySphere(
     encoding in (:auto, :dart, :cycle) ||
         throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
 
-    usecycle = encoding === :cycle || (encoding === :auto && allunique(labels))
-    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(p; labels)
-
     r = F(r)
     tol = sqrt(eps(F)) * r
     P = Pose{3,F,RotMatrix3{F}}
-    sites = Vector{BindingSite{P,F}}(undef, n)
-    for i in 1:n
+    poses = map(1:n) do i
         c = facecentroid(p, i)
         # On a sphere the patch normal has to be radial, so the frame is built from the
         # centroid direction and the tangential part of the direction to the first edge.
         ex = normalize(c)
         v = edgemidpoint(p, i, 1) - c
         ez = normalize(v - dot(v, ex) * ex)
-        psi = RotMatrix3{F}(hcat(ex, cross(ez, ex), ez))
-        sites[i] = BindingSite(P(r * ex, psi), colors[i], ranges[i], tol, tol / r, length(ranges[i]))
+        P(r * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
     end
+    # The patches stand in for the faces, so they inherit the faces' own symmetry.
+    gauges = facegauge(p)
+    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+
+    usecycle = encoding === :cycle || (encoding === :auto && allunique(labels))
+    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(p; labels)
+
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, gauges[i]) for i in 1:n]
     return _check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
 

@@ -38,9 +38,11 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
     color2siteloc, siteloc2color = _make_bindingsite_lookuptables(particlespecies)
 
     nsites = length(siteloc2color)
-    ncolors = length(color2siteloc)
+    # Colors index the interaction matrix, so what it has to span is the largest color, not the
+    # number of distinct ones — those differ as soon as a species leaves gaps in its colors.
+    ncolors = maximum(keys(color2siteloc))
 
-    intmat = _parse_intmat(bonds, siteloc2color)
+    intmat = _parse_intmat(bonds, siteloc2color, ncolors)
     bondlist = map(findall(intmat)) do cartidx
         (cartidx[1], cartidx[2])
     end
@@ -276,18 +278,30 @@ function _extract_nspecies(bonds::AbstractMatrix{<:Integer})
     return nspcs
 end
 
+"""
+    _adjust_labels_and_colors(particlespecies)
+
+Shift each species' colors and graph labels into disjoint global ranges, on copies, so that
+species built independently do not collide and a site's color indexes the interaction matrix
+directly.
+
+Colors are *shifted*, not renumbered per site, so sites the user gave the same color keep it:
+a color is an interaction identity, and two sites sharing one must go on bonding alike.
+Colors are shifted before labels, since recoloring a species rederives its labels.
+"""
 function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
     particlespecies = PS[copy(ps) for ps in particlespecies]
     c = 1
     l = 1
     for ps in particlespecies
+        cols = [color(bindingsites(ps, si)) for si in 1:nsites(ps)]
+        setcolors!(ps, cols .- minimum(cols) .+ c)
+        c = maximum(cols) - minimum(cols) + c + 1
+
         g = graphrep(ps)
         labs = labels(g)
         setlabels!(g, labs .- minimum(labs) .+ l)
         l = maximum(labels(g)) + 1
-
-        setcolors!(ps, collect(c:c+nsites(ps)-1))
-        c += nsites(ps)
     end
     return particlespecies
 end
@@ -308,15 +322,14 @@ function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:Partic
     return color2siteloc, siteloc2color
 end
 
-function _parse_intmat(bonds, siteloc2color)
-    return _intmat_from_bonds(bonds, siteloc2color)
+function _parse_intmat(bonds, siteloc2color, ncolors)
+    return _intmat_from_bonds(bonds, siteloc2color, ncolors)
 end
-function _parse_intmat(bonds::AbstractMatrix{<:Integer}, siteloc2color)
+function _parse_intmat(bonds::AbstractMatrix{<:Integer}, siteloc2color, ncolors)
     _checkshape(bonds)
-    return _intmat_from_bonds(eachrow(bonds), siteloc2color)
+    return _intmat_from_bonds(eachrow(bonds), siteloc2color, ncolors)
 end
-function _intmat_from_bonds(bonds, siteloc2color)
-    ncolors = length(siteloc2color)
+function _intmat_from_bonds(bonds, siteloc2color, ncolors)
     intmat = falses(ncolors, ncolors)
     for bond in bonds
         spcs1, site1, spcs2, site2 = bond

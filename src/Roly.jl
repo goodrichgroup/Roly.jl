@@ -16,7 +16,7 @@ export BindingSite, color, contact_pairing
 export Polyhedron, corners, faces, facevertices, nfaces, nedges
 export facecentroid, facecentroids, facenormal, facenormals, edgemidpoint
 export dartencoding, cycleencoding, sitegraph
-export rotationgroup, geometriclabels, site_symmetry
+export rotationgroup, geometriclabels, facegauge, siteorbits, site_symmetry
 export Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron, Pyramid, Prism, Antiprism
 
 # Particle species
