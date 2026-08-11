@@ -10,6 +10,7 @@ using NautyGraphs
     include("bindingrules.jl")
     include("polyform.jl")
     include("enumeration.jl")
+    include("environments.jl")
     include("utils.jl")
     include("ruleeditor.jl")
 

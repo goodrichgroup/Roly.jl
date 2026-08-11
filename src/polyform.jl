@@ -329,8 +329,8 @@ function lower!(poly::Polyform)
     sys = bindingrules(poly)
     nv_g = nv(graphrep(poly))
     target = zeros(Bool, nv_g)
-    visited = zeros(Bool, nv_g)
-    queue = zeros(Cint, nv_g)
+    dist = zeros(Int, nv_g)
+    queue = zeros(Int, nv_g)
 
     part = nothing
     for v in Iterators.reverse(canonical_vertices(poly))
@@ -342,7 +342,7 @@ function lower!(poly::Polyform)
         end
 
         part = particle_from_leadingvertex(poly, v)
-        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) || break
+        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, dist, queue) || break
         part = nothing
     end
     isnothing(part) && error("Internal error: no removable particle found in connected polyform. Please file an issue.")
@@ -376,6 +376,34 @@ function _remove_particle!(poly::Polyform, part::Particle)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
     return poly
+end
+
+"""
+    subpolyform(poly::Polyform, particleids)
+
+Return the sub-polyform induced by the particles `particleids`, renumbered in the given order.
+
+The particle subset is expected to be connected; bonds to removed particles are dropped and their
+sites become unbound.
+"""
+function subpolyform(poly::Polyform, particleids)
+    sys = bindingrules(poly)
+    newparticles = eltype(poly.particles)[]
+    verts = Int[]
+    lv = 1
+    for p in particleids
+        part = particles(poly, p)
+        for ov in graphvertices(part, sys)
+            push!(verts, tocanon(poly, ov))
+        end
+        push!(newparticles, typeof(part)(part.pose, lv, part.species_index))
+        lv += nv(graphrep(species(sys, part.species_index)))
+    end
+
+    g = graphrep(poly)[verts]
+    # `g` starts out in new-original vertex order, so the canon maps are the permutation itself.
+    perm, autg = nauty(g; canonize=true)
+    return typeof(poly)(g, convert(Int, autg.n), collect(Int, perm), invperm(perm), newparticles, sys)
 end
 
 function _overlap_and_contacts(

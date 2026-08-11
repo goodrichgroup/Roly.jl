@@ -23,7 +23,11 @@ export ncolors, nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, i
 
 # Polyforms
 export Polyform, nparticles, bindingrules, composition
-export bonds, bondindex, interior_edges, exterior_edges
+export bonds, bondindex, interior_edges, exterior_edges, subpolyform
+
+# Environments
+export Environment, ParticleEnvironment, BondEnvironment
+export particleenvironments, bondenvironments
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
@@ -43,6 +47,7 @@ include("bindingrules.jl")
 include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
+include("environments.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
