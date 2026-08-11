@@ -923,6 +923,64 @@ function sitestabilisers(poses, gauges, keys)
 end
 
 """
+    _recolor!(sites, g, colors)
+
+Give `sites` the interaction colors `colors`, and bring the labelling and the stabilisers back
+into step with them.
+
+A coloring is the whole statement: which sites are interchangeable follows from it and the
+geometry, and so does how many ways a partner can attach there. Leaving either behind would let
+a recolored species keep a symmetry it no longer has — the bug `setcolors!` used to have, since
+it rewrote colors alone.
+
+Labels are written through each site's `vertices`, which is sound because a species' graph is
+never canonised in place; see [`symmetrynumber`](@ref).
+
+The graph's *structure* is not rebuilt, only its labels, so a recoloring needing a different
+encoding cannot be applied in place, and the species method says so rather than leaving a
+species that misreports its own symmetry. A cube built with distinct colors is a bare 6-cycle,
+and coloring its faces alike afterwards would ask that cycle to report 24.
+"""
+function _recolor!(ps::ParticleSpecies, sites::AbstractVector{<:BindingSite}, colors)
+    # The check needs the new labelling in place to run, so apply first and undo on failure:
+    # a species left half-recolored would report a symmetry its graph does not have, which is
+    # the very thing being guarded against.
+    oldsites, oldlabels = copy(sites), copy(labels(graphrep(ps)))
+    _recolor!(sites, graphrep(ps), colors)
+    try
+        _check_encoding(ps)
+    catch err
+        err isa ArgumentError || rethrow()
+        copy!(sites, oldsites)
+        setlabels!(graphrep(ps), oldlabels)
+        throw(ArgumentError(
+            "this recoloring changes the particle's symmetry by more than its graph encoding " *
+            "can express, so it cannot be applied in place; build the species again with the " *
+            "new colors instead. ($(err.msg))"
+        ))
+    end
+    return nothing
+end
+
+function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors)
+    length(colors) == length(sites) || throw(ArgumentError("incorrect number of colors"))
+    poses = [s.pose for s in sites]
+    gauges = [s.gauge for s in sites]
+    orbits = siteorbits(poses, gauges, collect(colors))
+    stabs = sitestabilisers(poses, gauges, orbits)
+
+    labs = labels(g)
+    for i in eachindex(sites)
+        sites[i] = setstab(setcolor(sites[i], colors[i]), stabs[i])
+        for v in sites[i].vertices
+            labs[v] = orbits[i]
+        end
+    end
+    setlabels!(g, labs)
+    return nothing
+end
+
+"""
     _check_labelling(ps::ParticleSpecies)
 
 Throw unless `ps`'s labelling is at least as fine as its coloring: sites sharing a label must

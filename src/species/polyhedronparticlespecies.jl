@@ -38,7 +38,7 @@ every orientation the face geometrically permits: a triangular prism with square
 allows the neighbour stood on its side. See [`nregistrations`](@ref).
 """
 function PolyhedronParticleSpecies(
-    p::Polyhedron{F}; colors=1:nfaces(p), labels=nothing, locking=true, encoding::Symbol=:auto
+    p::Polyhedron{F}; colors=1:nfaces(p), locking=true, encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
     length(colors) == n ||
@@ -59,7 +59,7 @@ function PolyhedronParticleSpecies(
     fs = faces(p)
     poses = _faceposes(p, fs)
     gauges = facegauge(p)
-    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    labels = siteorbits(poses, gauges, collect(colors))
     fs = _propagate_faces(corners(p), fs, labels)
     poses = _faceposes(p, fs)
     stabs = sitestabilisers(poses, gauges, labels)
@@ -132,10 +132,7 @@ shape(ps::PolyhedronParticleSpecies) = ps.shape
 corners(ps::PolyhedronParticleSpecies) = corners(ps.shape)
 
 function setcolors!(p::PolyhedronParticleSpecies, colors::AbstractVector{<:Integer})
-    length(colors) != nsites(p) && throw(ArgumentError("incorrect number of colors"))
-    for k in eachindex(p.sites)
-        p.sites[k] = setcolor(p.sites[k], colors[k])
-    end
+    _recolor!(p, p.sites, colors)
     return nothing
 end
 

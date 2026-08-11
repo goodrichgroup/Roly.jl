@@ -115,6 +115,11 @@ The symmetry number is equal to the size of the automorphism group
 of `graphrep(p)`.
 """
 function symmetrynumber(p::ParticleSpecies)
+    # Deliberately without `canonize`: a species' graph must stay in construction order, since
+    # `BindingSite.vertices` indexes it directly and `bindingsites(::Particle, …)` reaches those
+    # vertices by shifting the range by a leading vertex. Reordering here would silently
+    # decouple the two. Canonical order belongs to `Polyform`, which canonises its own *copy*
+    # and keeps `canon2orig` to translate.
     _, autg = nauty(graphrep(p))
     return convert(Int, autg.n)
 end

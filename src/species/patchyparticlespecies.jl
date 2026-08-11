@@ -60,7 +60,7 @@ measured counterclockwise from the +x axis).
 patches are interchangeable exactly when a rotation carries one onto the other and they are the
 same color (see [`siteorbits`](@ref)).
 """
-function PatchyDisk(angles, r=1; colors=1:length(angles), labels=nothing)
+function PatchyDisk(angles, r=1; colors=1:length(angles))
     F = float(eltype(angles))
     r = F(r)
     n = length(angles)
@@ -69,7 +69,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles), labels=nothing)
     poses = [normal_pose(positions[i], F(0)) for i in 1:n]
     # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
     gauges = ones(Int, n)
-    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    labels = siteorbits(poses, gauges, collect(colors))
     stabs = sitestabilisers(poses, gauges, labels)
 
     g, ranges = cycleencoding(n; labels)
@@ -78,7 +78,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles), labels=nothing)
 end
 
 """
-    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), encoding=:auto)
+    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, encoding=:auto)
     PatchySphere(sym::Symbol, n=0, r=1; kwargs...)
 
 A 3D sphere of radius `r` carrying one patch per face of `p`, so that the patches inherit the
@@ -91,7 +91,7 @@ encoding, the labelling rules and the binding site frame convention of
 the same solid have interchangeable encodings and can share one set of `BindingRules`.
 """
 function PatchySphere(
-    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), labels=nothing, locking=true,
+    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), locking=true,
     encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
@@ -120,7 +120,7 @@ function PatchySphere(
     poses = patchposes(fs)
     # The patches stand in for the faces, so they inherit the faces' own symmetry.
     gauges = facegauge(p)
-    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    labels = siteorbits(poses, gauges, collect(colors))
     fs = _propagate_faces(corners(p), fs, labels)
     poses = patchposes(fs)
     stabs = sitestabilisers(poses, gauges, labels)
@@ -151,10 +151,7 @@ bindingsites(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
 isconvex(::PatchyParticleSpecies) = true
 
 function setcolors!(ps::PatchyParticleSpecies, colors::AbstractVector{<:Integer})
-    length(colors) != nsites(ps) && throw(ArgumentError("incorrect number of colors"))
-    for k in eachindex(ps.sites)
-        ps.sites[k] = setcolor(ps.sites[k], colors[k])
-    end
+    _recolor!(ps, ps.sites, colors)
     return nothing
 end
 

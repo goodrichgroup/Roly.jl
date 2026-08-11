@@ -26,7 +26,7 @@ the other and they are the same color (see [`siteorbits`](@ref)).
 So the default `colors=1:n` gives every edge its own identity and a symmetry number of 1, while
 `colors=fill(1, n)` makes all edges the same sticky stuff and gives the full `n`.
 """
-function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=nothing) where {F<:Real}
+function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real}
     r_in = convert(F, 0.5a * cot(π / n))
     r_out = convert(F, 0.5a * csc(π / n))
 
@@ -38,7 +38,7 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=nothing
     # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout, and with
     # it the stabiliser: the only rotation fixing a site is the identity.
     gauges = ones(Int, n)
-    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    labels = siteorbits(poses, gauges, collect(colors))
     stabs = sitestabilisers(poses, gauges, labels)
 
     g, ranges = cycleencoding(n; labels)
@@ -70,10 +70,7 @@ graphrep(p::PolygonParticleSpecies) = p.g
 nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer})
-    length(colors) != nsites(p) && throw(ArgumentError("incorrect number of colors"))
-    for k in eachindex(p.sites)
-        p.sites[k] = setcolor(p.sites[k], colors[k])
-    end
+    _recolor!(p, p.sites, colors)
     return nothing
 end
 

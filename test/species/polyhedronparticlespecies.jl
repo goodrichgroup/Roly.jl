@@ -235,10 +235,37 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     @test color(bindingsites(ps, 5)) == 5
 
     cp = copy(ps)
-    setcolors!(cp, fill(10, 6))
-    @test color(bindingsites(cp, 1)) == 10
+    # A recoloring that groups the sites the same way needs no new graph, so it applies in place.
+    setcolors!(cp, [30, 10, 40, 10, 50, 90])
+    @test color(bindingsites(cp, 1)) == 30
     @test color(bindingsites(ps, 1)) == 3          # the copy is independent
     @test_throws ArgumentError setcolors!(cp, [1, 2])
+
+    # One that groups them differently does need a new graph. This cube's colors are nearly all
+    # distinct, so it was built as a bare 6-cycle; making every face alike would ask that cycle
+    # to report the full 24, which it cannot. Refused, rather than left misreporting itself.
+    @test symmetrynumber(cp) == symmetrynumber(ps) == 1
+    @test_throws ArgumentError setcolors!(cp, fill(10, 6))
+    @test symmetrynumber(cp) == 1                  # and the failed call leaves it untouched
+    @test [color(bindingsites(cp, i)) for i in 1:6] == [30, 10, 40, 10, 50, 90]
+    # Built with those colors from the start, it is the dart encoding and the symmetry is there.
+    @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(10, 6))) == 24
+
+    # A coloring is the whole statement, so recoloring has to carry the labelling and the
+    # stabilisers with it. Given a graph roomy enough to hold the result -- here the dart
+    # encoding, asked for explicitly -- a prism whose faces all start out distinct can be
+    # recolored into its full D_3 and the derived quantities follow.
+    prism = PolyhedronParticleSpecies(Prism(3, 1.0; h=2.0); colors=1:5, encoding=:dart)
+    @test symmetrynumber(prism) == site_symmetry(prism) == 1
+    @test Roly.sitestabilisers(prism) == fill(1, 5)
+
+    caps = [i for i in 1:5 if abs(Roly.facenormal(Prism(3, 1.0; h=2.0), i)[3]) > 1e-8]
+    setcolors!(prism, [i in caps ? 7 : 8 for i in 1:5])
+    @test symmetrynumber(prism) == site_symmetry(prism) == 6
+    # Caps are 3-fold about their normals and the prism is 3-fold about them; the rectangular
+    # sides are 2-fold and so is the prism about those.
+    @test [Roly.bindingsites(prism, i).stab for i in 1:5] == [i in caps ? 3 : 2 for i in 1:5]
+    @test length(unique(Roly.labels(graphrep(prism)))) == 2
 
     id = Pose{3,Float64,RotMatrix3{Float64}}(SVector(0.0, 0.0, 0.0), one(RotMatrix3{Float64}))
     shifted(d, R=one(RotMatrix3{Float64})) =

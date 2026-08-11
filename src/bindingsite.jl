@@ -80,6 +80,9 @@ Base.:*(site::BindingSite, p) = _respecify(site, site.pose * p, site.color, site
 @inline shift_vertices(site::BindingSite, v::Integer) = _respecify(site, site.pose, site.color, site.vertices .+ v)
 @inline shift_color(site::BindingSite, c::Integer) = _respecify(site, site.pose, site.color + c, site.vertices)
 @inline setcolor(site::BindingSite, c::Integer) = _respecify(site, site.pose, c, site.vertices)
+@inline setstab(site::BindingSite, s::Integer) =
+    typeof(site)(site.pose, site.color, site.vertices, site.touching_tolerance,
+                 site.alignment_tolerance, site.gauge, s, site.locking)
 posetype(::BindingSite{P}) where P = P
 posetype(::Type{<:BindingSite{P}}) where P = P
 
