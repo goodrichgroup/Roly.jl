@@ -31,7 +31,7 @@ function PatchyParticleSpecies(
 
     tol = sqrt(eps(F)) * r
     sites = [
-        BindingSite(normal_pose(patch_positions[i], patch_twists[i]), colors[i], i:i, tol, tol / r) for
+        BindingSite(normal_pose(patch_positions[i], patch_twists[i]), colors[i], i:i, tol, tol / r, 1) for
         i in eachindex(patch_positions, patch_twists, colors)
     ]
     return _check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
@@ -52,7 +52,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
     positions = [SVector(r * cos(F(phi)), r * sin(F(phi))) for phi in angles]
 
     g, ranges = cycleencoding(n; labels)
-    sites = [BindingSite(normal_pose(positions[i], F(0)), colors[i], ranges[i], tol, tol / r) for i in 1:n]
+    sites = [BindingSite(normal_pose(positions[i], F(0)), colors[i], ranges[i], tol, tol / r, length(ranges[i])) for i in 1:n]
     return _check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
 end
 
@@ -93,7 +93,7 @@ function PatchySphere(
         v = edgemidpoint(p, i, 1) - c
         ez = normalize(v - dot(v, ex) * ex)
         psi = RotMatrix3{F}(hcat(ex, cross(ez, ex), ez))
-        sites[i] = BindingSite(P(r * ex, psi), colors[i], ranges[i], tol, tol / r)
+        sites[i] = BindingSite(P(r * ex, psi), colors[i], ranges[i], tol, tol / r, length(ranges[i]))
     end
     return _check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
@@ -118,7 +118,7 @@ function setcolors!(ps::PatchyParticleSpecies, colors::AbstractVector{<:Integer}
     length(colors) != nsites(ps) && throw(ArgumentError("incorrect number of colors"))
     for k in eachindex(ps.sites)
         s = ps.sites[k]
-        ps.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance)
+        ps.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance, s.gauge)
     end
     return nothing
 end

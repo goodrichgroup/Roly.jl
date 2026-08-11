@@ -94,6 +94,20 @@
          rules(Prism(6), unique([minmax(i, opposite(Prism(6), i)) for i in sidefaces(Prism(6))]),
                geometriclabels(Prism(6))),
          [1, 1, 3, 7, 22, 82, 333]),
+        # The same two tilings with h != a, so the side faces are rectangles rather than
+        # squares. Nothing about the tiling changes, but a rectangle is only 2-fold about its
+        # normal where a square is 4-fold, so these are the cases that stay planar once bonds
+        # are allowed in every registration a face admits. Baseline for that change.
+        ("polyiamonds, tall prism",
+         rules(Prism(3, 1.0; h=2.0), [(i, i) for i in sidefaces(Prism(3, 1.0; h=2.0))],
+               geometriclabels(Prism(3, 1.0; h=2.0))),
+         [1, 1, 1, 3, 4, 12, 24]),
+        ("polyhexes, tall prism",
+         rules(Prism(6, 1.0; h=2.0),
+               unique([minmax(i, opposite(Prism(6, 1.0; h=2.0), i))
+                       for i in sidefaces(Prism(6, 1.0; h=2.0))]),
+               geometriclabels(Prism(6, 1.0; h=2.0))),
+         [1, 1, 3, 7, 22, 82, 333]),
     ]
 
     for (name, sys, want) in lattice_animals

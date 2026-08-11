@@ -395,6 +395,37 @@ function geometriclabels(p::Polyhedron)
     return labels
 end
 
+"""
+    facegauge(p::Polyhedron, i)
+    facegauge(p::Polyhedron)
+
+Return the order of face `i`'s own rotational symmetry about its outward normal, or one entry
+per face.
+
+This is the `gauge` of a binding site placed on that face: a face invariant under turns of
+`2π/gauge` has that many equally good twist references, so nothing about the particle in
+isolation may depend on which was picked. It divides the face degree and equals it only for a
+regular face — a rectangular face has degree 4 but gauge 2.
+
+It is a property of the face alone, not of the solid it belongs to. A triangular prism is only
+2-fold about a square side face, but the face is still a square, so its gauge is 4.
+"""
+function facegauge(p::Polyhedron{F}, i::Integer) where {F}
+    f = facevertices(p, i)
+    k = length(f)
+    c = facecentroid(p, i)
+    nrm = facenormal(p, i)
+    rel = [corners(p)[v] - c for v in f]
+    atol = sqrt(eps(F)) * maximum(norm, rel)
+    # A rotational symmetry of a k-gon shifts its corner ring cyclically, and the shift by s is
+    # realized by the turn 2πs/k about the normal.
+    return count(0:(k - 1)) do s
+        R = AngleAxis(2F(π) * s / k, nrm[1], nrm[2], nrm[3])
+        all(j -> isapprox(R * rel[j], rel[mod1(j + s, k)]; atol), 1:k)
+    end
+end
+facegauge(p::Polyhedron) = [facegauge(p, i) for i in 1:nfaces(p)]
+
 function Base.show(io::Core.IO, p::Polyhedron)
     return print(io, "Polyhedron[v=$(ncorners(p)), e=$(nedges(p)), f=$(nfaces(p))]")
 end
@@ -661,38 +692,64 @@ end
 ################################################################################
 
 """
+    _siteturns(psi, gauge)
+
+The `gauge` orientations a site is indistinguishable between: turns by `2π/gauge` about its
+own outward normal, which `normal_pose` puts on the site's local x axis.
+
+In 2D there is no rotation about an in-plane axis, so a site has exactly one orientation and
+this is a singleton by construction rather than by arithmetic.
+"""
+_siteturns(psi::Rotation{3,F}, gauge::Integer) where {F} =
+    (psi * RotX(F(2π) * m / gauge) for m in 0:(gauge - 1))
+_siteturns(psi::Rotation{2}, ::Integer) = (psi,)
+
+"""
     site_symmetry(ps::ParticleSpecies)
 
-Return the number of rotations that permute the binding sites of `ps` while preserving their symmetry labels.
+Return the number of rotations about the particle origin that map every binding site of `ps`
+onto a binding site with the same symmetry label, matching orientation as well as position.
 
-Return `nothing` if the arrangement's symmetry is continuous rather than finite, which
-happens when every site direction is collinear (one site, or two antipodal ones).
+Frames need only agree up to the receiving site's own turns, see [`_siteturns`](@ref).
+Demanding them on the nose would report 6 for a cube rather than 24, since a quarter turn
+about a face normal maps that face to itself but sends its first dart to the second.
+
+The turn count comes from each site's `gauge`, never from its graph vertex count. Those
+coincide for the dart encoding, where a face gets one vertex per dart *because* it is that
+symmetric, but taking the vertex count would let an encoding certify itself: one vertex per
+face declares a pentagonal base 1-fold, exact frame matching then returns 1, the graph also
+says 1, and a combination that should be rejected passes.
+
+A rotation is pinned by where it sends one site's frame, so every symmetry arises from exactly
+one `(site, turn)` pair that could receive site 1. That also means the answer is always finite:
+a frame has no continuous stabiliser, so even a single site, or two antipodal ones, give a
+definite count.
 """
 function site_symmetry(ps::ParticleSpecies)
     n = nsites(ps)
-    xs = [bindingsites(ps, i).pose.x for i in 1:n]
+    poses = [bindingsites(ps, i).pose for i in 1:n]
+    ks = [bindingsites(ps, i).gauge for i in 1:n]
     labs = [labels(graphrep(ps))[first(bindingsites(ps, i).vertices)] for i in 1:n]
-    atol = sqrt(eps(numtype(ps))) * maximum(norm, xs)
 
-    permutes_sites(Q) = all(1:n) do i
-        any(j -> labs[j] == labs[i] && isapprox(Q * xs[i], xs[j]; atol), 1:n)
+    tol = sqrt(eps(numtype(ps)))
+    atol = tol * maximum(norm(p.x) for p in poses)
+
+    maps_sites(Q) = all(1:n) do i
+        any(1:n) do j
+            labs[j] == labs[i] &&
+                isapprox(Q * poses[i].x, poses[j].x; atol) &&
+                any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _siteturns(poses[j].psi, ks[j]))
+        end
     end
 
-    if dimension(ps) == 2
-        siteangle(i) = atan(xs[i][2], xs[i][1])
-        return count(a -> labs[a] == labs[1] && permutes_sites(Angle2d(siteangle(a) - siteangle(1))), 1:n)
+    sym = 0
+    for a in 1:n
+        labs[a] == labs[1] || continue
+        for psi in _siteturns(poses[a].psi, ks[a])
+            maps_sites(psi * inv(poses[1].psi)) && (sym += 1)
+        end
     end
-
-    frame(i, j) = (u = normalize(xs[i]); w = normalize(cross(xs[i], xs[j])); hcat(u, w, cross(u, w)))
-    b = findfirst(i -> norm(cross(xs[1], xs[i])) > atol, 1:n)
-    isnothing(b) && return nothing        # collinear: a whole axis of rotations preserves it
-    F = frame(1, b)
-
-    return count(Iterators.product(1:n, 1:n)) do (a, c)
-        labs[a] == labs[1] && labs[c] == labs[b] || return false
-        norm(cross(xs[a], xs[c])) > atol || return false
-        return permutes_sites(frame(a, c) * transpose(F))
-    end
+    return sym
 end
 
 """
@@ -706,13 +763,9 @@ particle, and it does *not* follow from having used [`cycleencoding`](@ref) or
 large a symmetry number merges structures that are really distinct; too small a one splits
 structures that are really the same. Both corrupt enumeration silently, so the species
 constructors that build their own graph check here instead.
-
-Skipped when [`site_symmetry`](@ref) is `nothing`, i.e. when the arrangement's symmetry is
-continuous and no finite graph can represent it.
 """
 function _check_encoding(ps::ParticleSpecies)
     geometric = site_symmetry(ps)
-    isnothing(geometric) && return ps
     graph = symmetrynumber(ps)
     graph == geometric || throw(ArgumentError(
         "graph encoding claims a symmetry number of $graph, but the binding sites of this " *

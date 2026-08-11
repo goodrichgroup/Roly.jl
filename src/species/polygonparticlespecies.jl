@@ -36,7 +36,7 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=colors)
     for (i, c) in enumerate(colors)
         ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
         x = SVector{2,F}(pol2cart(r_in, rotation_angle(ψ)))
-        push!(sites, BindingSite(Pose(x, ψ), c, ranges[i], tol, tol / r_in))
+        push!(sites, BindingSite(Pose(x, ψ), c, ranges[i], tol, tol / r_in, 1))
     end
 
     corners = [
@@ -65,7 +65,7 @@ function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer}
     length(colors) != nsites(p) && throw(ArgumentError("incorrect number of colors"))
     for k in eachindex(p.sites)
         s = p.sites[k]
-        p.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance)
+        p.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance, s.gauge)
     end
     return nothing
 end

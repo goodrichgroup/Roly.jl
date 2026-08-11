@@ -6,6 +6,37 @@ A `BindingSite` describes an anchor point at which particles can be attached tog
 The binding site color, together with an interaction matrix, determines whether two
 binding sites may bind. One binding site may be represented by multiple contiguous
 graph vertices and particle/polyform graph representation.
+
+`gauge` is the order of the site's *own* rotational symmetry about its outward normal; see the
+note below.
+
+!!! note "What a binding site's orientation means"
+    A site's pose carries three things, and they do not have the same status. Its position and
+    its outward normal — the pose's local x axis — are physical. The remaining freedom in the
+    frame, the *twist reference*, is not: a site with a `gauge`-fold symmetry is unchanged by
+    turns of `2π/gauge` about its normal, so `psi`, `psi·Rx(2π/gauge)`, … all describe the same
+    site. A square polyhedron face is such a site; a patch is one when the model resolves it
+    into several graph vertices.
+
+    Two counts meet here and are worth keeping apart. `gauge` is the *site's* symmetry. How
+    much of it the whole particle keeps — the site's stabiliser in the particle's rotation
+    group — is a different, smaller number. A triangular prism is only 2-fold about a square
+    side face, yet the face is still a square, so its `gauge` is 4. `gauge` is the count stored
+    here because it is what [`site_symmetry`](@ref) needs: asking whether a rotation carries
+    face *i* onto face *j* must not depend on which edge was called first, and the stabiliser
+    would reject genuine symmetries, since a rotation can carry one face's first dart onto
+    another face's second.
+
+    The twist reference becomes observable only through [`standard_offset`](@ref), which of the
+    orientations two sites could meet in recognises exactly one — fixed by the two sites' twist
+    references *relative to each other*. The individual choices mean nothing; the relative
+    choices across a particle's sites are its bond registry, and decide how orientation is
+    transported along a chain of bonds, hence which rings close. That is a modelling choice,
+    not a fact about the shape, and no symmetry check can validate it. Nor is there a canonical
+    choice to be had: for the Platonic solids the rotation group acts freely and transitively
+    on darts, so the orbit of any one dart is *every* dart and no symmetric assignment of one
+    per face exists. Every convention breaks the symmetry; the only question is whether it
+    breaks it the way the intended lattice needs.
 """
 struct BindingSite{P<:Pose, F<:Real}
     pose::P
@@ -13,20 +44,23 @@ struct BindingSite{P<:Pose, F<:Real}
     vertices::UnitRange{Int}
     touching_tolerance::F
     alignment_tolerance::F
+    gauge::Int
 end
 function BindingSite(pose::P, color::Integer, vertices::UnitRange{<:Integer},
-                     touching_tolerance::Real, alignment_tolerance::Real) where {P<:Pose}
+                     touching_tolerance::Real, alignment_tolerance::Real,
+                     gauge::Integer=1) where {P<:Pose}
     F = eltype(P)
-    return BindingSite{P,F}(pose, color, vertices, convert(F, touching_tolerance), convert(F, alignment_tolerance))
+    return BindingSite{P,F}(pose, color, vertices, convert(F, touching_tolerance),
+                            convert(F, alignment_tolerance), gauge)
 end
 
 Base.:(==)(b1::BindingSite, b2::BindingSite) = b1.vertices == b2.vertices && b1.color == b2.color
 Base.hash(b::BindingSite, h::UInt) = hash(b.color, hash(b.vertices, h))
 Base.isless(b1::BindingSite, b2::BindingSite) = isless(b1.vertices, b2.vertices)
-Base.:*(p, site::BindingSite) = typeof(site)(p * site.pose, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance)
-Base.:*(site::BindingSite, p) = typeof(site)(site.pose * p, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance)
-@inline shift_vertices(site::BindingSite, v::Integer) = typeof(site)(site.pose, site.color, site.vertices .+ v, site.touching_tolerance, site.alignment_tolerance)
-@inline shift_color(site::BindingSite, c::Integer) = typeof(site)(site.pose, site.color + c, site.vertices, site.touching_tolerance, site.alignment_tolerance)
+Base.:*(p, site::BindingSite) = typeof(site)(p * site.pose, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance, site.gauge)
+Base.:*(site::BindingSite, p) = typeof(site)(site.pose * p, site.color, site.vertices, site.touching_tolerance, site.alignment_tolerance, site.gauge)
+@inline shift_vertices(site::BindingSite, v::Integer) = typeof(site)(site.pose, site.color, site.vertices .+ v, site.touching_tolerance, site.alignment_tolerance, site.gauge)
+@inline shift_color(site::BindingSite, c::Integer) = typeof(site)(site.pose, site.color + c, site.vertices, site.touching_tolerance, site.alignment_tolerance, site.gauge)
 posetype(::BindingSite{P}) where P = P
 posetype(::Type{<:BindingSite{P}}) where P = P
 

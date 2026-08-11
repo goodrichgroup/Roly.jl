@@ -45,7 +45,7 @@ function PolyhedronParticleSpecies(
         ex = facenormal(p, i)
         ez = normalize(edgemidpoint(p, i, 1) - x)
         psi = RotMatrix3{F}(hcat(ex, cross(ez, ex), ez))
-        sites[i] = BindingSite(P(x, psi), colors[i], ranges[i], tol, tol / rmin)
+        sites[i] = BindingSite(P(x, psi), colors[i], ranges[i], tol, tol / rmin, facegauge(p, i))
     end
 
     return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
@@ -93,7 +93,7 @@ function setcolors!(p::PolyhedronParticleSpecies, colors::AbstractVector{<:Integ
     length(colors) != nsites(p) && throw(ArgumentError("incorrect number of colors"))
     for k in eachindex(p.sites)
         s = p.sites[k]
-        p.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance)
+        p.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance, s.gauge)
     end
     return nothing
 end
