@@ -2,6 +2,7 @@ using Test
 using Roly
 using Rotations, StaticArrays, LinearAlgebra, Random
 using NautyGraphs
+using CairoMakie
 
 @testset verbose=true "Roly" begin
     include("pose.jl")
@@ -12,6 +13,7 @@ using NautyGraphs
     include("polyform.jl")
     include("enumeration.jl")
     include("utils.jl")
+    include("plotting.jl")
 
     @testset verbose=true "species" begin
         include("species/polygonparticlespecies.jl")

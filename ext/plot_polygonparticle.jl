@@ -5,7 +5,7 @@ function plot_particlespecies!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=P
     a = 2spcs.rmin * tan(π / n)
     isnothing(cornerradius) && (cornerradius = 0.2a)
 
-    _, _, colors = _resolve_colors(spcs, species_index, sys, site_color)
+    _, _, colors, _ = _resolve_colors(spcs, species_index, sys, site_color)
     return _draw_ngon!(ax, pose.x[1], pose.x[2], rotation_angle(pose.psi);
                        n, a, cornerradius, color=colors, strokewidth, kwargs...)
 end

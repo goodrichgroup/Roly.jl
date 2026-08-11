@@ -1,68 +1,84 @@
 """
-    _shrunkface(p::Polyhedron, i, pose, shrink)
+    _faceloop(p::Polyhedron, i, pose)
 
-The corners of face `i`, transformed by `pose` and pulled towards the face centroid by the
-fraction `shrink`. Shrinking leaves a visible seam between neighboring faces, which is what
-keeps the per-site coloring readable once several particles are drawn side by side.
+The corners of face `i` of `p`, transformed by `pose`, in winding order.
 """
-function _shrunkface(p::Polyhedron, i::Integer, pose::Pose, shrink::Real)
-    c = facecentroid(p, i)
-    return [Point3f(pose * (c + (1 - shrink) * (corners(p)[v] - c))) for v in facevertices(p, i)]
+function _faceloop(p::Polyhedron, i::Integer, pose::Pose)
+    return [Point3f(pose * corners(p)[v]) for v in facevertices(p, i)]
 end
 
 """
-    _facemesh(p::Polyhedron, pose, shrink, colors)
+    _facemesh!(pts, tris, ptcolors, p::Polyhedron, pose, colors, border, bordercolors)
 
-Triangulate every face of `p` as a fan around its centroid, giving all points of a face that
-face's color. Returns the point list, an `ntriangles × 3` index matrix, and the point colors.
+Append the triangulation of `p` at `pose` to the given buffers: every face is drawn in its own
+color, with a rim band of `bordercolors` covering the outer `border` fraction of the face.
+
+Each face is a fan around its centroid out to an inner ring, plus a band of quads from that
+ring to the true corners. The outer boundary is the face's real corners, so the solid stays
+closed and adjacent faces meet exactly; the band only recolors the outer sliver.
+
+The outline is part of the mesh rather than a separate `linesegments!` on purpose. A backend
+that composites plot by plot — CairoMakie — draws a separate line plot over the whole mesh
+regardless of depth, so outlines on the far side of a solid would show through. Inside the
+mesh the band is sorted with the triangles it belongs to.
 """
-function _facemesh(p::Polyhedron, pose::Pose, shrink::Real, colors)
-    pts = Point3f[]
-    ptcolors = similar(colors, 0)
-    tris = Matrix{Int}(undef, sum(i -> length(facevertices(p, i)), 1:nfaces(p)), 3)
-
-    t = 0
+function _facemesh!(pts, tris, ptcolors, p::Polyhedron, pose::Pose, colors, border::Real, bordercolors)
     for i in 1:nfaces(p)
-        rim = _shrunkface(p, i, pose, shrink)
+        rim = _faceloop(p, i, pose)
+        n = length(rim)
+        c = Point3f(pose * facecentroid(p, i))
+        inner = [c + (1 - border) * (r - c) for r in rim]
+
+        # Centroid, then the inner ring in the face color; then a second copy of the inner
+        # ring and the true corners in the border color. The ring is duplicated so the band
+        # has a crisp edge instead of a gradient into the face color.
         base = length(pts)
-        push!(pts, Point3f(pose * facecentroid(p, i)))
+        push!(pts, c)
+        append!(pts, inner)
+        append!(ptcolors, fill(colors[i], n + 1))
+        append!(pts, inner)
         append!(pts, rim)
-        append!(ptcolors, fill(colors[i], length(rim) + 1))
-        for k in eachindex(rim)
-            t += 1
-            tris[t, :] .= (base + 1, base + 1 + k, base + 1 + mod1(k + 1, length(rim)))
+        append!(ptcolors, fill(bordercolors[i], 2n))
+
+        fan(k) = base + 1 + k
+        dup(k) = base + 1 + n + k
+        out(k) = base + 1 + 2n + k
+        for k in 1:n
+            k2 = mod1(k + 1, n)
+            push!(tris, (base + 1, fan(k), fan(k2)))
+            push!(tris, (dup(k), out(k), out(k2)))
+            push!(tris, (dup(k), out(k2), dup(k2)))
         end
     end
-    return pts, tris, ptcolors
+    return nothing
 end
 
-function plot_particlespecies!(
-    ax,
+function particlemesh(
     spcs::PolyhedronParticleSpecies{F},
     pose::Pose=Pose{3,F}();
     site_color=nothing,
     species_index=nothing,
     sys=nothing,
-    shrink=0.04,
-    strokewidth=1.5,
-    strokecolor=:black,
-    kwargs...,
+    alpha=0.8,
+    border=0.035,
 ) where {F}
-    _, _, colors = _resolve_colors(spcs, species_index, sys, site_color)
-    p = shape(spcs)
+    _, _, colors, _ = _resolve_colors(
+        spcs, species_index, sys, site_color; bond_tint=FACE_TINT, inert_color=nothing
+    )
+    facecolors = [RGBAf(c, alpha) for c in colors]
+    bordercolors = [RGBAf(_shade(c, 0.35), alpha) for c in colors]
 
-    pts, tris, ptcolors = _facemesh(p, pose, shrink, colors)
-    mesh!(ax, pts, tris; color=ptcolors, kwargs...)
+    pts, tris, ptcolors = Point3f[], NTuple{3,Int}[], RGBAf[]
+    _facemesh!(pts, tris, ptcolors, shape(spcs), pose, facecolors, border, bordercolors)
+    return pts, tris, ptcolors
+end
 
-    if strokewidth > 0
-        segs = Point3f[]
-        for i in 1:nfaces(p)
-            rim = _shrunkface(p, i, pose, shrink)
-            for k in eachindex(rim)
-                push!(segs, rim[k], rim[mod1(k + 1, length(rim))])
-            end
-        end
-        linesegments!(ax, segs; color=strokecolor, linewidth=strokewidth)
-    end
+function plot_particlespecies!(
+    ax, spcs::PolyhedronParticleSpecies{F}, pose::Pose=Pose{3,F}(); shading=NoShading, kwargs...
+) where {F}
+    pts, tris, ptcolors = particlemesh(spcs, pose; kwargs...)
+    # Flat shading, because the point of the pale tints is that a face's color identifies it.
+    # Diffuse lighting would darken faces by their orientation and swamp that.
+    mesh!(ax, pts, _facematrix(tris); color=ptcolors, shading)
     return nothing
 end
