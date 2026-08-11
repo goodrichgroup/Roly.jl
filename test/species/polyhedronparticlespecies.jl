@@ -134,6 +134,49 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
         @test symmetrynumber(sphere) == site_symmetry(sphere) == order
     end
 
+    ### Site stabilisers
+    # How much of a site's own symmetry the whole particle keeps. At most its gauge, and the
+    # ratio is how many distinct ways a partner can attach there: turns in the stabiliser put
+    # the same body in the same place with only its sites permuted.
+    gauges(ps) = [bindingsites(ps, i).gauge for i in 1:nsites(ps)]
+    registrations(ps) = gauges(ps) .÷ Roly.sitestabilisers(ps)
+
+    # A cube keeps all four turns about a face normal, so a face-to-face bond has one
+    # registration and nothing changes for polycubes.
+    cube = PolyhedronParticleSpecies(Cube(); labels=fill(1, 6))
+    @test gauges(cube) == fill(4, 6)
+    @test Roly.sitestabilisers(cube) == fill(4, 6)
+    @test registrations(cube) == fill(1, 6)
+
+    # Distinguishing the caps costs the side faces two of those turns, since a quarter turn
+    # about a side normal carries the other sides onto caps.
+    caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in Roly.facenormals(Cube())]
+    capped = PolyhedronParticleSpecies(Cube(); labels=caps)
+    @test Roly.sitestabilisers(capped) == [c == 2 ? 4 : 2 for c in caps]
+    @test registrations(capped) == [c == 2 ? 1 : 2 for c in caps]
+
+    # The case the registration story turns on. A triangular prism's side faces are squares
+    # when h == a — gauge 4 — but the prism is only 2-fold about them, so a partner can attach
+    # two ways: in the plane, or tipped out of it.
+    tri = PolyhedronParticleSpecies(Prism(3); labels=geometriclabels(Prism(3)))
+    @test gauges(tri) == [3, 4, 4, 4, 3]
+    @test Roly.sitestabilisers(tri) == [3, 2, 2, 2, 3]
+    @test registrations(tri) == [1, 2, 2, 2, 1]
+
+    # Make the prism taller and those faces are rectangles: gauge and stabiliser agree at 2,
+    # leaving a single registration. This is why the tall prisms stay planar.
+    tall = Prism(3, 1.0; h=2.0)
+    tallps = PolyhedronParticleSpecies(tall; labels=geometriclabels(tall))
+    @test gauges(tallps) == [3, 2, 2, 2, 3]
+    @test registrations(tallps) == fill(1, 5)
+
+    # A stabiliser always divides the gauge, and always divides the symmetry number.
+    for ps in (cube, capped, tri, tallps, UnitDodecahedron, UnitAntiprism(4))
+        stabs = Roly.sitestabilisers(ps)
+        @test all(gauges(ps) .% stabs .== 0)
+        @test all(symmetrynumber(ps) .% stabs .== 0)
+    end
+
     # And it has teeth. Declaring a pyramid's base equivalent to its sides claims the
     # tetrahedral 12 for an arrangement that only has 3.
     @test_throws ArgumentError PolyhedronParticleSpecies(Pyramid(3); labels=fill(1, 4))

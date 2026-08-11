@@ -801,6 +801,29 @@ function siteorbits(poses, gauges, colors)
 end
 
 """
+    sitestabilisers(ps::ParticleSpecies)
+
+Return, per site, how many of the particle's own symmetries leave that site where it is.
+
+Where [`site_symmetry`](@ref) counts all of them, this counts the ones fixing each site — the
+turns about that site's normal that carry the whole particle onto itself. It is at most the
+site's `gauge`, and usually less: a triangular prism is 2-fold about a square side face, so
+that face has gauge 4 but a stabiliser of 2, while a cube's face has both equal to 4.
+
+The difference is what decides how many *distinct* ways a partner can attach there. Turns in
+the stabiliser put the same body in the same place with only its sites permuted, so they give
+nothing new; the rest are genuinely different attachments.
+
+Keyed on the graph's labels rather than on colors, because that is what decides whether two
+assemblies are the same structure — the enumeration merges by canonical form, so a colour
+difference finer than the labelling is invisible to it anyway.
+"""
+function sitestabilisers(ps::ParticleSpecies)
+    perms = _site_symmetries(_sitedata(ps)...)
+    return [count(perm -> perm[i] == i, perms) for i in 1:nsites(ps)]
+end
+
+"""
     _relabel!(ps::ParticleSpecies)
 
 Rederive `ps`'s graph labels from its site colors and geometry, in place.
