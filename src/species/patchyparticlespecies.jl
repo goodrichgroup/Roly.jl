@@ -35,14 +35,19 @@ function PatchyParticleSpecies(
     D = length(first(patch_positions))
     F = float(eltype(first(patch_positions)))
     r = F(r)
+    n = length(patch_positions)
 
     tol = sqrt(eps(F)) * r
-    sites = [
-        BindingSite(normal_pose(patch_positions[i], patch_twists[i]), colors[i], i:i, tol, tol / r, 1) for
-        i in eachindex(patch_positions, patch_twists, colors)
-    ]
-    ps = PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol)
-    return _check_encoding(_relabel!(ps))
+    poses = [normal_pose(patch_positions[i], patch_twists[i]) for i in eachindex(patch_positions)]
+    # One vertex per patch leaves no room for a turn about the patch normal, so the gauge is 1
+    # whatever the arrangement; a patch that needs its own symmetry needs `dartencoding`.
+    gauges = ones(Int, n)
+    labs = siteorbits(poses, gauges, collect(colors))
+    stabs = sitestabilisers(poses, gauges, labs)
+    setlabels!(g, collect(Cint, labs))
+
+    sites = [BindingSite(poses[i], colors[i], i:i, tol, tol / r, 1, stabs[i]) for i in 1:n]
+    return _check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
 end
 
 """
@@ -63,10 +68,12 @@ function PatchyDisk(angles, r=1; colors=1:length(angles), labels=nothing)
     positions = [SVector(r * cos(F(phi)), r * sin(F(phi))) for phi in angles]
     poses = [normal_pose(positions[i], F(0)) for i in 1:n]
     # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
-    labels = something(labels, siteorbits(poses, ones(Int, n), collect(colors)))
+    gauges = ones(Int, n)
+    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    stabs = sitestabilisers(poses, gauges, labels)
 
     g, ranges = cycleencoding(n; labels)
-    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1) for i in 1:n]
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1, stabs[i]) for i in 1:n]
     return _check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
 end
 
@@ -84,34 +91,46 @@ encoding, the labelling rules and the binding site frame convention of
 the same solid have interchangeable encodings and can share one set of `BindingRules`.
 """
 function PatchySphere(
-    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), labels=nothing, encoding::Symbol=:auto
+    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), labels=nothing, locking=true,
+    encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
     length(colors) == n ||
         throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
     encoding in (:auto, :dart, :cycle) ||
         throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
+    locking = _locking(locking, n)
 
     r = F(r)
     tol = sqrt(eps(F)) * r
+    # On a sphere the patch normal has to be radial, so the frame is built from the centroid
+    # direction and the tangential part of the direction to the face's first edge. The two
+    # passes over the face lists are as in `PolyhedronParticleSpecies`; see `_propagate_faces`.
     P = Pose{3,F,RotMatrix3{F}}
-    poses = map(1:n) do i
-        c = facecentroid(p, i)
-        # On a sphere the patch normal has to be radial, so the frame is built from the
-        # centroid direction and the tangential part of the direction to the first edge.
-        ex = normalize(c)
-        v = edgemidpoint(p, i, 1) - c
-        ez = normalize(v - dot(v, ex) * ex)
-        P(r * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
+    function patchposes(fs)
+        map(eachindex(fs)) do i
+            c = facecentroid(p, i)
+            ex = normalize(c)
+            v = (corners(p)[fs[i][1]] + corners(p)[fs[i][2]]) / 2 - c
+            ez = normalize(v - dot(v, ex) * ex)
+            P(r * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
+        end
     end
+    fs = faces(p)
+    poses = patchposes(fs)
     # The patches stand in for the faces, so they inherit the faces' own symmetry.
     gauges = facegauge(p)
     labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    fs = _propagate_faces(corners(p), fs, labels)
+    poses = patchposes(fs)
+    stabs = sitestabilisers(poses, gauges, labels)
 
-    usecycle = encoding === :cycle || (encoding === :auto && allunique(labels))
-    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(p; labels)
+    usecycle = encoding === :cycle ||
+        (encoding === :auto && _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
+    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(fs; labels)
 
-    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, gauges[i]) for i in 1:n]
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, gauges[i], stabs[i],
+                         locking[i]) for i in 1:n]
     return _check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
 
@@ -134,8 +153,7 @@ isconvex(::PatchyParticleSpecies) = true
 function setcolors!(ps::PatchyParticleSpecies, colors::AbstractVector{<:Integer})
     length(colors) != nsites(ps) && throw(ArgumentError("incorrect number of colors"))
     for k in eachindex(ps.sites)
-        s = ps.sites[k]
-        ps.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance, s.gauge)
+        ps.sites[k] = setcolor(ps.sites[k], colors[k])
     end
     return nothing
 end

@@ -1,6 +1,6 @@
 mutable struct PolyformAux{BS<:BindingSite}
     seen::Set{NautyDiGraph}
-    pairs::Vector{Tuple{BS,BindingSiteLoc}}
+    pairs::Vector{Tuple{BS,BindingSiteLoc,Int}}
 end
 Base.copy(polyaux::PolyformAux) = typeof(polyaux)(copy(polyaux.seen), copy(polyaux.pairs))
 
@@ -20,9 +20,9 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
     j == 1 && collect_compatible_pairs!(aux.pairs, v)
     j > length(aux.pairs) && return nothing
 
-    site, siteloc = aux.pairs[j]
+    site, siteloc, r = aux.pairs[j]
     copy!(u, v)
-    out = raise!(u, site, siteloc)
+    out = raise!(u, site, siteloc, r)
     (ismissing(out) || isnothing(out)) && return out
 
     if graphrep(out) ∈ aux.seen
@@ -59,7 +59,7 @@ the underlying reverse search: `Finished` if the enumeration ran to completion, 
 function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
     v₀ = Polyform(rules)
     BS = BindingSite{posetype(rules), numtype(rules)}
-    aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,BindingSiteLoc}[])
+    aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,BindingSiteLoc,Int}[])
     rsys = RSSystem(ls!, adj!, v₀; aux)
 
     frs = isnothing(f) ? nothing : (v, _) -> f(v, nparticles(v))

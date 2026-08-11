@@ -15,7 +15,7 @@ struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
 end
 
 """
-    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), encoding=:auto)
+    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, encoding=:auto)
 
 Build a particle species from the polyhedron `p`, with one binding site at each face centroid.
 
@@ -28,38 +28,71 @@ So `colors=1:nfaces(p)` gives every face its own identity and a symmetry number 
 `colors=fill(1, nfaces(p))` makes them all alike and recovers the solid's full rotation group;
 and colouring the caps of a cube apart from its sides leaves the subgroup that preserves that
 split.
+
+`locking` says whether a site holds its partner in the orientation its frame names, and takes
+either one flag for the whole species or one per face. The default, `true`, is the ordinary
+reading of an oriented binding site, and leaves a bond with a single registration unless the
+particle's own symmetry makes the frame ambiguous. Setting a face rotation-free instead admits
+every orientation the face geometrically permits: a triangular prism with square sides is only
+2-fold about them, so `locking=true` bonds its prisms coplanar, while freeing a side face also
+allows the neighbour stood on its side. See [`nregistrations`](@ref).
 """
 function PolyhedronParticleSpecies(
-    p::Polyhedron{F}; colors=1:nfaces(p), labels=nothing, encoding::Symbol=:auto
+    p::Polyhedron{F}; colors=1:nfaces(p), labels=nothing, locking=true, encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
     length(colors) == n ||
         throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
     encoding in (:auto, :dart, :cycle) ||
         throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
+    locking = _locking(locking, n)
 
     rmin = inradius(p)
     rmax = bounding_radius(p)
     tol = sqrt(eps(F)) * rmax
 
-    P = Pose{3,F,RotMatrix3{F}}
-    poses = map(1:n) do i
-        x = facecentroid(p, i)
-        ex = facenormal(p, i)
-        ez = normalize(edgemidpoint(p, i, 1) - x)
-        P(x, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
-    end
+    # The twist references are settled in two passes. The solid has already picked each face's
+    # first corner from its own shape; that is enough to compute the labelling, since it fixes
+    # the frames up to a gauge turn and nothing here looks finer. Knowing the labelling then
+    # gives the symmetry group, and re-winding along it pins the references up to `stab`, which
+    # is what bonds need. See `_propagate_faces`.
+    fs = faces(p)
+    poses = _faceposes(p, fs)
     gauges = facegauge(p)
     labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    fs = _propagate_faces(corners(p), fs, labels)
+    poses = _faceposes(p, fs)
+    stabs = sitestabilisers(poses, gauges, labels)
 
-    usecycle = encoding === :cycle || (encoding === :auto && allunique(labels))
-    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(p; labels)
+    usecycle = encoding === :cycle ||
+        (encoding === :auto && _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
+    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(fs; labels)
 
-    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / rmin, gauges[i]) for i in 1:n]
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / rmin, gauges[i], stabs[i],
+                         locking[i]) for i in 1:n]
 
     return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
         g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol
     ))
+end
+
+"""
+    _faceposes(p::Polyhedron, fs)
+
+The binding site frames of `p`'s faces, given face corner lists `fs`: local x along the
+outward normal, local z pointing at the midpoint of each face's first edge.
+
+`fs` is passed separately rather than read from `p` because [`_propagate_faces`](@ref) re-winds
+the lists, and the frames and the encoding have to be built from the same ones.
+"""
+function _faceposes(p::Polyhedron{F}, fs::Vector{Vector{Int}}) where {F}
+    P = Pose{3,F,RotMatrix3{F}}
+    return map(eachindex(fs)) do i
+        x = facecentroid(p, i)
+        ex = facenormal(p, i)
+        ez = normalize((corners(p)[fs[i][1]] + corners(p)[fs[i][2]]) / 2 - x)
+        P(x, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
+    end
 end
 
 # Separating axis candidates contributed by the edges. Only the direction matters, and only
@@ -101,8 +134,7 @@ corners(ps::PolyhedronParticleSpecies) = corners(ps.shape)
 function setcolors!(p::PolyhedronParticleSpecies, colors::AbstractVector{<:Integer})
     length(colors) != nsites(p) && throw(ArgumentError("incorrect number of colors"))
     for k in eachindex(p.sites)
-        s = p.sites[k]
-        p.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance, s.gauge)
+        p.sites[k] = setcolor(p.sites[k], colors[k])
     end
     return nothing
 end

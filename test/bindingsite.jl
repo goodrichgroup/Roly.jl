@@ -89,4 +89,96 @@ using Graphs, NautyGraphs
     for (k1, k2) in [(3, 3), (4, 4), (6, 6), (6, 3), (3, 6), (4, 6), (6, 4), (12, 8), (8, 6), (4, 5)]
         @test dimer_symmetrynumber(k1, k2) == gcd(k1, k2)
     end
+
+    ### contact_pairing under a registration
+    # Vertex a of site 1 sits at azimuth 2πa/k1 about the bond axis; vertex b of site 2 sits at
+    # 2πr/L - 2πb/k2, its cyclic order reversed by the gluing and its frame turned by the
+    # registration. The pairing is exactly the coincidences, so check it against them directly.
+    function coincidences(k1, k2, L, r)
+        M = lcm(lcm(k1, k2), L)
+        return sort([(a, b) for a in 0:(k1 - 1), b in 0:(k2 - 1)
+                     if M * a ÷ k1 == mod(-(M * b ÷ k2) + M * r ÷ L, M)][:])
+    end
+    pairs0(k1, k2, r, L) = sort([(a - 1, b - k1 - 1)
+                                 for (a, b) in contact_pairing(1:k1, (k1 + 1):(k1 + k2), r, L)])
+
+    divisors(n) = [d for d in 1:n if n % d == 0]
+    for k1 in 1:8, k2 in 1:8, q1 in divisors(k1), q2 in divisors(k2)
+        L = lcm(q1, q2)
+        # A twist freedom divides its site's vertex count, so L always divides lcm(k1, k2) and
+        # the registration is expressible. This is what makes the offset an integer.
+        @test lcm(k1, k2) % L == 0
+        seen = Set()
+        for r in 0:(L - 1)
+            p = pairs0(k1, k2, r, L)
+            @test p == coincidences(k1, k2, L, r)
+            # The count never depends on the registration, so a bond keeps its residual
+            # symmetry however it is turned...
+            @test length(p) == gcd(k1, k2)
+            # ...and distinct registrations give distinct pairings, so the graph records which
+            # one a bond is in. Without that, geometrically different assemblies would share a
+            # canonical form and be silently merged.
+            @test p ∉ seen
+            push!(seen, p)
+        end
+    end
+    # r = 0 is the base registration and must reproduce the plain call exactly.
+    for (k1, k2) in [(1, 1), (3, 3), (4, 4), (6, 3), (4, 6), (12, 8), (4, 5)]
+        @test collect(contact_pairing(1:k1, 11:(10 + k2), 0, 4)) ==
+              collect(contact_pairing(1:k1, 11:(10 + k2)))
+    end
+    # A registration a site's vertex count cannot express is refused rather than truncated.
+    @test_throws ArgumentError collect(contact_pairing(1:1, 2:2, 1, 4))
+end
+
+@testset "bond registrations" begin
+    using Roly: BindingSite, twistfreedom, bondperiod, nregistrations, registration,
+                standard_offset, isaligned
+    site(gauge, stab, locking) =
+        BindingSite(Pose{3,Float64,RotMatrix3{Float64}}(SVector(1.0, 0.0, 0.0),
+                                                        one(RotMatrix3{Float64})),
+                    1, 1:gauge, 1e-8, 1e-8, gauge, stab, locking)
+
+    # A locking site's say in the bond is its particle's symmetry; a rotation-free one's is its
+    # own. The two coincide when a face is no more symmetric than the body around it.
+    @test twistfreedom(site(4, 2, true)) == 2
+    @test twistfreedom(site(4, 2, false)) == 4
+    @test twistfreedom(site(4, 4, true)) == twistfreedom(site(4, 4, false)) == 4
+
+    # Registrations come from symmetry: an unsymmetric particle has exactly one per bond,
+    # however symmetric the face it bonds through.
+    @test nregistrations(site(4, 1, true), site(4, 1, true)) == 1
+    @test nregistrations(site(1, 1, true), site(1, 1, true)) == 1
+    # A cube face onto a cube face, both 4-fold: still one, the four turns being symmetries.
+    @test nregistrations(site(4, 4, true), site(4, 4, true)) == 1
+    # A cube (4-fold) meeting a prism's square side face (2-fold): in-plane and out-of-plane.
+    @test nregistrations(site(4, 4, true), site(4, 2, true)) == 2
+    # ...and only one the other way round, since a lone cube turned about the bond axis maps
+    # onto itself, so there is only one distinct dimer to find.
+    @test nregistrations(site(4, 2, true), site(4, 4, true)) == 1
+    # Freeing one side opens the bond up whatever the other says.
+    @test nregistrations(site(4, 2, false), site(4, 2, true)) == 2
+    @test nregistrations(site(4, 2, true), site(4, 2, true)) == 1
+
+    # bondperiod is the lcm because the admissible set must be closed under both sites' turns.
+    @test bondperiod(site(6, 6, true), site(4, 4, true)) == 12
+    @test bondperiod(site(4, 2, true), site(6, 3, true)) == 6
+
+    # A partner placed in registration r is recognised as being in registration r, and reading
+    # the pair the other way round gives the same answer -- which is what lets a ring closure
+    # be paired the same way it was placed.
+    for L in (1, 2, 3, 4, 6)
+        b1 = site(L, L, true)
+        for r in 0:(L - 1)
+            b2 = BindingSite(standard_offset(b1, r, L), 1, 1:L, 1e-8, 1e-8, L, L, true)
+            @test registration(b1, b2) == r
+            @test registration(b2, b1) == r
+            @test isaligned(b1, b2)
+        end
+    end
+    # An orientation in no registration at all is not a bond.
+    b = site(2, 2, true)
+    off = BindingSite(standard_offset(b, 1, 4), 1, 1:2, 1e-8, 1e-8, 2, 2, true)
+    @test isnothing(registration(b, off))
+    @test !isaligned(b, off)
 end

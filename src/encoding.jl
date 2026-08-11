@@ -4,8 +4,14 @@
 A convex polyhedron, stored as a list of `corners` and a list of `faces`.
 
 Each face is a list of indices into `corners`, wound counter-clockwise as seen from
-*outside* the solid. The winding is what fixes the orientation of the graph encoding, and
-is checked on construction.
+*outside* the solid. The winding is what fixes the orientation of the graph encoding, and is
+checked on construction, as is convexity; each face is then rotated to start at a canonical
+corner, see [`_canonical_faces`](@ref). Species refine that further with
+[`_propagate_faces`](@ref), which needs the labelling and so cannot happen here.
+
+Convexity is not decoration. [`PolyhedronParticleSpecies`](@ref) reports `isconvex` for every
+solid and tests overlap by separating axes, which is a convex-only argument, and
+[`site_symmetry`](@ref) relies on a solid being the intersection of its faces' half-spaces.
 """
 struct Polyhedron{F<:AbstractFloat}
     corners::Vector{SVector{3,F}}
@@ -13,8 +19,8 @@ struct Polyhedron{F<:AbstractFloat}
 
     function Polyhedron(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
         _check_winding(length(corners), faces)
-        # Twist references, weakest rule first so the stronger one can override it.
-        return new{F}(corners, _align_mates(corners, _align_axis(corners, faces)))
+        _check_convex(corners, faces)
+        return new{F}(corners, _canonical_faces(corners, faces))
     end
 end
 
@@ -72,109 +78,144 @@ function _check_winding(ncorners::Integer, faces::AbstractVector{<:AbstractVecto
 end
 
 """
-    _principal_axis(corners)
+    _check_convex(corners, faces)
 
-Return the solid's unique principal axis, or `nothing` if it has no distinguished one.
-
-Taken from the inertia tensor of the corner set: a solid with a single rotation axis of order
-3 or more (a prism, antiprism or pyramid) has one distinct eigenvalue and a degenerate pair,
-whereas the cube and the other high-symmetry solids have three equal eigenvalues and no
-preferred direction.
+Verify that every corner lies on the inner side of every face's plane, so that the solid is
+the intersection of its faces' half-spaces. See [`Polyhedron`](@ref) for what depends on it.
 """
-function _principal_axis(corners::Vector{SVector{3,F}}) where {F}
-    c0 = sum(corners) / length(corners)
-    tensor = zero(SMatrix{3,3,F})
-    for c in corners
-        r = c - c0
-        tensor += dot(r, r) * one(SMatrix{3,3,F}) - r * transpose(r)
-    end
-    vals, vecs = eigen(Symmetric(Matrix(tensor)))
-    atol = sqrt(eps(F)) * maximum(abs, vals)
-    for k in 1:3
-        i, j = filter(!=(k), 1:3)
-        isapprox(vals[i], vals[j]; atol) && !isapprox(vals[k], vals[i]; atol) &&
-            return SVector{3,F}(view(vecs, :, k))
+function _check_convex(corners::Vector{SVector{3,F}}, faces::AbstractVector{<:AbstractVector{Int}}) where {F}
+    atol = sqrt(eps(F)) * maximum(norm, corners)
+    for (i, f) in enumerate(faces)
+        c = sum(corners[v] for v in f) / length(f)
+        nrm = zero(SVector{3,F})
+        for k in eachindex(f)
+            nrm += cross(corners[f[k]] - c, corners[f[mod1(k + 1, length(f))]] - c)
+        end
+        nrm = normalize(nrm)
+        d = dot(nrm, c)
+        for (j, x) in enumerate(corners)
+            dot(nrm, x) <= d + atol || throw(ArgumentError(
+                "corner $j lies outside the plane of face $i, so the solid is not convex; " *
+                "Roly's polyhedra must be convex, since overlap is tested by separating axes"
+            ))
+        end
     end
     return nothing
 end
 
 """
-    _align_axis(corners, faces)
+    _canonical_faces(corners, faces)
 
-Point every face's first edge as nearly along the solid's principal axis as it can, so that
-all the site frames share one local z direction.
+Return `faces` with each corner list cyclically rotated so that the face begins at an
+intrinsically chosen corner, fixing the twist reference of that face's binding site.
 
-This is the twist convention for faces with no translation mate — the side faces of an
-odd prism, say, no two of which are parallel. A bond between two such faces turns the
-attached particle by π about the site's local z (that is what [`standard_rotation`](@ref)
-does), so making those axes *parallel* means the turns all commute and a loop of even length
-composes back to the identity. Triangular prisms then close the six-triangle ring and
-enumerate as polyiamonds; with the local z axes left unrelated, that ring is lost.
+A site's local z points at the midpoint of its face's *first* edge, so which corner comes
+first is the site's twist reference. That reference is not physical, but it is not free
+either: [`site_symmetry`](@ref) compares two faces' frames up to a turn by `2π/gauge`, so
+faces that a rotation of the solid carries onto one another must pick *corresponding* first
+edges. A square face has gauge 4 and every corner is corresponding, which is why the choice
+never mattered for cubes; a rectangle has gauge 2 and degree 4, its corners falling into two
+classes a quarter turn apart, and picking a long edge on one face and a short edge on another
+hides the symmetry that relates them.
 
-A no-op when the solid has no distinguished axis, and overridden by [`_align_mates`](@ref)
-wherever a translation mate exists, which is the stronger convention.
+The choice is made from the face alone: rotate to the lexicographically least cyclic word of
+`(edge length, interior angle)`. That word determines a planar polygon up to congruence and
+its cyclic symmetries are exactly the face's own rotations, so the minimising positions form
+exactly one gauge orbit. Congruent faces have identical words, so their minimising positions
+correspond up to a gauge turn — which is the tolerance `site_symmetry` allows. A regular face
+ties everywhere and the rotation is a no-op.
+
+This is only half of what the twist references have to satisfy, and the weaker half; see
+[`_propagate_faces`](@ref), which runs after it and overrides it wherever the two disagree.
 """
-function _align_axis(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
-    axis = _principal_axis(corners)
-    isnothing(axis) && return faces
-
-    faces = [copy(f) for f in faces]
-    for (i, f) in enumerate(faces)
-        c = sum(corners[v] for v in f) / length(f)
-        alignment(k) = abs(dot(normalize((corners[f[k]] + corners[f[mod1(k + 1, length(f))]]) / 2 - c), axis))
-        k = argmax(alignment, eachindex(f))
-        faces[i] = circshift(f, 1 - k)
+function _canonical_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
+    atol = sqrt(eps(F)) * maximum(norm, corners)
+    return map(faces) do f
+        k = length(f)
+        edge(m) = norm(corners[f[mod1(m + 1, k)]] - corners[f[mod1(m, k)]])
+        function turn(m)
+            a = corners[f[mod1(m - 1, k)]] - corners[f[mod1(m, k)]]
+            b = corners[f[mod1(m + 1, k)]] - corners[f[mod1(m, k)]]
+            return acos(clamp(dot(a, b) / (norm(a) * norm(b)), -one(F), one(F)))
+        end
+        # Does the word starting at s come before the one starting at t?
+        function isbefore(s, t)
+            for j in 0:(k - 1), (x, y) in ((edge(s + j), edge(t + j)), (turn(s + j), turn(t + j)))
+                isapprox(x, y; atol) || return x < y
+            end
+            return false
+        end
+        best = 1
+        for s in 2:k
+            isbefore(s, best) && (best = s)
+        end
+        circshift(f, 1 - best)
     end
-    return faces
 end
 
 """
-    _align_mates(corners, faces)
+    _propagate_faces(corners, faces, labels)
 
-Cyclically rotate face vertex lists so that *mated* faces — faces related by a pure
-translation, which is what lets a solid tile space without turning — start on the same edge.
+Return `faces` with each corner list cyclically rotated so that faces related by a
+label-preserving rotation of the solid carry twist references related by that same rotation.
 
-This is what makes a bond between mated faces a pure translation rather than a turn. The
-relative orientation of a bond is `sᵢ · Δ · sⱼ⁻¹`, where `sᵢ`, `sⱼ` are the two binding site
-frames and `Δ` is [`standard_rotation`](@ref); since `Δ` is a π rotation about the frames'
-local z, and the local z of a site points at its face's *first* edge, aligning the first
-edges of a mated pair gives `sⱼ = sᵢ·Δ` and hence a relative orientation of the identity.
+This is the condition [`_canonical_faces`](@ref) cannot reach and the one bonds actually need.
+That rule reads a face's own shape, so it can only line references up *to the face's gauge* —
+every dart of a square is like every other, so it has nothing to say. But two frames differing
+by a gauge turn describe the same bond only when that turn is also a symmetry of the whole
+particle, i.e. lies in `stab`. Where `gauge > stab` the leftover turns are real, and choosing
+them inconsistently across a face orbit makes otherwise equivalent bonds differ.
 
-The payoff is that transport around any closed loop of mated bonds composes to the identity,
-so ring closures always succeed and a space-filling solid assembles into its lattice. Faces
-without a translation mate — every face of a tetrahedron, say — are left alone; such solids
-do not tile by translation and have no orientation-free convention to find.
+A triangular prism with square sides is the case in point: `gauge` 4, `stab` 2. Left to the
+face rule, one side face's reference comes out a quarter turn from its neighbours' — legal by
+gauge, not by stab — and bonding face 2 to face 3 then turns the neighbour out of the plane
+where face 2 to face 4 does not, so the prisms stop tiling as polyiamonds.
 
-Idempotent, and a no-op for solids with no mated faces.
+The group has to be the *label-preserving* rotations, not all of them. A rotation outside it
+relates two faces by an element of the solid's stabiliser rather than the species', which is
+too coarse by exactly the amount that goes wrong above: a cube with four sticky sides and two
+caps has all six faces in one orbit under its 24 rotations, but only the 8 preserving
+sides-from-caps are symmetries of the particle, and propagating under the 24 leaves adjacent
+side faces a quarter turn apart.
+
+Correctness, and that the slack is exactly `stab` rather than merely `gauge`, is proved in
+`twist-references.md`. The ordering it forces is worth noting: labels are needed to know the
+group, and propagation only ever moves a dart within its gauge orbit, so `facegauge` and
+`siteorbits` — which compare frames up to gauge — may be computed first and are unaffected.
 """
-function _align_mates(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
-    faces = [copy(f) for f in faces]
-    n = length(faces)
-    atol = sqrt(eps(F)) * maximum(norm, corners)
+function _propagate_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}},
+                          labels) where {F}
+    cs = _centred(corners)
+    atol = sqrt(eps(F)) * maximum(norm, cs)
+    centroid(f) = sum(cs[v] for v in f) / length(f)
+    midpoint(f, k) = (cs[f[k]] + cs[f[mod1(k + 1, length(f))]]) / 2
 
-    centroid(f) = sum(corners[v] for v in f) / length(f)
-    midpoint(f, k) = (corners[f[k]] + corners[f[mod1(k + 1, length(f))]]) / 2
-
-    paired = falses(n)
-    for i in 1:n
-        paired[i] && continue
-        ci = centroid(faces[i])
-        # A mate carries the same corner set, shifted by the translation between centroids.
-        j = findfirst(1:n) do k
-            k == i && return false
-            paired[k] && return false
-            length(faces[k]) == length(faces[i]) || return false
-            t = centroid(faces[k]) - ci
-            all(v -> any(w -> isapprox(corners[v] + t, corners[w]; atol), faces[k]), faces[i])
+    # The rotations that carry every face onto one of the same label. Composition and inverses
+    # preserve that, so these form a group, which the proof needs.
+    faceof(x) = findfirst(i -> isapprox(centroid(faces[i]), x; atol), eachindex(faces))
+    group = filter(_rotationgroup(corners, faces)) do Q
+        all(eachindex(faces)) do i
+            j = faceof(Q * centroid(faces[i]))
+            !isnothing(j) && labels[j] == labels[i]
         end
-        isnothing(j) && continue
+    end
+    length(group) == 1 && return faces
 
-        target = midpoint(faces[i], 1) + (centroid(faces[j]) - ci)
-        k = findfirst(l -> isapprox(midpoint(faces[j], l), target; atol), eachindex(faces[j]))
-        isnothing(k) && continue
-
-        faces[j] = circshift(faces[j], 1 - k)
-        paired[i] = paired[j] = true
+    faces = [copy(f) for f in faces]
+    for j in 2:length(faces)
+        cj = centroid(faces[j])
+        for i in 1:(j - 1)
+            labels[i] == labels[j] || continue
+            # A symmetry carrying face i's centroid onto face j's carries the face itself, and
+            # so carries its first edge midpoint onto one of face j's.
+            k = findfirst(Q -> isapprox(Q * centroid(faces[i]), cj; atol), group)
+            isnothing(k) && continue
+            target = group[k] * midpoint(faces[i], 1)
+            d = findfirst(m -> isapprox(midpoint(faces[j], m), target; atol), eachindex(faces[j]))
+            isnothing(d) && continue
+            faces[j] = circshift(faces[j], 1 - d)
+            break
+        end
     end
     return faces
 end
@@ -337,24 +378,26 @@ centroid. `length(rotationgroup(p))` is the solid's true symmetry number.
 Every symmetry maps the first dart to some dart, and that correspondence determines the
 rotation, so it suffices to test the `2 * nedges(p)` candidates this generates.
 """
-function rotationgroup(p::Polyhedron{F}) where {F}
-    cs = corners(p)
-    c0 = sum(cs) / length(cs)
-    cs = [c - c0 for c in cs]
+rotationgroup(p::Polyhedron) = _rotationgroup(corners(p), faces(p))
+
+# Same, on the raw corner and face lists, so the Polyhedron constructor can use it before there
+# is a Polyhedron. Rotations are about the corner centroid, and so are the frames they act on.
+function _rotationgroup(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
+    cs = _centred(corners)
     atol = sqrt(eps(F)) * maximum(norm, cs)
 
     # An orthonormal frame attached to dart k of face i: along the edge, along the outward
     # normal, and their cross product.
     function dartframe(i, k)
-        f = facevertices(p, i)
+        f = faces[i]
         e1 = normalize(cs[f[mod1(k + 1, length(f))]] - cs[f[k]])
-        e2 = facenormal(p, i)
+        e2 = _facenormal(cs, f)
         return hcat(e1, e2, cross(e1, e2))
     end
 
     Mref = dartframe(1, 1)
     group = RotMatrix3{F}[]
-    for i in 1:nfaces(p), k in 1:facedegree(p, i)
+    for i in eachindex(faces), k in eachindex(faces[i])
         # every potential symmetry rotation maps the ref frame to some other dartframe, and is therefore
         # given by the matrix
         R = dartframe(i, k) * transpose(Mref)
@@ -363,6 +406,17 @@ function rotationgroup(p::Polyhedron{F}) where {F}
         push!(group, RotMatrix3{F}(R))
     end
     return group
+end
+
+_centred(corners::Vector{SVector{3,F}}) where {F} = (c0 = sum(corners) / length(corners); [c - c0 for c in corners])
+
+function _facenormal(cs::Vector{SVector{3,F}}, f::Vector{Int}) where {F}
+    c = sum(cs[v] for v in f) / length(f)
+    nrm = zero(SVector{3,F})
+    for k in eachindex(f)
+        nrm += cross(cs[f[k]] - c, cs[f[mod1(k + 1, length(f))]] - c)
+    end
+    return normalize(nrm)
 end
 
 """
@@ -442,8 +496,13 @@ end
 
 """
     dartencoding(p::Polyhedron; labels=1:nfaces(p))
+    dartencoding(faces::Vector{Vector{Int}}; labels=1:length(faces))
 
 Return `(g, ranges)`, the dart encoding of `p` and the graph vertices belonging to each face.
+
+The second form takes the face lists directly, for species that have re-wound them with
+[`_propagate_faces`](@ref): a site's vertex range has to start at the dart its frame points
+at, so the encoding and the poses must be built from the same lists.
 
 A *dart* is one corner of one face, so a face of degree `k` owns `k` darts and the graph has
 `2 * nedges(p)` vertices in total. The encoding consists of
@@ -457,8 +516,9 @@ The automorphism group of the resulting `g` is the polyhedron's rotational symme
 distinct gives a symmetry number of 1, all labels equal gives the full rotation group, and
 merging some faces gives the subgroup preserving that labelling.
 """
-function dartencoding(p::Polyhedron; labels=1:nfaces(p))
-    fs = faces(p)
+dartencoding(p::Polyhedron; labels=1:nfaces(p)) = dartencoding(faces(p); labels)
+
+function dartencoding(fs::Vector{Vector{Int}}; labels=1:length(fs))
     length(labels) == length(fs) ||
         throw(ArgumentError("expected $(length(fs)) labels, one per face, got $(length(labels))"))
 
@@ -501,9 +561,8 @@ end
 Return `(g, ranges)`, the cycle encoding of a particle with `nsites` binding sites: a single
 directed cycle carrying one vertex per site.
 
-This is the 2D polygon encoding, and it is also valid in 3D whenever all `labels` are
-distinct: no rotation can then preserve the labelling, so the symmetry number is 1 whatever
-structure the graph has internally. It is *not* valid when labels are shared.
+This is the 2D polygon encoding, and it is also valid in 3D under the conditions
+[`_cycle_suffices`](@ref) states. It is *not* valid in general.
 """
 function cycleencoding(nsites::Integer; labels=1:nsites)
     length(labels) == nsites ||
@@ -513,6 +572,42 @@ function cycleencoding(nsites::Integer; labels=1:nsites)
     g = NautyDiGraph(cycle_digraph(nsites); vertex_labels=collect(Cint, labels))
     return g, [i:i for i in 1:nsites]
 end
+
+"""
+    _twistfreedoms(gauges, stabs, locking)
+    _locking(locking, n)
+
+Per-site [`twistfreedom`](@ref) from the two symmetry counts and the locking flags, and the
+normalisation of a `locking` keyword given as a single `Bool` or as one flag per site.
+"""
+_twistfreedoms(gauges, stabs, locking) = [l ? s : g for (g, s, l) in zip(gauges, stabs, locking)]
+
+function _locking(locking, n::Integer)
+    locking isa Bool && return fill(locking, n)
+    length(locking) == n ||
+        throw(ArgumentError("expected $n locking flags, one per site, got $(length(locking))"))
+    return collect(Bool, locking)
+end
+
+"""
+    _cycle_suffices(twistfreedoms, labels)
+
+Whether one graph vertex per site carries everything the encoding has to carry, so that
+[`cycleencoding`](@ref) can stand in for [`dartencoding`](@ref).
+
+Two things have to fit. The *symmetry number* must come out right, which needs all `labels`
+distinct: no rotation can then preserve the labelling, so the answer is 1 whatever structure
+the graph has internally, and a bare cycle gives 1. And the *bonds* must be distinguishable,
+which needs every site's twist freedom to be 1. A one-vertex site pins no turn about its own
+normal, so a bond to it is a single graph edge however the partner is turned; a site with `q`
+registrations would have all `q` canonicalise alike and be merged, losing `q - 1` real
+structures rather than merely encoding them coarsely. See [`contact_pairing`](@ref).
+
+Distinct labels already force every stabiliser to 1, so for locking sites the second condition
+comes free and this reduces to the first. It bites only on rotation-free sites, which are
+asking for exactly the registrations a single vertex cannot record.
+"""
+_cycle_suffices(qs, labels) = allunique(labels) && all(isone, qs)
 
 """
     Polyhedron(sym::Symbol, n=0; a=1.0)
@@ -802,6 +897,7 @@ end
 
 """
     sitestabilisers(ps::ParticleSpecies)
+    sitestabilisers(poses, gauges, keys)
 
 Return, per site, how many of the particle's own symmetries leave that site where it is.
 
@@ -810,43 +906,69 @@ turns about that site's normal that carry the whole particle onto itself. It is 
 site's `gauge`, and usually less: a triangular prism is 2-fold about a square side face, so
 that face has gauge 4 but a stabiliser of 2, while a cube's face has both equal to 4.
 
-The difference is what decides how many *distinct* ways a partner can attach there. Turns in
-the stabiliser put the same body in the same place with only its sites permuted, so they give
-nothing new; the rest are genuinely different attachments.
+The difference is what decides how many *distinct* ways a partner can attach there, see
+[`nregistrations`](@ref). Species compute this once at construction and store it on each
+`BindingSite`, since it is fixed as soon as the labelling is; the `ps` method reads that back.
 
-Keyed on the graph's labels rather than on colors, because that is what decides whether two
-assemblies are the same structure — the enumeration merges by canonical form, so a colour
-difference finer than the labelling is invisible to it anyway.
+Keyed on the graph's labels, which is exact because a labelling is required to be at least as
+fine as the coloring (see [`_check_labelling`](@ref)). A turn that leaves every label alone
+therefore leaves every color alone too, so it changes neither which structure this is nor which
+bonds the attached particle offers next.
 """
-function sitestabilisers(ps::ParticleSpecies)
-    perms = _site_symmetries(_sitedata(ps)...)
-    return [count(perm -> perm[i] == i, perms) for i in 1:nsites(ps)]
+sitestabilisers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
+
+function sitestabilisers(poses, gauges, keys)
+    perms = _site_symmetries(poses, gauges, keys)
+    return [count(perm -> perm[i] == i, perms) for i in eachindex(poses)]
 end
 
 """
-    _relabel!(ps::ParticleSpecies)
+    _check_labelling(ps::ParticleSpecies)
 
-Rederive `ps`'s graph labels from its site colors and geometry, in place.
+Throw unless `ps`'s labelling is at least as fine as its coloring: sites sharing a label must
+share a color.
 
-Called whenever a species is recolored: labels are a function of the coloring, so leaving them
-alone would let a recolored species keep a symmetry it no longer has.
+Labels say which sites the particle cannot tell apart; colors say which bonds a site offers.
+A labelling coarser than the coloring asserts both at once — that two sites are the same, and
+that they behave differently — and two separate mechanisms then read the wrong one. The graph
+records only the label, so structures whose futures differ get merged; and
+[`_propagate_faces`](@ref) aligns twist references using the label-preserving rotations, which
+for a coarser labelling are not symmetries of the *colored* particle at all, so the bond
+registry it settles on is one the coloring never asked for.
+
+Labels derived from colors by [`siteorbits`](@ref) satisfy this by construction, and usually
+strictly: two sites are put in one orbit only if they share a color *and* a rotation carries
+one onto the other, so geometry splits a color class wherever nothing relates its members. A
+labelling made finer still is the one good reason to set labels by hand — it breaks a symmetry
+on purpose, which is always safe, since the graph then distinguishes more rather than less.
+Only coarser is rejected, and the fix is to say the thing in colors instead.
+
+Being insensitive is not the same as being sound. A species with a coarse labelling and a bond
+table of self-bonds `(i, i)` can come out right anyway, since such a bond never depends on the
+registry between two *different* faces. Bonds between different faces do, and those break.
 """
-function _relabel!(ps::ParticleSpecies)
-    n = nsites(ps)
-    sites = [bindingsites(ps, i) for i in 1:n]
-    orbits = siteorbits([s.pose for s in sites], [s.gauge for s in sites], [color(s) for s in sites])
+function _check_labelling(ps::ParticleSpecies)
     labs = labels(graphrep(ps))
-    for i in 1:n, v in sites[i].vertices
-        labs[v] = orbits[i]
+    seen = Dict{eltype(labs),Int}()
+    for i in 1:nsites(ps)
+        b = bindingsites(ps, i)
+        l = labs[first(b.vertices)]
+        c = get!(seen, l, color(b))
+        c == color(b) || throw(ArgumentError(
+            "sites sharing symmetry label $l have colors $c and $(color(b)); a labelling must " *
+            "be at least as fine as the coloring, since the graph and the twist references " *
+            "follow the label while the bonds follow the color. Drop the labels and give the " *
+            "sites the coloring you mean — the labelling is derived from it."
+        ))
     end
-    setlabels!(graphrep(ps), labs)
     return ps
 end
 
 """
     _check_encoding(ps::ParticleSpecies)
 
-Throw if `ps`'s graph claims a different symmetry than its binding sites actually have.
+Throw if `ps`'s graph claims a different symmetry than its binding sites actually have, or if
+its labelling is coarser than its coloring (see [`_check_labelling`](@ref)).
 
 `symmetrynumber(ps) == site_symmetry(ps)` is what makes a graph a correct encoding of a
 particle, and it does *not* follow from having used [`cycleencoding`](@ref) or
@@ -854,8 +976,16 @@ particle, and it does *not* follow from having used [`cycleencoding`](@ref) or
 large a symmetry number merges structures that are really distinct; too small a one splits
 structures that are really the same. Both corrupt enumeration silently, so the species
 constructors that build their own graph check here instead.
+
+The symmetry check is one-sided in a way worth relying on: a twist reference chosen
+inconsistently across faces can only make `site_symmetry` too *small*, never too large. A
+rotation matching every site's position and normal maps every face's supporting plane to
+another, hence maps the solid — an intersection of half-spaces, by convexity — onto itself,
+so it is a genuine symmetry. Spurious symmetries are therefore impossible, and this check
+catches the only direction [`_canonical_faces`](@ref) can fail in.
 """
 function _check_encoding(ps::ParticleSpecies)
+    _check_labelling(ps)
     geometric = site_symmetry(ps)
     graph = symmetrynumber(ps)
     graph == geometric || throw(ArgumentError(

@@ -295,18 +295,20 @@ function composition(p::Polyform)
 end
 
 """
-    raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc)
+    raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r=0)
 
-Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`. 
+Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`,
+in registration `r` of the bond (see [`standard_offset`](@ref)).
 
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
-function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwargs...)
+function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::Integer=0; kwargs...)
     sys = bindingrules(poly)
     species_index, site_index = siteloc
     particle_species = species(sys, species_index)
     leading_vertex = nv(graphrep(poly)) + 1
-    particle_pose = standard_offset(site) * inv(bindingsites(particle_species, site_index).pose)
+    mate = bindingsites(particle_species, site_index)
+    particle_pose = standard_offset(site, r, bondperiod(site, mate)) * inv(mate.pose)
     attached_particle = Particle(particle_pose, leading_vertex, species_index)
 
     has_overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
@@ -320,8 +322,10 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc; kwar
         add_edge!(graphrep(poly), src + leading_vertex - 1, dst + leading_vertex - 1)
     end
 
-    for (vs1, vs2) in contacting_vertices
-        for (v1, v2) in contact_pairing(vs1, vs2)
+    # Every contact is paired in the registration it was *found* in, not the one this call
+    # placed the particle in: a ring closure brings sites together that raise! never chose.
+    for (vs1, vs2, reg, L) in contacting_vertices
+        for (v1, v2) in contact_pairing(vs1, vs2, reg, L)
             add_edge!(graphrep(poly), tocanon(poly, v1), v2)
             add_edge!(graphrep(poly), v2, tocanon(poly, v1))
         end
@@ -424,7 +428,7 @@ function _overlap_and_contacts(
     kwargs...,
 )
     intmat = interactionmatrix(sys)
-    contacts = NTuple{2,UnitRange{Int}}[]
+    contacts = Tuple{UnitRange{Int},UnitRange{Int},Int,Int}[]
 
     for polypart in polyparticles
         could_contact(polypart, part, sys) || continue
@@ -434,8 +438,9 @@ function _overlap_and_contacts(
             istouching(b1, b2) || continue
             interacting = intmat[color(b1), color(b2)]
             !allow_noninteracting && !interacting && return true, nothing
-            !allow_misaligned && !isaligned(b1, b2) && return true, nothing
-            push!(contacts, (b1.vertices, b2.vertices))
+            reg = registration(b1, b2)
+            !allow_misaligned && isnothing(reg) && return true, nothing
+            push!(contacts, (b1.vertices, b2.vertices, something(reg, 0), bondperiod(b1, b2)))
         end
     end
     return false, contacts
@@ -478,7 +483,10 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
             for siteloc in compatible_sitelocs(sys, color(site))
-                push!(pairs, (site, siteloc))
+                mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
+                for r in 0:(nregistrations(site, mate) - 1)
+                    push!(pairs, (site, siteloc, r))
+                end
             end
         end
     end
@@ -488,6 +496,6 @@ end
 function collect_compatible_pairs(poly::Polyform)
     sys = bindingrules(poly)
     BS = BindingSite{posetype(sys),numtype(sys)}
-    pairs = Tuple{BS,BindingSiteLoc}[]
+    pairs = Tuple{BS,BindingSiteLoc,Int}[]
     return collect_compatible_pairs!(pairs, poly)
 end

@@ -22,7 +22,7 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
     ps32 = PolygonParticleSpecies(3, Float32(1.0))
     @test numtype(ps32) == Float32
 
-    ps_labels = PolygonParticleSpecies(4; labels=[1, 1, 1, 1])
+    ps_labels = PolygonParticleSpecies(4; colors=[1, 1, 1, 1])
     @test nsites(ps_labels) == 4
 
     ps_colors = PolygonParticleSpecies(4; colors=[1, 2, 1, 2])
@@ -67,11 +67,11 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
     @test nsites(UnitHexagon) == 6
 
     @test symmetrynumber(UnitSquare) == 1
-    @test symmetrynumber(PolygonParticleSpecies(4; labels=[1,1,1,1])) == 4
+    @test symmetrynumber(PolygonParticleSpecies(4; colors=[1,1,1,1])) == 4
 
     @test symmetrynumber(UnitTriangle) == 1
-    @test symmetrynumber(PolygonParticleSpecies(3; labels=[1,1,1])) == 3
+    @test symmetrynumber(PolygonParticleSpecies(3; colors=[1,1,1])) == 3
 
     @test symmetrynumber(UnitHexagon) == 1
-    @test symmetrynumber(PolygonParticleSpecies(6; labels=[1,1,1,1,1,1])) == 6
+    @test symmetrynumber(PolygonParticleSpecies(6; colors=[1,1,1,1,1,1])) == 6
 end

@@ -41,20 +41,15 @@
     # @test nstrs_137_gen == 137
     # @test nstrs_cyc_gen == 283
 
-    I_polymino = BindingRules(
-        [1 1 1 3;
-         1 2 1 4], 
-         PolygonParticleSpecies(4, 1.0; labels=[1,1,1,1]))
+    # All four edges the same sticky stuff, so any edge binds any edge. A square is 4-fold, so
+    # that is the same square lattice the old edge-1-to-edge-3 pairing described.
+    I_polymino = BindingRules([1 1 1 1], PolygonParticleSpecies(4, 1.0; colors=fill(1, 4)))
 
     # Number of one-sided polyminoes (https://oeis.org/A000988) [starting from 1]
     n_polyminoes = [1, 1, 2, 7, 18, 60, 196, 704, 2500]
     n_polyminoes_cumulative = cumsum(n_polyminoes)
 
-    I_polyiamond = BindingRules(
-            [1 1 1 1;
-             1 2 1 2;
-             1 3 1 3], 
-             PolygonParticleSpecies(3, 1.0; labels=[1,1,1]))
+    I_polyiamond = BindingRules([1 1 1 1], PolygonParticleSpecies(3, 1.0; colors=fill(1, 3)))
     
     # Number of one-sided polyiamonds (https://oeis.org/A006534)
     n_polyiamonds = [1, 1, 1, 4, 6, 19, 43, 120, 307, 866]
@@ -62,56 +57,81 @@
 
     # 3D lattice animals. Each of these needs ring closures to work — the first polycube with
     # a ring is the 2x2 square tetracube, the first polyiamond the six-triangle hexagon — so
-    # they exercise the twist conventions of `_align_mates` and `_align_axis` end to end.
+    # they exercise bond registration and dart pairing end to end.
+    #
+    # Every one is stated in colors alone: the sticky faces get one color, the rest another,
+    # and the symmetry follows. Nothing is said about labels, and nothing needs to be — see
+    # `_check_labelling` for why saying it would be worse than redundant.
     #
     # The planar cases come out *free* rather than one-sided: a flat assembly can be turned
     # over by a rotation about an axis in its plane, which is a rigid motion in 3D, so mirror
     # images are the same structure. That is the 3D answer, and differs from the 2D species
     # above, where reflections are not available.
     sidefaces(p) = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) < 1e-8]
-    opposite(p, i) = findfirst(j -> isapprox(dot(Roly.facenormal(p, i), Roly.facenormal(p, j)), -1;
-                                             atol=1e-8), 1:nfaces(p))
-    rules(shp, pairs, labels) = BindingRules(
-        reduce(vcat, [[1 p[1] 1 p[2]] for p in pairs]), PolyhedronParticleSpecies(shp; labels)
-    )
+    function rules(shp, sticky)
+        colors = [i in sticky ? 1 : 2 for i in 1:nfaces(shp)]
+        return BindingRules([1 first(sticky) 1 first(sticky)],
+                            PolyhedronParticleSpecies(shp; colors))
+    end
 
+    # Whether a bond admits more than one registration is what separates these two groups, and
+    # it is `gauge ÷ stab` of the sticky face: the turns the face has that the whole particle
+    # does not. Every solid here has gauge == stab, so each bond lands in one registration and
+    # the assembly is confined to its lattice.
     lattice_animals = [
-        # Cubes bonded on all six faces fill space: polycubes up to rotation.
-        ("polycubes (https://oeis.org/A000162)",
-         rules(Cube(), unique([minmax(i, opposite(Cube(), i)) for i in 1:6]), fill(1, 6)),
+        # Cubes bonded on all six faces fill space: polycubes up to rotation. A cube face is
+        # 4-fold and so is the cube about it, so a neighbour can only be attached one way.
+        ("polycubes (https://oeis.org/A000162)", Cube(), 1:nfaces(Cube()),
          [1, 1, 2, 8, 29, 166, 1023]),
-        # Restricted to the four side faces the cubes tile a plane: free polyominoes.
-        ("polyominoes (https://oeis.org/A000105)",
-         rules(Cube(), unique([minmax(i, opposite(Cube(), i)) for i in sidefaces(Cube())]), fill(1, 6)),
-         [1, 1, 2, 5, 12, 35, 108]),
-        # Triangular prisms tile a plane, but neighbouring triangles are related by a π
-        # rotation rather than a translation, which is what `_align_axis` sets up.
-        ("polyiamonds (https://oeis.org/A000577)",
-         rules(Prism(3), [(i, i) for i in sidefaces(Prism(3))], geometriclabels(Prism(3))),
-         [1, 1, 1, 3, 4, 12, 24]),
+        # Square prisms with h != a tile a plane on their four sides. The side faces are
+        # rectangles, 2-fold about their normals, and the prism is 2-fold about them too.
+        ("polyominoes (https://oeis.org/A000105)", Prism(4, 1.0; h=2.0),
+         sidefaces(Prism(4, 1.0; h=2.0)), [1, 1, 2, 5, 12, 35, 108]),
+        # Triangular prisms tile a plane, with neighbouring triangles related by a π rotation
+        # rather than a translation. That the ring of six closes is the test.
+        ("polyiamonds (https://oeis.org/A000577)", Prism(3, 1.0; h=2.0),
+         sidefaces(Prism(3, 1.0; h=2.0)), [1, 1, 1, 3, 4, 12, 24]),
         # Hexagonal prisms tile a plane by translation: free polyhexes.
-        ("polyhexes (https://oeis.org/A000228)",
-         rules(Prism(6), unique([minmax(i, opposite(Prism(6), i)) for i in sidefaces(Prism(6))]),
-               geometriclabels(Prism(6))),
-         [1, 1, 3, 7, 22, 82, 333]),
-        # The same two tilings with h != a, so the side faces are rectangles rather than
-        # squares. Nothing about the tiling changes, but a rectangle is only 2-fold about its
-        # normal where a square is 4-fold, so these are the cases that stay planar once bonds
-        # are allowed in every registration a face admits. Baseline for that change.
-        ("polyiamonds, tall prism",
-         rules(Prism(3, 1.0; h=2.0), [(i, i) for i in sidefaces(Prism(3, 1.0; h=2.0))],
-               geometriclabels(Prism(3, 1.0; h=2.0))),
-         [1, 1, 1, 3, 4, 12, 24]),
-        ("polyhexes, tall prism",
-         rules(Prism(6, 1.0; h=2.0),
-               unique([minmax(i, opposite(Prism(6, 1.0; h=2.0), i))
-                       for i in sidefaces(Prism(6, 1.0; h=2.0))]),
-               geometriclabels(Prism(6, 1.0; h=2.0))),
-         [1, 1, 3, 7, 22, 82, 333]),
+        ("polyhexes (https://oeis.org/A000228)", Prism(6, 1.0; h=2.0),
+         sidefaces(Prism(6, 1.0; h=2.0)), [1, 1, 3, 7, 22, 82, 333]),
     ]
 
-    for (name, sys, want) in lattice_animals
+    for (name, shp, sticky, want) in lattice_animals
+        sys = rules(shp, sticky)
+        ps = species(sys, 1)
+        # The premise of the case: one registration per bond, so it cannot leave its lattice.
+        @test all(i -> Roly.nregistrations(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
+                  sticky)
         @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
+    end
+
+    # The same two tilings from prisms whose side faces are *squares* rather than rectangles.
+    # The face is then 4-fold about its normal where the prism is only 2-fold about it, so the
+    # two solids differ in `gauge` but not in `stab` — and since registrations come from the
+    # particle's symmetry rather than the face's, they must enumerate identically. Two
+    # differently-shaped solids modelling the same tiling agreeing is the strongest check that
+    # the twist references are being pinned at the right strength.
+    for (shp, want) in [(Prism(3), [1, 2, 3, 6, 10, 22]), (Prism(6), [1, 2, 5, 12, 34])]
+        sys = rules(shp, sidefaces(shp))
+        b = Roly.bindingsites(species(sys, 1), first(sidefaces(shp)))
+        @test (b.gauge, b.stab) == (4, 2)
+        @test Roly.nregistrations(b, b) == 1
+        @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
+    end
+
+    # Freeing those side faces from their orientation is how the out-of-plane lattice is asked
+    # for. The square face then contributes its own 4-fold symmetry instead of the prism's
+    # 2-fold, so a bond admits two registrations — the in-plane one and one standing the
+    # neighbour on its side — and the assemblies leave the plane.
+    for (shp, want) in [(Prism(3), [1, 3, 6, 22, 73, 357]), (Prism(6), [1, 3, 12, 81, 812])]
+        sides = sidefaces(shp)
+        colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
+        ps = PolyhedronParticleSpecies(shp; colors, locking=[!(i in sides) for i in 1:nfaces(shp)])
+        b = Roly.bindingsites(ps, first(sides))
+        @test Roly.twistfreedom(b) == b.gauge == 4
+        @test Roly.nregistrations(b, b) == 2
+        sys = BindingRules([1 first(sides) 1 first(sides)], ps)
+        @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
     end
 
     nstrs_polymino_enum = [polyenum(I_polymino, maxsize=i)[1] for i in 1:length(n_polyminoes_cumulative)]

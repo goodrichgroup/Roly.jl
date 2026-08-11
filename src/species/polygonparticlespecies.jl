@@ -35,13 +35,16 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n, labels=nothing
         ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
         Pose(SVector{2,F}(pol2cart(r_in, rotation_angle(ψ))), ψ)
     end
-    # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
-    labels = something(labels, siteorbits(poses, ones(Int, n), collect(colors)))
+    # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout, and with
+    # it the stabiliser: the only rotation fixing a site is the identity.
+    gauges = ones(Int, n)
+    labels = something(labels, siteorbits(poses, gauges, collect(colors)))
+    stabs = sitestabilisers(poses, gauges, labels)
 
     g, ranges = cycleencoding(n; labels)
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]
     for (i, c) in enumerate(colors)
-        push!(sites, BindingSite(poses[i], c, ranges[i], tol, tol / r_in, 1))
+        push!(sites, BindingSite(poses[i], c, ranges[i], tol, tol / r_in, 1, stabs[i]))
     end
 
     corners = [
@@ -69,8 +72,7 @@ bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer})
     length(colors) != nsites(p) && throw(ArgumentError("incorrect number of colors"))
     for k in eachindex(p.sites)
-        s = p.sites[k]
-        p.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance, s.gauge)
+        p.sites[k] = setcolor(p.sites[k], colors[k])
     end
     return nothing
 end

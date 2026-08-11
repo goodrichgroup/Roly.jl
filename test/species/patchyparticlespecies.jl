@@ -45,7 +45,7 @@ using Roly:
     @test bindingsites(ps2, 1).vertices == 1:1
     @test bindingsites(ps2, 2).vertices == 2:2
     # Two equivalent patches give a symmetry number of 2. The old 4-cycle padding reported 4.
-    @test symmetrynumber(PatchyDisk([0.0, π]; labels=[1, 1])) == 2
+    @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
     @test bindingsites(ps2, 1).pose.x ≈ SVector(1.0, 0.0) atol = 1e-10
     @test bindingsites(ps2, 2).pose.x ≈ SVector(-1.0, 0.0) atol = 1e-10
 
@@ -66,8 +66,8 @@ using Roly:
 
     # symmetrynumber: all distinct → 1, all equal → n
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3])) == 1
-    @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; labels=[1, 1, 1])) == 3
-    @test symmetrynumber(PatchyDisk([0.0, π / 2, π, 3π / 2]; labels=[1, 1, 1, 1])) == 4
+    @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
+    @test symmetrynumber(PatchyDisk([0.0, π / 2, π, 3π / 2]; colors=[1, 1, 1, 1])) == 4
 
     # copy and setcolors!
     ps = PatchyDisk([0.0, 2π / 3, 4π / 3])
@@ -123,7 +123,7 @@ end
 
         # Same labelling rules and the same graph as the polyhedron species.
         @test symmetrynumber(ps) == 1
-        @test symmetrynumber(PatchySphere(shp, 2.0; labels=geometriclabels(shp))) == order
+        @test symmetrynumber(PatchySphere(shp, 2.0; colors=geometriclabels(shp))) == order
         @test order == length(rotationgroup(shp))
         @test nv(graphrep(ps)) == np
         @test nv(graphrep(PatchySphere(shp, 2.0; encoding=:dart))) == 2 * Roly.nedges(shp)
@@ -157,15 +157,16 @@ end
     using NautyGraphs: NautyDiGraph
 
     # Evenly spaced identical patches really do have that symmetry, so they build.
-    @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; labels=[1, 1, 1])) == 3
-    @test site_symmetry(PatchyDisk([0.0, 2π / 3, 4π / 3]; labels=[1, 1, 1])) == 3
-    @test symmetrynumber(PatchyDisk([0.0, π]; labels=[1, 1])) == 2
-    @test site_symmetry(PatchyDisk([0.0, π]; labels=[1, 1])) == 2
+    @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
+    @test site_symmetry(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
+    @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
+    @test site_symmetry(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
 
-    # Unevenly spaced ones do not: calling them equivalent claims a 3-fold symmetry the disk
-    # does not have, and the constructor rejects it.
-    @test_throws ArgumentError PatchyDisk([0.0, 0.5, 3.0]; labels=[1, 1, 1])
-    # With distinct labels the same arrangement is fine.
+    # Unevenly spaced ones do not, and giving them one color cannot pretend otherwise: the
+    # labelling is derived from the coloring *and the geometry*, so it splits patches no
+    # rotation carries onto one another and the symmetry comes out 1 either way.
+    @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0]; colors=[1, 1, 1])) == 1
+    @test length(unique(labels(graphrep(PatchyDisk([0.0, 0.5, 3.0]; colors=[1, 1, 1]))))) == 3
     @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0])) == 1
 
     # The general constructor takes the graph's structure but derives its labels, so a

@@ -59,52 +59,69 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
         end
     end
 
-    # Faces related by a translation are given the same local z (see `_align_mates`), so
-    # `sⱼ = sᵢ·Δ` and the bond leaves the attached particle's orientation unchanged. That
-    # is what lets a space-filling solid close rings and assemble into its lattice.
-    antiparallel(p) = [(i, j) for i in 1:nfaces(p) for j in (i + 1):nfaces(p)
-                       if isapprox(Roly.facenormal(p, i), -Roly.facenormal(p, j); atol=1e-8)]
-    localz(p, i) = normalize(edgemidpoint(p, i, 1) - facecentroid(p, i))
-    aligned(p) = [(i, j) for (i, j) in antiparallel(p) if isapprox(localz(p, i), localz(p, j); atol=1e-8)]
-
+    # The twist references have to agree up to `stab` under every label-preserving rotation:
+    # that is what `_propagate_faces` establishes, and what makes bonds between symmetry-related
+    # faces equivalent. `_canonical_faces` on its own only gets them to agree up to `gauge`,
+    # which is strictly weaker wherever a face is more symmetric than the body around it. The
+    # proof is in twist-references.md; this checks it holds for every element of the group, not
+    # just the ones the construction happened to use.
+    # Tetrahedron and octahedron are here for the cases with no translation-mated faces at all:
+    # a tetrahedron has no antiparallel pair, and an octahedron's are related by inversion,
+    # which is not a proper rotation. Neither has an orientation-free convention to find, and
+    # neither needs one — propagation asks only for consistency along the rotations there are.
     for (name, shp) in [("Cube", Cube()), ("Prism(4,h=2)", Prism(4, 1.0; h=2.0)),
-                        ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3))]
-        # Geometric labels, not all-equal: a box is combinatorially a cube, and calling its
-        # six faces equivalent claims a symmetry it does not have (the constructor rejects it).
-        ps = PolyhedronParticleSpecies(shp; labels=geometriclabels(shp))
-        pairs = aligned(shp)
-        # A prism tiles by translation, so every antiparallel pair is a mated pair.
-        @test !isempty(pairs)
-        @test pairs == antiparallel(shp)
-        for (i, j) in pairs
-            sys = BindingRules([1 i 1 j], ps)
-            poly = Polyform(sys, 1)
-            grown = false
-            for (site, loc) in collect_compatible_pairs(poly)
-                trial = copy(poly)
-                ismissing(raise!(trial, site, loc)) && continue
-                a, b = trial.particles
-                # Same orientation, and displaced by exactly one face-to-face step.
-                @test isapprox(a.pose.psi, b.pose.psi; atol=1e-8)
-                @test isapprox(norm(a.pose.x - b.pose.x), 2 * norm(facecentroid(shp, i)); atol=1e-8)
-                grown = true
-                break
+                        ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3)),
+                        ("Antiprism(4)", Antiprism(4)), ("Dodecahedron", Dodecahedron()),
+                        ("Tetrahedron", Tetrahedron()), ("Octahedron", Octahedron())]
+        ps = PolyhedronParticleSpecies(shp; colors=geometriclabels(shp))
+        labs = Roly.labels(graphrep(ps))
+        sitelabel(i) = labs[first(Roly.bindingsites(ps, i).vertices)]
+        centroids = [facecentroid(shp, i) - sum(corners(shp)) / length(corners(shp))
+                     for i in 1:nfaces(shp)]
+        faceat(x) = findfirst(i -> isapprox(centroids[i], x; atol=1e-8), 1:nfaces(shp))
+
+        group = filter(Roly.rotationgroup(shp)) do Q
+            all(i -> (j = faceat(Q * centroids[i]); !isnothing(j) && sitelabel(j) == sitelabel(i)),
+                1:nfaces(shp))
+        end
+        @test length(group) == symmetrynumber(ps)
+
+        for Q in group, i in 1:nfaces(shp)
+            j = faceat(Q * centroids[i])
+            bi, bj = Roly.bindingsites(ps, i), Roly.bindingsites(ps, j)
+            @test bj.stab == bi.stab
+            # Q carries site i's frame onto site j's, up to a turn about j's normal lying in
+            # j's stabiliser -- not merely in its gauge.
+            @test any(0:(bj.stab - 1)) do m
+                isapprox(Q * bi.pose.psi, bj.pose.psi * RotX(2π * m / bj.stab); atol=1e-8)
             end
-            @test grown
         end
     end
 
-    # A tetrahedron has no antiparallel face pairs at all: it does not tile by
-    # translation, so there is no orientation-free convention to find and none is forced.
-    @test isempty(antiparallel(Tetrahedron()))
-    # An octahedron does have antiparallel faces, but they are related by inversion, not
-    # translation, so they are not mates and are correctly left unaligned.
-    @test !isempty(antiparallel(Octahedron()))
-    @test isempty(aligned(Octahedron()))
+    # And the payoff: bonding two faces that a symmetry relates gives congruent dimers, so a
+    # space-filling solid assembles into one lattice rather than several.
+    for (name, shp) in [("Cube", Cube()), ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3))]
+        sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
+        ps = PolyhedronParticleSpecies(shp; colors=[i in sides ? 1 : 2 for i in 1:nfaces(shp)])
+        sys = BindingRules([1 first(sides) 1 first(sides)], ps)
+        step = 2 * norm(facecentroid(shp, first(sides)))
+        poly = Polyform(sys, 1)
+        grown = 0
+        for (site, loc, r) in collect_compatible_pairs(poly)
+            trial = copy(poly)
+            ismissing(raise!(trial, site, loc, r)) && continue
+            a, b = trial.particles
+            @test isapprox(norm(a.pose.x - b.pose.x), step; atol=1e-8)
+            # Every neighbour lands in the plane the side faces span.
+            @test isapprox((b.pose.x - a.pose.x)[3], 0; atol=1e-8)
+            grown += 1
+        end
+        @test grown == length(sides)^2
+    end
 
     for (name, _, shp, nf, order) in solids
         # Faces grouped by geometric orbit recover the solid's rotation group.
-        geo = PolyhedronParticleSpecies(shp; labels=geometriclabels(shp))
+        geo = PolyhedronParticleSpecies(shp; colors=geometriclabels(shp))
         @test symmetrynumber(geo) == order == length(rotationgroup(shp))
         # Distinct labels give 1, regardless of encoding.
         @test symmetrynumber(PolyhedronParticleSpecies(shp)) == 1
@@ -123,14 +140,14 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
         end
         # Repeated labels: only the dart encoding carries the rotation group, and forcing the
         # sparse one is now rejected rather than silently reporting the cyclic order.
-        geo = PolyhedronParticleSpecies(shp; encoding=:dart, labels=geometriclabels(shp))
+        geo = PolyhedronParticleSpecies(shp; encoding=:dart, colors=geometriclabels(shp))
         @test symmetrynumber(geo) == site_symmetry(geo) == order
         order == nfaces(shp) ||
             @test_throws ArgumentError PolyhedronParticleSpecies(shp; encoding=:cycle,
-                                                                 labels=geometriclabels(shp))
+                                                                 colors=geometriclabels(shp))
     end
     for (shp, order) in [(Tetrahedron(), 12), (Cube(), 24), (Dodecahedron(), 60), (Prism(5), 10)]
-        sphere = PatchySphere(shp, 1.0; labels=geometriclabels(shp))
+        sphere = PatchySphere(shp, 1.0; colors=geometriclabels(shp))
         @test symmetrynumber(sphere) == site_symmetry(sphere) == order
     end
 
@@ -143,7 +160,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
 
     # A cube keeps all four turns about a face normal, so a face-to-face bond has one
     # registration and nothing changes for polycubes.
-    cube = PolyhedronParticleSpecies(Cube(); labels=fill(1, 6))
+    cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
     @test gauges(cube) == fill(4, 6)
     @test Roly.sitestabilisers(cube) == fill(4, 6)
     @test registrations(cube) == fill(1, 6)
@@ -151,14 +168,14 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     # Distinguishing the caps costs the side faces two of those turns, since a quarter turn
     # about a side normal carries the other sides onto caps.
     caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in Roly.facenormals(Cube())]
-    capped = PolyhedronParticleSpecies(Cube(); labels=caps)
+    capped = PolyhedronParticleSpecies(Cube(); colors=caps)
     @test Roly.sitestabilisers(capped) == [c == 2 ? 4 : 2 for c in caps]
     @test registrations(capped) == [c == 2 ? 1 : 2 for c in caps]
 
     # The case the registration story turns on. A triangular prism's side faces are squares
     # when h == a — gauge 4 — but the prism is only 2-fold about them, so a partner can attach
     # two ways: in the plane, or tipped out of it.
-    tri = PolyhedronParticleSpecies(Prism(3); labels=geometriclabels(Prism(3)))
+    tri = PolyhedronParticleSpecies(Prism(3); colors=geometriclabels(Prism(3)))
     @test gauges(tri) == [3, 4, 4, 4, 3]
     @test Roly.sitestabilisers(tri) == [3, 2, 2, 2, 3]
     @test registrations(tri) == [1, 2, 2, 2, 1]
@@ -166,7 +183,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     # Make the prism taller and those faces are rectangles: gauge and stabiliser agree at 2,
     # leaving a single registration. This is why the tall prisms stay planar.
     tall = Prism(3, 1.0; h=2.0)
-    tallps = PolyhedronParticleSpecies(tall; labels=geometriclabels(tall))
+    tallps = PolyhedronParticleSpecies(tall; colors=geometriclabels(tall))
     @test gauges(tallps) == [3, 2, 2, 2, 3]
     @test registrations(tallps) == fill(1, 5)
 
@@ -177,29 +194,34 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
         @test all(symmetrynumber(ps) .% stabs .== 0)
     end
 
-    # And it has teeth. Declaring a pyramid's base equivalent to its sides claims the
-    # tetrahedral 12 for an arrangement that only has 3.
-    @test_throws ArgumentError PolyhedronParticleSpecies(Pyramid(3); labels=fill(1, 4))
+    # Deriving the labelling from the coloring cannot claim a symmetry that is not there: one
+    # color on all four faces of a triangular pyramid does not make its base equivalent to its
+    # sides, and the derivation splits them, leaving the 3-fold axis rather than a tetrahedral
+    # 12. Saying it in labels instead is what used to be rejected here; it can no longer be
+    # said at all.
+    pyramid = PolyhedronParticleSpecies(Pyramid(3); colors=fill(1, 4))
+    @test length(unique(Roly.labels(graphrep(pyramid)))) == 2
+    @test symmetrynumber(pyramid) == site_symmetry(pyramid) == 3
     # The sparse encoding imposes a cyclic order, which is not the symmetry of a tetrahedral
     # or octahedral patch arrangement: it claims n where the truth is |G|. This is the failure
     # that using `cycleencoding`/`dartencoding` does *not* rule out on its own.
-    @test_throws ArgumentError PatchySphere(Tetrahedron(), 1.0; labels=fill(1, 4), encoding=:cycle)
-    @test_throws ArgumentError PatchySphere(Cube(), 1.0; labels=fill(1, 6), encoding=:cycle)
+    @test_throws ArgumentError PatchySphere(Tetrahedron(), 1.0; colors=fill(1, 4), encoding=:cycle)
+    @test_throws ArgumentError PatchySphere(Cube(), 1.0; colors=fill(1, 6), encoding=:cycle)
     # The dart encoding is the one that describes them.
-    @test symmetrynumber(PatchySphere(Tetrahedron(), 1.0; labels=fill(1, 4), encoding=:dart)) == 12
+    @test symmetrynumber(PatchySphere(Tetrahedron(), 1.0; colors=fill(1, 4), encoding=:dart)) == 12
 
     # A cube with the two caps distinguished from the four sides keeps the 4-fold axis
     # and the 2-fold axes through it: D_4, of order 8.
     caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in Roly.facenormals(Cube())]
-    @test symmetrynumber(PolyhedronParticleSpecies(Cube(); labels=caps)) == 8
+    @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=caps)) == 8
     # Singling out one face leaves only the rotations about its normal.
-    @test symmetrynumber(PolyhedronParticleSpecies(Cube(); labels=[2, 1, 1, 1, 1, 1])) == 4
+    @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=[2, 1, 1, 1, 1, 1])) == 4
 
     shp = Cube()
     # :auto takes the cheap encoding when it is provably equivalent, the dart encoding
     # when a repeated label means the graph has to carry the rotation group.
     @test nv(graphrep(PolyhedronParticleSpecies(shp))) == 6
-    @test nv(graphrep(PolyhedronParticleSpecies(shp; labels=fill(1, 6)))) == 24
+    @test nv(graphrep(PolyhedronParticleSpecies(shp; colors=fill(1, 6)))) == 24
     @test nv(graphrep(PolyhedronParticleSpecies(shp; encoding=:dart))) == 24
     @test nv(graphrep(PolyhedronParticleSpecies(shp; encoding=:cycle))) == 6
     @test all(length(bindingsites(PolyhedronParticleSpecies(shp; encoding=:dart), i).vertices) == 4
@@ -208,7 +230,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     @test_throws ArgumentError PolyhedronParticleSpecies(shp; encoding=:nonsense)
     @test_throws ArgumentError PolyhedronParticleSpecies(shp; colors=1:5)
 
-    ps = PolyhedronParticleSpecies(Cube(); colors=[3, 1, 4, 1, 5, 9], labels=1:6)
+    ps = PolyhedronParticleSpecies(Cube(); colors=[3, 1, 4, 1, 5, 9])
     @test color(bindingsites(ps, 1)) == 3
     @test color(bindingsites(ps, 5)) == 5
 

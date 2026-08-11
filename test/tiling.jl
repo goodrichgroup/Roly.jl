@@ -1,10 +1,10 @@
 @testset "tiling" begin
     # Polymino square: all 4 sites same color; opposite faces bond (1↔3, 2↔4).
-    sq_sys = BindingRules([1 1 1 3; 1 2 1 4], PolygonParticleSpecies(4; labels=[1, 1, 1, 1]))
+    sq_sys = BindingRules([1 1 1 3; 1 2 1 4], PolygonParticleSpecies(4; colors=[1, 1, 1, 1]))
     sq = Polyform(sq_sys, 1)
 
     # Polyiamond triangle: all 3 sites same color; all faces bond.
-    tri_sys = BindingRules([1 1 1 1; 1 2 1 2; 1 3 1 3], PolygonParticleSpecies(3; labels=[1, 1, 1]))
+    tri_sys = BindingRules([1 1 1 1; 1 2 1 2; 1 3 1 3], PolygonParticleSpecies(3; colors=[1, 1, 1]))
     tri = Polyform(tri_sys, 1)
 
     # Square with only 1 active site → n_opensites = 1, cannot tile.

@@ -8,7 +8,9 @@
 
     tri = PolygonParticleSpecies(3)
     disk = PatchyDisk([0.0, 2π / 3, 4π / 3])
-    cube = PolyhedronParticleSpecies(Cube(); labels=fill(1, 6))
+    # Distinct colors per face, so a rules table naming one bond leaves the other four inert
+    # and the inert-site rendering below has something to grey out.
+    cube = PolyhedronParticleSpecies(Cube())
     sphere = PatchySphere(Cube(), 1.0)
 
     for spcs in (tri, disk, cube, sphere, UnitTetrahedron, UnitDodecahedron, UnitPrism(5))
