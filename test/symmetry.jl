@@ -20,9 +20,9 @@ Two subtleties, both learned the hard way:
   * the induced site map must be a bijection. Coincident sites let a non-injective map satisfy
     the pointwise conditions.
 """
-function geometric_symmetry(poly)
+function site_rotations(poly)
     bs = [bindingsites(poly, i) for i in 1:nsites(poly)]
-    isempty(bs) && return 1
+    isempty(bs) && return []
     c0 = sum(b.pose.x for b in bs) / length(bs)
     xs = [b.pose.x - c0 for b in bs]
     ps = [b.pose.psi for b in bs]
@@ -49,7 +49,24 @@ function geometric_symmetry(poly)
             push!(found, Q)
         end
     end
-    return length(found)
+    return found
+end
+
+geometric_symmetry(poly) = length(site_rotations(poly))
+
+"""
+The strongest reading: rotations mapping the union of the particles' actual corner sets onto
+itself. `geometric_symmetry` compares site frames only up to each site's gauge, which is the
+resolution the graph works at -- so on its own it could agree with `sigma` by sharing a blind
+spot. Checking the solid closes that, for the species that have one.
+"""
+function body_symmetry(poly, sys, rotations)
+    bs = [bindingsites(poly, i) for i in 1:nsites(poly)]
+    c0 = sum(b.pose.x for b in bs) / length(bs)
+    pts = [pt.pose * c - c0
+           for pt in poly.particles
+           for c in Roly.corners(Roly.shape(Roly.species(sys, pt.species_index)))]
+    return count(Q -> all(p -> any(q -> isapprox(Q * p, q; atol=1e-7), pts), pts), rotations)
 end
 
 @testset "polyform symmetry matches the graph" begin
@@ -80,8 +97,13 @@ end
     for (name, sys, maxsize) in cases
         polys = polygen(sys; maxsize)
         @test !isempty(polys)
+        polyhedral = Roly.species(sys, 1) isa PolyhedronParticleSpecies
         for poly in polys
-            @test symmetrynumber(poly) == geometric_symmetry(poly)
+            rots = site_rotations(poly)
+            @test symmetrynumber(poly) == length(rots)
+            # ...and for a solid, every one of those really does map the body onto itself, so
+            # the agreement is not two views sharing the graph's resolution.
+            polyhedral && @test body_symmetry(poly, sys, rots) == length(rots)
         end
     end
 
