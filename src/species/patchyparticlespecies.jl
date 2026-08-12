@@ -78,7 +78,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles))
 end
 
 """
-    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, encoding=:auto)
+    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, twists=0, encoding=:auto)
     PatchySphere(sym::Symbol, n=0, r=1; kwargs...)
 
 A 3D sphere of radius `r` carrying one patch per face of `p`, so that the patches inherit the
@@ -87,11 +87,12 @@ by [`Polyhedron`](@ref): `PatchySphere(:T)`, `PatchySphere(:O)`, `PatchySphere(:
 
 Patches sit where the face centroid directions pierce the sphere, and share the graph
 encoding, the labelling rules and the binding site frame convention of
-[`PolyhedronParticleSpecies`](@ref) — so a polyhedron species and a patchy sphere built from
-the same solid have interchangeable encodings and can share one set of `BindingRules`.
+[`PolyhedronParticleSpecies`](@ref), including its `locking` and `twists` keywords — so a
+polyhedron species and a patchy sphere built from the same solid have interchangeable encodings
+and can share one set of `BindingRules`.
 """
 function PatchySphere(
-    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), locking=true,
+    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), locking=true, twists=0,
     encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
@@ -99,38 +100,23 @@ function PatchySphere(
         throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
     encoding in (:auto, :dart, :cycle) ||
         throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
-    locking = _locking(locking, n)
 
     r = F(r)
     tol = sqrt(eps(F)) * r
     # On a sphere the patch normal has to be radial, so the frame is built from the centroid
-    # direction and the tangential part of the direction to the face's first edge. The two
-    # passes over the face lists are as in `PolyhedronParticleSpecies`; see `_propagate_faces`.
+    # direction and the tangential part of the direction to the face's first edge. Everything
+    # else about the construction is shared with the polyhedron species; see `_facesites`.
     P = Pose{3,F,RotMatrix3{F}}
-    function patchposes(fs)
-        map(eachindex(fs)) do i
-            c = facecentroid(p, i)
-            ex = normalize(c)
-            v = (corners(p)[fs[i][1]] + corners(p)[fs[i][2]]) / 2 - c
-            ez = normalize(v - dot(v, ex) * ex)
-            P(r * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
-        end
+    patchposes(fs) = map(eachindex(fs)) do i
+        c = facecentroid(p, i)
+        ex = normalize(c)
+        v = (corners(p)[fs[i][1]] + corners(p)[fs[i][2]]) / 2 - c
+        ez = normalize(v - dot(v, ex) * ex)
+        P(r * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
     end
-    fs = faces(p)
-    poses = patchposes(fs)
-    # The patches stand in for the faces, so they inherit the faces' own symmetry.
-    gauges = facegauge(p)
-    labels = siteorbits(poses, gauges, collect(colors))
-    fs = _propagate_faces(corners(p), fs, labels)
-    poses = patchposes(fs)
-    stabs = sitestabilisers(poses, gauges, labels)
 
-    usecycle = encoding === :cycle ||
-        (encoding === :auto && _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
-    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(fs; labels)
-
-    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, gauges[i], stabs[i],
-                         locking[i]) for i in 1:n]
+    g, sites = _facesites(p, patchposes, colors, _perface(locking, n, "locking flags"),
+                          _perface(twists, n, "twists"), encoding, tol, tol / r)
     return _check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
 

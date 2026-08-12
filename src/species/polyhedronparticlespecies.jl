@@ -15,7 +15,7 @@ struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
 end
 
 """
-    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, encoding=:auto)
+    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0, encoding=:auto)
 
 Build a particle species from the polyhedron `p`, with one binding site at each face centroid.
 
@@ -36,40 +36,35 @@ particle's own symmetry makes the frame ambiguous. Setting a face rotation-free 
 every orientation the face geometrically permits: a triangular prism with square sides is only
 2-fold about them, so `locking=true` bonds its prisms coplanar, while freeing a side face also
 allows the neighbour stood on its side. See [`nregistrations`](@ref).
+
+`twists` turns a face's binding site about its own normal, in whole dart steps — one step being
+`2π/degree` — and likewise takes one value or one per face. This is the bond *registry*: which
+relative orientation a bond means, as opposed to how many it admits. Note that turning both
+faces of a bond by the same amount does not cancel, it turns the partner by twice that: the
+offset appears on both sides of the face-to-face flip, and `Δ·Rx(-θ) = Rx(θ)·Δ`.
+
+Whole steps, not free angles, because the frame and the dart numbering have to move together;
+turning the frame alone would leave [`contact_pairing`](@ref) anchoring the bond on the wrong
+pair of vertices. Twisting one face of a symmetry orbit differently from its fellows splits the
+orbit, lowering the symmetry number — deliberately breaking a symmetry is exactly what this is
+for, and the graph then records the break.
 """
 function PolyhedronParticleSpecies(
-    p::Polyhedron{F}; colors=1:nfaces(p), locking=true, encoding::Symbol=:auto
+    p::Polyhedron{F}; colors=1:nfaces(p), locking=true, twists=0, encoding::Symbol=:auto
 ) where {F}
     n = nfaces(p)
     length(colors) == n ||
         throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
     encoding in (:auto, :dart, :cycle) ||
         throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
-    locking = _locking(locking, n)
 
     rmin = inradius(p)
     rmax = bounding_radius(p)
     tol = sqrt(eps(F)) * rmax
 
-    # The twist references are settled in two passes. The solid has already picked each face's
-    # first corner from its own shape; that is enough to compute the labelling, since it fixes
-    # the frames up to a gauge turn and nothing here looks finer. Knowing the labelling then
-    # gives the symmetry group, and re-winding along it pins the references up to `stab`, which
-    # is what bonds need. See `_propagate_faces`.
-    fs = faces(p)
-    poses = _faceposes(p, fs)
-    gauges = facegauge(p)
-    labels = siteorbits(poses, gauges, collect(colors))
-    fs = _propagate_faces(corners(p), fs, labels)
-    poses = _faceposes(p, fs)
-    stabs = sitestabilisers(poses, gauges, labels)
-
-    usecycle = encoding === :cycle ||
-        (encoding === :auto && _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
-    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(fs; labels)
-
-    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / rmin, gauges[i], stabs[i],
-                         locking[i]) for i in 1:n]
+    g, sites = _facesites(p, fs -> _faceposes(p, fs), colors,
+                          _perface(locking, n, "locking flags"),
+                          _perface(twists, n, "twists"), encoding, tol, tol / rmin)
 
     return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
         g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol

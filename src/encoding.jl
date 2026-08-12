@@ -575,18 +575,64 @@ end
 
 """
     _twistfreedoms(gauges, stabs, locking)
-    _locking(locking, n)
+    _perface(x, n, what)
 
 Per-site [`twistfreedom`](@ref) from the two symmetry counts and the locking flags, and the
-normalisation of a `locking` keyword given as a single `Bool` or as one flag per site.
+normalisation of a keyword given either as a single value for the whole species or as one value
+per site.
 """
 _twistfreedoms(gauges, stabs, locking) = [l ? s : g for (g, s, l) in zip(gauges, stabs, locking)]
 
-function _locking(locking, n::Integer)
-    locking isa Bool && return fill(locking, n)
-    length(locking) == n ||
-        throw(ArgumentError("expected $n locking flags, one per site, got $(length(locking))"))
-    return collect(Bool, locking)
+function _perface(x, n::Integer, what::AbstractString)
+    x isa Union{Bool,Integer} && return fill(x, n)
+    length(x) == n ||
+        throw(ArgumentError("expected $n $what, one per face, got $(length(x))"))
+    return collect(x)
+end
+
+"""
+    _facesites(p, poseof, colors, locking, twists, encoding, touching_tol, alignment_tol)
+
+Build the graph and binding sites of a species carrying one site per face of `p`, shared by
+[`PolyhedronParticleSpecies`](@ref) and [`PatchySphere`](@ref). They differ only in where a
+site sits and how its frame is built, which is what `poseof` supplies: it maps a list of face
+corner lists to the poses of the corresponding sites.
+
+The order is forced. A face's first corner is its site's twist reference, and settling it takes
+three steps, each needing the one before:
+
+1. The solid arrives with each face already started at an intrinsically chosen corner
+   ([`_canonical_faces`](@ref)), which pins the references up to each face's `gauge`.
+2. That is enough to derive the labelling, since [`siteorbits`](@ref) compares frames only up
+   to `gauge`. Knowing the labelling gives the symmetry group.
+3. [`_propagate_faces`](@ref) then re-winds along that group, pinning the references up to
+   `stab`, which is the strength bonds need.
+
+`twists` is applied last, as a per-face rotation of the corner list — a whole dart step rather
+than a free angle, because the frame and the dart numbering have to move together or
+[`contact_pairing`](@ref) would anchor a bond on the wrong pair. It is folded into the key
+`siteorbits` groups by, alongside the color, so that twisting one face of an orbit differently
+from its fellows splits that orbit rather than silently breaking the equivariance propagation
+just established. Splitting is always safe: the graph then distinguishes more, not less.
+"""
+function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists, encoding::Symbol,
+                    touching_tol::Real, alignment_tol::Real) where {F}
+    n = nfaces(p)
+    gauges = facegauge(p)
+    labels = siteorbits(poseof(faces(p)), gauges, collect(zip(colors, twists)))
+
+    fs = _propagate_faces(corners(p), faces(p), labels)
+    fs = [circshift(f, -mod(t, length(f))) for (f, t) in zip(fs, twists)]
+    poses = poseof(fs)
+    stabs = sitestabilisers(poses, gauges, labels)
+
+    usecycle = encoding === :cycle ||
+        (encoding === :auto && _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
+    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(fs; labels)
+
+    sites = [BindingSite(poses[i], colors[i], ranges[i], touching_tol, alignment_tol,
+                         gauges[i], stabs[i], locking[i]) for i in 1:n]
+    return g, sites
 end
 
 """

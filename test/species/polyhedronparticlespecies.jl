@@ -393,3 +393,57 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     @test nbonds(polygen(same; maxsize=2)[end]) == 4
     @test nbonds(polygen(mixed; maxsize=2)[end]) == 1
 end
+
+@testset "twists set the bond registry" begin
+    using Roly: PolyhedronParticleSpecies, Prism, Tetrahedron, BindingRules, Polyform,
+                raise!, collect_compatible_pairs, symmetrynumber, graphrep, nfaces
+    using Rotations: RotMatrix3, rotation_angle
+    using LinearAlgebra: inv
+
+    shp = Prism(3)
+    sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
+    colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
+    counts(sys) = [polyenum(sys; maxsize=i)[1] for i in 1:5]
+
+    # Turning a whole orbit by the same amount turns the partner by *twice* it, since the offset
+    # lands on both sides of the face-to-face flip. Here that is 2*90 = 180 degrees, which is a
+    # symmetry of the prism about a side face (stab = 2), so the lattice is untouched however
+    # far the sides are turned -- and the symmetry number holds, the orbit being intact.
+    for t in 0:3
+        ps = PolyhedronParticleSpecies(shp; colors,
+                                       twists=[i in sides ? t : 0 for i in 1:nfaces(shp)])
+        @test symmetrynumber(ps) == 6
+        @test counts(BindingRules([1 first(sides) 1 first(sides)], ps)) == [1, 2, 3, 6, 10]
+    end
+
+    # Turning *one* face of an orbit differently is a deliberate break, and the labelling has to
+    # record it or the graph would keep claiming a symmetry the frames no longer have. The twist
+    # is folded into the key `siteorbits` groups by, so the orbit splits.
+    split = PolyhedronParticleSpecies(shp; colors,
+                                      twists=[i == first(sides) ? 1 : 0 for i in 1:nfaces(shp)])
+    @test symmetrynumber(split) == site_symmetry(split) == 2
+    @test length(unique(Roly.labels(graphrep(split)))) == 3
+    @test symmetrynumber(PolyhedronParticleSpecies(shp; colors)) == 6
+
+    # On a particle with no symmetry to hide behind, the twist is the bond registry outright.
+    # Turning only the mate's face turns the partner by exactly one dart step, not two.
+    function dimerpsi(t)
+        ps = PolyhedronParticleSpecies(Tetrahedron(); twists=[0, t, 0, 0], encoding=:dart)
+        @test symmetrynumber(ps) == 1
+        poly = Polyform(BindingRules([1 1 1 2], ps), 1)
+        for (site, loc, r) in collect_compatible_pairs(poly)
+            trial = copy(poly)
+            ismissing(raise!(trial, site, loc, r)) && continue
+            return trial.particles[2].pose.psi
+        end
+        return nothing
+    end
+    a, b = dimerpsi(0), dimerpsi(1)
+    @test !isnothing(a) && !isnothing(b)
+    @test isapprox(rotation_angle(RotMatrix3(a * inv(b))), 2π / 3; atol=1e-8)
+    # A triangular face has three darts, so three steps is the identity.
+    @test isapprox(dimerpsi(3), a; atol=1e-8)
+
+    @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0, 1])
+    @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); locking=[true, false])
+end
