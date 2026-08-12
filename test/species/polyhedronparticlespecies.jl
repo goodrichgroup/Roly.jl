@@ -427,22 +427,30 @@ end
 
     # On a particle with no symmetry to hide behind, the twist is the bond registry outright.
     # Turning only the mate's face turns the partner by exactly one dart step, not two.
-    function dimerpsi(t)
+    function dimer(t)
         ps = PolyhedronParticleSpecies(Tetrahedron(); twists=[0, t, 0, 0], encoding=:dart)
         @test symmetrynumber(ps) == 1
         poly = Polyform(BindingRules([1 1 1 2], ps), 1)
         for (site, loc, r) in collect_compatible_pairs(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
-            return trial.particles[2].pose.psi
+            return trial
         end
         return nothing
     end
-    a, b = dimerpsi(0), dimerpsi(1)
+    a, b = dimer(0), dimer(1)
     @test !isnothing(a) && !isnothing(b)
-    @test isapprox(rotation_angle(RotMatrix3(a * inv(b))), 2π / 3; atol=1e-8)
+    @test isapprox(rotation_angle(RotMatrix3(a.particles[2].pose.psi * inv(b.particles[2].pose.psi))),
+                   2π / 3; atol=1e-8)
     # A triangular face has three darts, so three steps is the identity.
-    @test isapprox(dimerpsi(3), a; atol=1e-8)
+    @test isapprox(dimer(3).particles[2].pose.psi, a.particles[2].pose.psi; atol=1e-8)
+
+    # And the encoding notices, which is the whole reason the twist rotates the face's corner
+    # list rather than just its frame. `contact_pairing` anchors on the first vertex of each
+    # site's range because that is the dart local z points at; turning the frame alone would
+    # leave the graph recording a coincidence that is no longer there, and two genuinely
+    # different assemblies would share a canonical form and be merged.
+    @test graphrep(a) != graphrep(b)
 
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0, 1])
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); locking=[true, false])
