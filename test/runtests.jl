@@ -11,6 +11,7 @@ using NautyGraphs
     include("polyform.jl")
     include("enumeration.jl")
     include("environments.jl")
+    include("tiling.jl")
     include("utils.jl")
     include("ruleeditor.jl")
 
