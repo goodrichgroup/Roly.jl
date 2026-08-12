@@ -1,7 +1,9 @@
 # The species interface as `docs/src/custom_species.md` documents it. This exists because that
-# page's example was wrong for a long time without anything noticing: it labelled all four sites
-# of a *rectangle* alike, claiming a 4-fold symmetry the shape does not have, which would have
-# merged genuinely different structures for anyone who followed it.
+# page's example was wrong for a long time without anything noticing: it wrote its labels by
+# hand and made all four sites of a *rectangle* alike, claiming a 4-fold symmetry the shape does
+# not have, which would have merged genuinely different structures for anyone who followed it.
+# The fix is not to write more careful labels but to stop writing them: `siteorbits` reads the
+# symmetry off the geometry and the coloring, which is what every species in Roly does.
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color,
             cycleencoding, sitestabilisers
@@ -17,18 +19,21 @@ struct Rectangle{F,B<:BindingSite} <: ParticleSpecies{2,B}
     skin::F
 end
 
-function Rectangle(width::Real, height::Real)
+function Rectangle(width::Real, height::Real; colors=1:4)
     F = float(promote_type(typeof(width), typeof(height)))
     w, h = F(width), F(height)
     tol = sqrt(eps(F)) * max(w, h)
-    # Opposite edges are interchangeable, adjacent ones are not: a rectangle is 2-fold.
-    sites = [
-        BindingSite(Pose(SVector{2,F}(w / 2, 0), Angle2d{F}(0)), 1, 1:1, tol, tol),
-        BindingSite(Pose(SVector{2,F}(0, -h / 2), Angle2d{F}(-F(π) / 2)), 2, 2:2, tol, tol),
-        BindingSite(Pose(SVector{2,F}(-w / 2, 0), Angle2d{F}(F(π))), 1, 3:3, tol, tol),
-        BindingSite(Pose(SVector{2,F}(0, h / 2), Angle2d{F}(F(π) / 2)), 2, 4:4, tol, tol),
+    poses = [
+        Pose(SVector{2,F}(w / 2, 0), Angle2d{F}(0)),
+        Pose(SVector{2,F}(0, -h / 2), Angle2d{F}(-F(π) / 2)),
+        Pose(SVector{2,F}(-w / 2, 0), Angle2d{F}(F(π))),
+        Pose(SVector{2,F}(0, h / 2), Angle2d{F}(F(π) / 2)),
     ]
-    g, _ = cycleencoding(4; labels=[1, 2, 1, 2])
+    # Derived, not written down: a 2D site has no turn about its in-plane normal, so every
+    # gauge is 1, and `siteorbits` reads the rest off the geometry and the coloring.
+    labels = siteorbits(poses, ones(Int, 4), collect(colors))
+    g, ranges = cycleencoding(4; labels)
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol) for i in 1:4]
     corners = [SVector{2,F}(w / 2, h / 2), SVector{2,F}(w / 2, -h / 2),
                SVector{2,F}(-w / 2, -h / 2), SVector{2,F}(-w / 2, h / 2)]
     return Rectangle{F,eltype(sites)}(g, sites, corners, w, h, tol)
@@ -62,14 +67,23 @@ function Roly.overlap(p1::SpeciesAndPose{<:Rectangle}, p2::SpeciesAndPose{<:Rect
 end
 
 @testset "custom species" begin
-    r = Rectangle(2.0, 1.0)
+    r = Rectangle(2.0, 1.0; colors=[1, 2, 1, 2])
     @test nsites(r) == 4
     @test dimension(r) == 2
 
     # The graph has to claim exactly the symmetry the sites have, or structures get merged or
-    # split. A rectangle is 2-fold; labelling all four sites alike would say 4.
+    # split. A rectangle is 2-fold, and nothing has to be told so: `siteorbits` separates the
+    # long edges from the short ones from the geometry alone, whatever the coloring says.
     @test symmetrynumber(r) == site_symmetry(r) == 2
     @test Roly._check_encoding(r) === r
+    for cols in ([1, 1, 1, 1], [1, 2, 1, 2], [9, 9, 9, 9])
+        @test symmetrynumber(Rectangle(2.0, 1.0; colors=cols)) == 2
+    end
+    # All four edges alike on a *square* really are interchangeable, and it says 4 there.
+    @test siteorbits([Pose(SVector(cos(t), sin(t)), Angle2d(t)) for t in (0, π/2, π, 3π/2)],
+                     ones(Int, 4), fill(1, 4)) == [1, 1, 1, 1]
+    # Distinct colors break the symmetry, since interchangeable sites must also bond alike.
+    @test symmetrynumber(Rectangle(2.0, 1.0; colors=1:4)) == 1
 
     # `setcolors!` needs no definition: the generic method finds the sites in the `sites` field
     # and re-derives the labelling and the stabilisers, which are a function of the coloring.

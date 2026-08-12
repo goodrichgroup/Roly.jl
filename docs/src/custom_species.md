@@ -69,23 +69,26 @@ The type parameters `{2,B}` fix the spatial dimension to 2D and let Roly infer t
 The constructor builds the graph, places one binding site at the midpoint of each edge (facing outward), and computes the corners. We use `Angle2d` for 2D rotations and `Pose` to describe each site's position and orientation.
 
 ```julia
-function Rectangle(width::Real, height::Real)
+function Rectangle(width::Real, height::Real; colors=1:4)
     F = float(promote_type(typeof(width), typeof(height)))
     w, h = F(width), F(height)
     tol = sqrt(eps(F)) * max(w, h)
 
-    # Four binding sites at edge midpoints, each facing outward along the edge normal.
-    # Sites are ordered clockwise: right, bottom, left, top.
-    sites = [
-        BindingSite(Pose(SVector{2,F}( w/2, 0),   Angle2d{F}(0)),        1, 1:1, tol, tol),
-        BindingSite(Pose(SVector{2,F}(0,  -h/2),  Angle2d{F}(-F(π)/2)),  2, 2:2, tol, tol),
-        BindingSite(Pose(SVector{2,F}(-w/2, 0),   Angle2d{F}(F(π))),     1, 3:3, tol, tol),
-        BindingSite(Pose(SVector{2,F}(0,   h/2),  Angle2d{F}(F(π)/2)),   2, 4:4, tol, tol),
+    # Site poses first, so the labelling can be derived from them.
+    poses = [
+        Pose(SVector{2,F}( w/2, 0),  Angle2d{F}(0)),
+        Pose(SVector{2,F}(0,  -h/2), Angle2d{F}(-F(π)/2)),
+        Pose(SVector{2,F}(-w/2, 0),  Angle2d{F}(F(π))),
+        Pose(SVector{2,F}(0,   h/2), Angle2d{F}(F(π)/2)),
     ]
+    # A 2D site has no turn about its in-plane normal, so every gauge is 1.
+    labels = siteorbits(poses, ones(Int, 4), collect(colors))
 
-    # Directed 4-cycle, one vertex per binding site. `cycleencoding` also returns the vertex
-    # range of each site, which is `i:i` here.
-    g, _ = cycleencoding(4; labels=[1, 2, 1, 2])
+    # Directed 4-cycle, one vertex per binding site; `ranges[i]` is `i:i` here.
+    g, ranges = cycleencoding(4; labels)
+
+    # Sites at the edge midpoints, ordered clockwise: right, bottom, left, top.
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol) for i in 1:4]
 
     corners = [
         SVector{2,F}( w/2,  h/2),
@@ -100,7 +103,9 @@ end
 
 The `skin` field is a small numerical tolerance used when comparing distances, so sites that should touch are recognized as touching despite floating-point noise.
 
-Note the colors and labels. A rectangle is 2-fold, not 4-fold: opposite edges are interchangeable, adjacent ones are not. So the two long edges share color 1, the two short ones color 2, and the labels say the same. Giving all four sites the same label — which a square would deserve — claims a symmetry the rectangle does not have, and the graph would then merge structures that are genuinely different. Roly's own species never face this question, since they derive labels from colors and geometry with [`siteorbits`](@ref); a hand-built species has to get it right itself, and [`_check_encoding`](@ref) is worth calling once to confirm that `symmetrynumber` and `site_symmetry` agree.
+Note that the labels are *derived*, not written down. [`siteorbits`](@ref) puts two sites in one orbit exactly when a rotation carries one onto the other **and** they are the same color, so it reads the symmetry off the geometry you already supplied. For this rectangle it returns `[1, 2, 1, 2]` even when all four colors are equal: opposite edges are interchangeable, adjacent ones are not, because a rectangle is 2-fold and not 4-fold. The same call on a square with one color returns `[1, 1, 1, 1]`.
+
+This is worth doing rather than writing the labels by hand, and it is what all of Roly's own species do. A labelling that claims more symmetry than the shape has makes the graph merge structures that are genuinely different — silently, since nothing downstream re-examines it. If you do write labels yourself, call [`_check_encoding`](@ref) once to confirm `symmetrynumber` and `site_symmetry` agree.
 
 ### Interface methods
 
