@@ -196,6 +196,17 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test all(facedegree(p, i) == 4 for i in 1:6)
     @test length(rotationgroup(p)) == 24
 
+    # A corner sitting mid-edge is not dropped: it lies on the planes of both faces meeting
+    # there, so both gain a degree and the solid gains an edge. The shape is unchanged and the
+    # dart count is not, which is what a combinatorial encoding of a subdivided face means.
+    cs = collect(corners(Cube(2.0)))
+    f = faces(Cube(2.0))[1]
+    push!(cs, (cs[f[1]] + cs[f[2]]) / 2)
+    sub = Polyhedron(cs)
+    @test nfaces(sub) == 6
+    @test sort([facedegree(sub, i) for i in 1:6]) == [4, 4, 4, 4, 5, 5]
+    @test nedges(sub) == nedges(Cube()) + 1
+
     # An irregular but convex solid.
     box = Polyhedron([SVector(x, y, z) for x in (-1.0, 1.0) for y in (-2.0, 2.0) for z in (-3.0, 3.0)])
     @test nfaces(box) == 6

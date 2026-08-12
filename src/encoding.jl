@@ -116,7 +116,15 @@ as seen from outside the solid; this is verified, since a reversed face would si
 produce a graph encoding with the wrong symmetry group.
 
 If `faces` is omitted, they are derived from the corners by finding all supporting planes of
-the convex hull, which requires the solid to be convex.
+the convex hull, which requires the solid to be convex. That is the form to reach for, and
+together with the library constructors ([`Cube`](@ref), [`Prism`](@ref), …) covers most uses.
+
+Giving `faces` explicitly is the expert path, and what it buys is control the derived form
+does not offer: a face's *first corner* is the twist reference of the binding site placed on
+it, so the ordering within each face is a modelling choice. It is only a starting point —
+[`_canonical_faces`](@ref) rotates each face to an intrinsic corner and species then re-wind
+along their symmetry group — so it is not a way to set a bond registry, which is what the
+`twists` keyword of [`PolyhedronParticleSpecies`](@ref) is for.
 """
 function Polyhedron(corners::AbstractVector{<:AbstractVector}, faces)
     F = float(eltype(first(corners)))
@@ -321,30 +329,40 @@ end
 
 Find the faces of the convex hull of `corners` by testing every corner triple for a
 supporting plane, then winding each face counter-clockwise about its outward normal.
+
+Measured from the corner centroid, so that a plane's offset `d` is its signed distance from the
+inside of the solid: `d > 0` says the normal points outward, and `dot(nrm, r) <= d` for every
+corner says the plane supports the hull. (The corners are not yet centred here — the
+`Polyhedron` constructor does that afterwards, on the way in.)
+
+Every corner on a face's plane joins that face, including one sitting mid-edge, which gives a
+face with three collinear corners. That is a face of degree `k+1` where the shape has `k`
+sides, so it raises `nedges` and the dart count with it — arguably what a combinatorial
+encoding should do with a subdivided face, but worth knowing before subdividing one.
 """
 function _derive_faces(corners::Vector{SVector{3,F}}) where {F}
     n = length(corners)
     center = sum(corners) / n
-    scale = maximum(norm(c - center) for c in corners)
-    atol = sqrt(eps(F)) * scale
+    rel = [c - center for c in corners]
+    atol = sqrt(eps(F)) * maximum(norm, rel)
 
     faces = Vector{Int}[]
     planes = Tuple{SVector{3,F},F}[]
     for i in 1:(n - 2), j in (i + 1):(n - 1), k in (j + 1):n
-        nrm = cross(corners[j] - corners[i], corners[k] - corners[i])
+        nrm = cross(rel[j] - rel[i], rel[k] - rel[i])
+        # Collinear triple: no plane through it, and any plane it lies on is found by another.
         norm(nrm) < atol && continue
         nrm = normalize(nrm)
-        d = dot(nrm, corners[i])
-        # Point the normal away from the interior
-        # nrm'(c_i - c_0) > 0 => nrm'c_i > nrm'c_0, otherwise flip
-        dot(nrm, center) > d && ((nrm, d) = (-nrm, -d))
+        d = dot(nrm, rel[i])
+        # Point the normal away from the centroid, which is inside the hull.
+        d < 0 && ((nrm, d) = (-nrm, -d))
         # Supporting plane of the hull?
-        all(c -> dot(nrm, c) <= d + atol, corners) || continue
+        all(r -> dot(nrm, r) <= d + atol, rel) || continue
         any(pl -> isapprox(pl[1], nrm; atol) && isapprox(pl[2], d; atol), planes) && continue
 
         push!(planes, (nrm, d))
         push!(faces, _wind_counterclockwise!(
-            corners, findall(c -> abs(dot(nrm, c) - d) <= atol, corners), nrm
+            corners, findall(r -> abs(dot(nrm, r) - d) <= atol, rel), nrm
         ))
     end
     return faces
