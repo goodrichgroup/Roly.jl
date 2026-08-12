@@ -28,6 +28,7 @@ export bonds, bondindex, interior_edges, exterior_edges, subpolyform
 # Environments
 export Environment, ParticleEnvironment, BondEnvironment
 export particleenvironments, bondenvironments, crop
+export tilings, isunitcell, tilelatticevectors, cantile
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
@@ -48,6 +49,7 @@ include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
 include("environments.jl")
+include("tiling.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
