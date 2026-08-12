@@ -6,7 +6,7 @@
 # symmetry off the geometry and the coloring, which is what every species in Roly does.
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color,
-            cycleencoding, sitestabilisers
+            cycleencoding, sitestabilisers, sat_overlap, edgenormals
 import Roly: graphrep, nsites, bindingsites, bounding_radius, isconvex
 using NautyGraphs, StaticArrays, LinearAlgebra, Rotations
 
@@ -48,22 +48,13 @@ bounding_radius(ps::Rectangle) = sqrt(ps.width^2 + ps.height^2) / 2
 Base.copy(ps::Rectangle) =
     typeof(ps)(copy(ps.g), copy(ps.sites), copy(ps.corners), ps.width, ps.height, ps.skin)
 
-# Required: separating axes, testing the edge normals of both rectangles.
+# Required. `sat_overlap` and `edgenormals` do the work, so a 2D species supplies only the
+# candidate axes -- the edge normals of both polygons.
 function Roly.overlap(p1::SpeciesAndPose{<:Rectangle}, p2::SpeciesAndPose{<:Rectangle}; kwargs...)
     s1, pose1 = p1
     s2, pose2 = p2
-    skin = s1.skin + s2.skin
-    for (s, pose) in ((s1, pose1), (s2, pose2))
-        n = length(s.corners)
-        for i in 1:n
-            e = pose.psi * (s.corners[mod1(i + 1, n)] - s.corners[i])
-            axis = SVector(-e[2], e[1])
-            lo1, hi1 = extrema(dot(axis, pose1 * c) for c in s1.corners)
-            lo2, hi2 = extrema(dot(axis, pose2 * c) for c in s2.corners)
-            (hi2 < lo1 + skin || hi1 < lo2 + skin) && return false
-        end
-    end
-    return true
+    axes = Iterators.flatten((edgenormals(s1.corners, pose1), edgenormals(s2.corners, pose2)))
+    return sat_overlap(axes, s1.corners, pose1, s2.corners, pose2, s1.skin + s2.skin)
 end
 
 @testset "custom species" begin

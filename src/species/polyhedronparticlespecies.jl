@@ -126,39 +126,6 @@ Return the [`Polyhedron`](@ref) the species was built from.
 shape(ps::PolyhedronParticleSpecies) = ps.shape
 corners(ps::PolyhedronParticleSpecies) = corners(ps.shape)
 
-function _SAT_overlap(
-    p1::SpeciesAndPose{<:PolyhedronParticleSpecies}, p2::SpeciesAndPose{<:PolyhedronParticleSpecies}
-)
-    spcs1, pose1 = p1
-    spcs2, pose2 = p2
-
-    # The 3D separating axis theorem needs more candidate axes than the 2D one: the face
-    # normals of both solids, plus the cross products of their edge directions, which catch
-    # the edge-on-edge configurations no face normal separates.
-    skin_sum = spcs1.skin + spcs2.skin
-    corners1, corners2 = corners(spcs1), corners(spcs2)
-
-    function separated(axis)
-        n2 = dot(axis, axis)
-        n2 < eps(typeof(n2)) && return false
-        axis = axis / sqrt(n2)
-        lo1, hi1 = extrema(dot(axis, pose1 * c) for c in corners1)
-        lo2, hi2 = extrema(dot(axis, pose2 * c) for c in corners2)
-        return hi2 < lo1 + skin_sum || hi1 < lo2 + skin_sum
-    end
-
-    for nrm in spcs1.normals
-        separated(pose1.psi * nrm) && return false
-    end
-    for nrm in spcs2.normals
-        separated(pose2.psi * nrm) && return false
-    end
-    for e1 in spcs1.edgedirections, e2 in spcs2.edgedirections
-        separated(cross(pose1.psi * e1, pose2.psi * e2)) && return false
-    end
-    return true
-end
-
 function overlap(
     p1::SpeciesAndPose{<:PolyhedronParticleSpecies},
     p2::SpeciesAndPose{<:PolyhedronParticleSpecies};
@@ -166,11 +133,23 @@ function overlap(
 )
     spcs1, pose1 = p1
     spcs2, pose2 = p2
+    # Outer and inner spheres first; both are measured from the origin, which the centred
+    # corners of a `Polyhedron` make the solid's centroid.
     d = norm(pose1.x - pose2.x)
-    # check outer and inner spheres first 
     d >= spcs1.rmax + spcs2.rmax && return false
     d < (spcs1.rmin + spcs2.rmin) - (spcs1.skin + spcs2.skin) && return true
-    return _SAT_overlap(p1, p2)
+
+    # Separating axes. 3D needs more candidates than 2D: the face normals of both solids, plus
+    # the cross products of their edge directions, which catch the edge-on-edge configurations
+    # no face normal separates.
+    axes = Iterators.flatten((
+        (pose1.psi * nrm for nrm in spcs1.normals),
+        (pose2.psi * nrm for nrm in spcs2.normals),
+        (cross(pose1.psi * e1, pose2.psi * e2)
+         for e1 in spcs1.edgedirections, e2 in spcs2.edgedirections),
+    ))
+    return sat_overlap(axes, corners(spcs1), pose1, corners(spcs2), pose2,
+                       spcs1.skin + spcs2.skin)
 end
 
 """

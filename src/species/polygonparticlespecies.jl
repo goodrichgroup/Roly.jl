@@ -88,36 +88,15 @@ end
 
 isconvex(::PolygonParticleSpecies) = true
 
-function _SAT_overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies})
-    spcs1, pose1 = p1
-    spcs2, pose2 = p2
-    isconvex(spcs1) && isconvex(spcs2) || error("SAT overlap check requires convex polygons")
-
-    # The SAT algorithm checks for intersections of convex polygons by exploiting a simple theorem:
-    # For any nonintersecting convex shapes, there exists an axis in space on which the projections
-    # of the shapes are nonoverlapping. Therefore, we project all polygon corners on axes given by
-    # the surface normals of the polygons. As soon as we identify an axis where projections do not overlap
-    # we know that the polygons are not intersecting.
-    skin_sum = spcs1.skin + spcs2.skin
-    corners1, corners2 = spcs1.corners, spcs2.corners
-    for (corners, pose) in ((corners1, pose1), (corners2, pose2))
-        n = length(corners)
-        for i in 1:n
-            edge = pose.psi * (corners[mod1(i + 1, n)] - corners[i])
-            normal = SVector(-edge[2], edge[1])
-            lo1, hi1 = extrema(dot(normal, pose1 * c) for c in corners1)
-            lo2, hi2 = extrema(dot(normal, pose2 * c) for c in corners2)
-            (hi2 < lo1 + skin_sum || hi1 < lo2 + skin_sum) && return false
-        end
-    end
-    return true
-end
-
-
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
-    can_skip_overlap_check(p1, p2) || return _SAT_overlap(p1, p2)
     spcs1, pose1 = p1
     spcs2, pose2 = p2
+    # Where the cheap test applies, the inradius decides; otherwise fall back to separating
+    # axes, for which a 2D polygon's edge normals are a sufficient candidate set.
+    can_skip_overlap_check(p1, p2) ||
+        return sat_overlap(Iterators.flatten((edgenormals(spcs1.corners, pose1),
+                                              edgenormals(spcs2.corners, pose2))),
+                           spcs1.corners, pose1, spcs2.corners, pose2, spcs1.skin + spcs2.skin)
     return norm(pose1.x - pose2.x) < (spcs1.rmin + spcs2.rmin) - (spcs1.skin + spcs2.skin)
 end
 
