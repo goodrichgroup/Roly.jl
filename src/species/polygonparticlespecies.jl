@@ -69,11 +69,6 @@ end
 graphrep(p::PolygonParticleSpecies) = p.g
 nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
-function setcolors!(p::PolygonParticleSpecies, colors::AbstractVector{<:Integer})
-    _recolor!(p, p.sites, colors)
-    return nothing
-end
-
 function can_skip_overlap_check(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies})
     spcs1, pose1 = p1
     spcs2, pose2 = p2

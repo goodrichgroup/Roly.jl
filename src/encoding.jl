@@ -9,8 +9,16 @@ checked on construction, as is convexity; each face is then rotated to start at 
 corner, see [`_canonical_faces`](@ref). Species refine that further with
 [`_propagate_faces`](@ref), which needs the labelling and so cannot happen here.
 
-Convexity is not decoration. [`PolyhedronParticleSpecies`](@ref) reports `isconvex` for every
-solid and tests overlap by separating axes, which is a convex-only argument, and
+**Corners are translated to put their centroid at the origin**, and everything downstream may
+assume it. Several quantities are measured from the origin rather than from the solid —
+[`bounding_radius`](@ref) is `maximum(norm, corners)` and [`inradius`](@ref) the smallest face
+centroid norm, both of which feed the overlap fast path — and rotations are about the origin
+too. Normalising once at the door is what makes those readings mean what they say; the
+alternative is every one of them recomputing a centroid, and being silently wrong if one
+forgets.
+
+Convexity is not decoration either. [`PolyhedronParticleSpecies`](@ref) reports `isconvex` for
+every solid and tests overlap by separating axes, which is a convex-only argument, and
 [`site_symmetry`](@ref) relies on a solid being the intersection of its faces' half-spaces.
 """
 struct Polyhedron{F<:AbstractFloat}
@@ -19,6 +27,7 @@ struct Polyhedron{F<:AbstractFloat}
 
     function Polyhedron(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
         _check_winding(length(corners), faces)
+        corners = _recenter(corners)
         _check_convex(corners, faces)
         return new{F}(corners, _canonical_faces(corners, faces))
     end
@@ -53,9 +62,23 @@ end
 Verify that `faces` describes a closed, consistently oriented surface: every directed edge
 occurs exactly once, and its reverse occurs in exactly one other face. This is precisely the
 condition that makes the edge pairing of [`dartencoding`](@ref) well defined.
+
+Also that every corner is used by some face. A corner strictly inside the hull lies on no
+supporting plane, so [`_derive_faces`](@ref) never mentions it and it would otherwise be
+carried along silently — contributing nothing to the shape while still counting towards
+[`bounding_radius`](@ref) and shifting the centroid the corners are recentred on.
 """
 function _check_winding(ncorners::Integer, faces::AbstractVector{<:AbstractVector{Int}})
     length(faces) < 3 && throw(ArgumentError("a polyhedron needs at least 3 faces"))
+    used = falses(ncorners)
+    for f in faces, v in f
+        checkbounds(Bool, used, v) && (used[v] = true)
+    end
+    all(used) || throw(ArgumentError(
+        "corner$(count(!, used) > 1 ? "s" : "") $(join(findall(!, used), ", ")) " *
+        "$(count(!, used) > 1 ? "are" : "is") used by no face; a corner strictly inside the " *
+        "hull is not part of the solid, and one on the boundary means the face list is incomplete"
+    ))
     seen = Dict{Tuple{Int,Int},Int}()
     for (i, f) in enumerate(faces)
         length(f) < 3 && throw(ArgumentError("face $i has fewer than 3 corners"))
@@ -183,9 +206,8 @@ Correctness, and that the slack is exactly `stab` rather than merely `gauge`, is
 group, and propagation only ever moves a dart within its gauge orbit, so `facegauge` and
 `siteorbits` — which compare frames up to gauge — may be computed first and are unaffected.
 """
-function _propagate_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}},
+function _propagate_faces(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}},
                           labels) where {F}
-    cs = _centred(corners)
     atol = sqrt(eps(F)) * maximum(norm, cs)
     centroid(f) = sum(cs[v] for v in f) / length(f)
     midpoint(f, k) = (cs[f[k]] + cs[f[mod1(k + 1, length(f))]]) / 2
@@ -193,7 +215,7 @@ function _propagate_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{In
     # The rotations that carry every face onto one of the same label. Composition and inverses
     # preserve that, so these form a group, which the proof needs.
     faceof(x) = findfirst(i -> isapprox(centroid(faces[i]), x; atol), eachindex(faces))
-    group = filter(_rotationgroup(corners, faces)) do Q
+    group = filter(_rotationgroup(cs, faces)) do Q
         all(eachindex(faces)) do i
             j = faceof(Q * centroid(faces[i]))
             !isnothing(j) && labels[j] == labels[i]
@@ -381,9 +403,9 @@ rotation, so it suffices to test the `2 * nedges(p)` candidates this generates.
 rotationgroup(p::Polyhedron) = _rotationgroup(corners(p), faces(p))
 
 # Same, on the raw corner and face lists, so the Polyhedron constructor can use it before there
-# is a Polyhedron. Rotations are about the corner centroid, and so are the frames they act on.
-function _rotationgroup(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
-    cs = _centred(corners)
+# is a Polyhedron. Rotations are about the origin, which the centred-corners invariant makes the
+# corner centroid; see `Polyhedron`.
+function _rotationgroup(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     atol = sqrt(eps(F)) * maximum(norm, cs)
 
     # An orthonormal frame attached to dart k of face i: along the edge, along the outward
@@ -407,8 +429,6 @@ function _rotationgroup(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}
     end
     return group
 end
-
-_centred(corners::Vector{SVector{3,F}}) where {F} = (c0 = sum(corners) / length(corners); [c - c0 for c in corners])
 
 function _facenormal(cs::Vector{SVector{3,F}}, f::Vector{Int}) where {F}
     c = sum(cs[v] for v in f) / length(f)

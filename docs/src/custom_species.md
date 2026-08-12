@@ -13,7 +13,6 @@ A concrete `ParticleSpecies` must define the following methods:
 | `graphrep(ps)` | Return the graph representation of the particle species (a `NautyDiGraph`). See the note below. |
 | `nsites(ps)` | Number of binding sites. |
 | `bindingsites(ps, i)` | Return the `i`th `BindingSite`. |
-| `setcolors!(ps, colors)` | Assign new colors to the binding sites. Called by `BindingRules` during construction. |
 | `bounding_radius(ps)` | Radius of a sphere centered at the pose origin that fully encloses the particle. |
 | `overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)` | Return `true` if two particles at given poses overlap. |
 | `Base.copy(ps)` | Deep copy. `BindingRules` copies each species during construction to reassign its colors. |
@@ -41,7 +40,7 @@ Let's define a species for a non-square rectangle with binding sites at the midp
 ```julia
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose
-import Roly: graphrep, nsites, bindingsites, setcolors!,
+import Roly: graphrep, nsites, bindingsites,
              bounding_radius, isconvex, overlap
 using NautyGraphs
 using Graphs: cycle_digraph
@@ -80,12 +79,13 @@ function Rectangle(width::Real, height::Real)
     sites = [
         BindingSite(Pose(SVector{2,F}( w/2, 0),   Angle2d{F}(0)),        1, 1:1, tol, tol),
         BindingSite(Pose(SVector{2,F}(0,  -h/2),  Angle2d{F}(-F(π)/2)),  2, 2:2, tol, tol),
-        BindingSite(Pose(SVector{2,F}(-w/2, 0),   Angle2d{F}(F(π))),     3, 3:3, tol, tol),
-        BindingSite(Pose(SVector{2,F}(0,   h/2),  Angle2d{F}(F(π)/2)),   4, 4:4, tol, tol),
+        BindingSite(Pose(SVector{2,F}(-w/2, 0),   Angle2d{F}(F(π))),     1, 3:3, tol, tol),
+        BindingSite(Pose(SVector{2,F}(0,   h/2),  Angle2d{F}(F(π)/2)),   2, 4:4, tol, tol),
     ]
 
-    # Directed 4-cycle: one vertex per binding site, all with the same label.
-    g = NautyDiGraph(cycle_digraph(4); vertex_labels=fill(Cint(1), 4))
+    # Directed 4-cycle, one vertex per binding site. `cycleencoding` also returns the vertex
+    # range of each site, which is `i:i` here.
+    g, _ = cycleencoding(4; labels=[1, 2, 1, 2])
 
     corners = [
         SVector{2,F}( w/2,  h/2),
@@ -99,6 +99,8 @@ end
 ```
 
 The `skin` field is a small numerical tolerance used when comparing distances, so sites that should touch are recognized as touching despite floating-point noise.
+
+Note the colors and labels. A rectangle is 2-fold, not 4-fold: opposite edges are interchangeable, adjacent ones are not. So the two long edges share color 1, the two short ones color 2, and the labels say the same. Giving all four sites the same label — which a square would deserve — claims a symmetry the rectangle does not have, and the graph would then merge structures that are genuinely different. Roly's own species never face this question, since they derive labels from colors and geometry with [`siteorbits`](@ref); a hand-built species has to get it right itself, and [`_check_encoding`](@ref) is worth calling once to confirm that `symmetrynumber` and `site_symmetry` agree.
 
 ### Interface methods
 
@@ -115,19 +117,7 @@ Base.copy(ps::Rectangle) =
     typeof(ps)(copy(ps.g), copy(ps.sites), copy(ps.corners), ps.width, ps.height, ps.skin)
 ```
 
-`setcolors!` rebuilds each `BindingSite` with a new color while preserving pose, vertex range, and tolerances:
-
-```julia
-function setcolors!(ps::Rectangle, colors::AbstractVector{<:Integer})
-    length(colors) == nsites(ps) || throw(ArgumentError("wrong number of colors"))
-    for k in eachindex(ps.sites)
-        s = ps.sites[k]
-        ps.sites[k] = BindingSite(s.pose, colors[k], s.vertices,
-                                  s.touching_tolerance, s.alignment_tolerance)
-    end
-    return nothing
-end
-```
+`setcolors!` needs no definition at all. Recoloring has to re-derive the labelling and the site stabilisers along with the colors, since a coloring is what decides both which sites are interchangeable and how many ways a partner can attach; the generic method does all of it, and finds the sites in the `sites` field. That field name is the only requirement — a species keeping them elsewhere defines its own method.
 
 ### Overlap
 

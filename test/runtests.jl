@@ -14,6 +14,7 @@ using CairoMakie
     include("enumeration.jl")
     include("utils.jl")
     include("plotting.jl")
+    include("custom_species.jl")
 
     @testset verbose=true "species" begin
         include("species/polygonparticlespecies.jl")

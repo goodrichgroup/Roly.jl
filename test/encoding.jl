@@ -200,3 +200,34 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test eltype(facecentroid(p, 1)) === Float32
     @test length(rotationgroup(p)) == 24
 end
+
+@testset "corner normalisation" begin
+    # Corners are recentred on construction, and everything downstream may assume it:
+    # `bounding_radius` and `inradius` measure from the origin and feed the overlap fast path,
+    # so an off-centre solid would read both wrong with nothing to say so.
+    cube = Cube()
+    offset = SVector(3.0, -1.0, 7.0)
+    shifted = Polyhedron([c + offset for c in corners(cube)], faces(cube))
+
+    @test isapprox(sum(corners(shifted)) / ncorners(shifted), zero(SVector{3,Float64}); atol=1e-12)
+    @test isapprox(bounding_radius(shifted), bounding_radius(cube); atol=1e-12)
+    @test isapprox(inradius(shifted), inradius(cube); atol=1e-12)
+    @test length(rotationgroup(shifted)) == length(rotationgroup(cube)) == 24
+    # Same solid, so the same species down to the site frames.
+    a = PolyhedronParticleSpecies(cube; colors=fill(1, 6))
+    b = PolyhedronParticleSpecies(shifted; colors=fill(1, 6))
+    @test symmetrynumber(a) == symmetrynumber(b) == 24
+    for i in 1:6
+        @test isapprox(Roly.bindingsites(a, i).pose.x, Roly.bindingsites(b, i).pose.x; atol=1e-12)
+        @test isapprox(Roly.bindingsites(a, i).pose.psi, Roly.bindingsites(b, i).pose.psi; atol=1e-12)
+    end
+
+    # A corner used by no face contributes nothing to the shape while still counting towards
+    # the bounding radius and dragging the centroid, so it is refused rather than carried.
+    @test_throws ArgumentError Polyhedron([corners(cube); [SVector(0.0, 0.0, 0.0)]], faces(cube))
+    # And the derived-faces path cannot hide one either: an interior point lies on no
+    # supporting plane, so it lands in no face and the same check catches it.
+    @test_throws ArgumentError Polyhedron([corners(cube); [SVector(0.1, 0.05, 0.0)]])
+    # A point outside is a different error: it breaks convexity rather than going unused.
+    @test_throws ArgumentError Polyhedron([corners(cube); [SVector(9.0, 0.0, 0.0)]], faces(cube))
+end

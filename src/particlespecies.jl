@@ -65,8 +65,21 @@ function nsites end
     setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
 
 Assign colors to the binding sites of particle species `p`.
+
+A coloring is the whole statement of which sites are interchangeable and of how many ways a
+partner can attach at each, so this re-derives the graph labelling and the stabilisers along
+with it; see [`_recolor!`](@ref). Species get it for free by keeping their binding sites in a
+field named `sites`, which is part of the interface — a species storing them elsewhere defines
+its own method.
+
+Throws if the new coloring needs a graph the species does not have, leaving it untouched: only
+the labels are rewritten, never the structure, so a species built with distinct colors cannot
+be recolored into a symmetry its graph has no room for.
 """
-function setcolors! end
+function setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
+    _recolor!(p, p.sites, colors)
+    return nothing
+end
 
 """
     isconvex(::ParticleSpecies)

@@ -136,11 +136,6 @@ nsites(ps::PatchyParticleSpecies) = length(ps.sites)
 bindingsites(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
 isconvex(::PatchyParticleSpecies) = true
 
-function setcolors!(ps::PatchyParticleSpecies, colors::AbstractVector{<:Integer})
-    _recolor!(ps, ps.sites, colors)
-    return nothing
-end
-
 function could_contact(
     p1::SpeciesAndPose{<:PatchyParticleSpecies}, p2::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...
 )

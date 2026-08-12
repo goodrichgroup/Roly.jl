@@ -1,7 +1,7 @@
 """
     PolyhedronParticleSpecies{F}
 
-A 3D convex polyhedron with one binding site at the centre of each face.
+A 3D convex polyhedron with one binding site per face.
 """
 struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
     g::NautyDiGraph
@@ -125,11 +125,6 @@ Return the [`Polyhedron`](@ref) the species was built from.
 """
 shape(ps::PolyhedronParticleSpecies) = ps.shape
 corners(ps::PolyhedronParticleSpecies) = corners(ps.shape)
-
-function setcolors!(p::PolyhedronParticleSpecies, colors::AbstractVector{<:Integer})
-    _recolor!(p, p.sites, colors)
-    return nothing
-end
 
 function _SAT_overlap(
     p1::SpeciesAndPose{<:PolyhedronParticleSpecies}, p2::SpeciesAndPose{<:PolyhedronParticleSpecies}
