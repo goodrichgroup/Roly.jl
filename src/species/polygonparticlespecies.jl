@@ -9,7 +9,6 @@ struct PolygonParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{2,B}
     corners::Vector{SVector{2,F}}
     rmin::F
     rmax::F
-    isregular::Bool
     skin::F
 end
 
@@ -51,7 +50,7 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real
         SVector{2,F}(r_out * cos(-π / 2 - (2k - 1) * π / n), r_out * sin(-π / 2 - (2k - 1) * π / n)) for k in 1:n
     ]
     return _check_encoding(
-        PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, true, tol)
+        PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, tol)
     )
 end
 
@@ -61,7 +60,7 @@ end
 
 function Base.copy(pps::PolygonParticleSpecies)
     return PolygonParticleSpecies(
-        copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax, pps.isregular, pps.skin
+        copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax, pps.skin
     )
 end
 
@@ -69,35 +68,29 @@ end
 graphrep(p::PolygonParticleSpecies) = p.g
 nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
-function can_skip_overlap_check(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies})
-    spcs1, pose1 = p1
-    spcs2, pose2 = p2
-
-    norm(pose1.x - pose2.x) >= spcs1.rmax + spcs2.rmax && return true
-    spcs1.isregular && spcs2.isregular || return false
-
-    n = nsites(spcs1)
-    n in (3, 4, 6) && nsites(spcs2) == n || return false
-
-    sym_angle = 2π / n
-    θ_rel = mod(rotation_angle(pose2.psi) - rotation_angle(pose1.psi), sym_angle)
-    tol = (spcs1.skin + spcs2.skin) / spcs1.rmin
-    face_to_face = mod(π, sym_angle)
-    return θ_rel < tol || θ_rel > sym_angle - tol || abs(θ_rel - face_to_face) < tol
-end
-
 isconvex(::PolygonParticleSpecies) = true
+
+# The three regular polygons that tile the plane. Nothing else about the species can take a
+# bond off the tiling: every site sits at an edge midpoint facing out, all edges of a regular
+# polygon are the same length, and a 2D bond has a single registration — the half turn that
+# brings the two edges flush. So the shape is the whole condition here, and `_samesize` on the
+# caller's side is the rest of it.
+_tiles(ps::PolygonParticleSpecies) = nsites(ps) in (3, 4, 6)
 
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
     spcs1, pose1 = p1
     spcs2, pose2 = p2
-    # Where the cheap test applies, the inradius decides; otherwise fall back to separating
-    # axes, for which a 2D polygon's edge normals are a sufficient candidate set.
-    can_skip_overlap_check(p1, p2) ||
-        return sat_overlap(Iterators.flatten((edgenormals(spcs1.corners, pose1),
-                                              edgenormals(spcs2.corners, pose2))),
-                           spcs1.corners, pose1, spcs2.corners, pose2, spcs1.skin + spcs2.skin)
-    return norm(pose1.x - pose2.x) < (spcs1.rmin + spcs2.rmin) - (spcs1.skin + spcs2.skin)
+    skin = spcs1.skin + spcs2.skin
+    d = norm(pose1.x - pose2.x)
+    # The two spheres decide it outright often enough to be worth asking first.
+    d >= spcs1.rmax + spcs2.rmax && return false
+    d < (spcs1.rmin + spcs2.rmin) - skin && return true
+    # Otherwise separating axes, for which a 2D polygon's edge normals are a sufficient
+    # candidate set. There is nothing cheaper to reach for here: 2D has no cross-product axes to
+    # avoid, so this is already the small candidate set that the 3D species works to reduce to.
+    return sat_overlap(Iterators.flatten((edgenormals(spcs1.corners, pose1),
+                                          edgenormals(spcs2.corners, pose2))),
+                       spcs1.corners, pose1, spcs2.corners, pose2, skin)
 end
 
 bounding_radius(ps::PolygonParticleSpecies) = ps.rmax

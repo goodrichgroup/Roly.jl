@@ -14,3 +14,12 @@ dartsphere(p, r=1; colors=1:Roly.nfaces(p), locking=true, twists=0) =
     Roly._patchysphere(p, r, colors, locking, twists, false)
 cyclesphere(p, r=1; colors=1:Roly.nfaces(p), locking=true, twists=0) =
     Roly._patchysphere(p, r, colors, locking, twists, true)
+
+# The same rules with the on-lattice shortcut switched off, so a system that takes it can be
+# enumerated both ways and the two answers compared. `_onlattice` is derived in the constructor
+# and there is deliberately no way to set it, hence the field surgery.
+function withoutlattice(sys::BindingRules)
+    vals = Any[getfield(sys, f) for f in fieldnames(typeof(sys))]
+    vals[findfirst(==(:_onlattice), collect(fieldnames(typeof(sys))))] = false
+    return typeof(sys)(vals...)
+end

@@ -27,6 +27,7 @@ struct BindingRules{D,PS<:ParticleSpecies}
     _bonded_species::Vector{NTuple{2,Int}}
     _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
     _isinert::BitVector
+    _onlattice::Bool
 end
 function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
     D = dimension(first(particlespecies))
@@ -73,7 +74,9 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
     return BindingRules{D,PS}(intmat, particlespecies, nbonds, nsites, ncolors,
                                 color2siteloc, siteloc2color,
                                 bondlist, bondedsites, bondedspecies,
-                                compatible_sitelocs_cache, isinert_cache)
+                                compatible_sitelocs_cache, isinert_cache,
+                                all(_tiles(ps) for ps in particlespecies) &&
+                                    _samesize(particlespecies))
 end
 function BindingRules(bonds, particlespecies::ParticleSpecies)
     nspcs = _extract_nspecies(bonds)

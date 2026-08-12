@@ -8,7 +8,9 @@ struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
     sites::Vector{B}
     shape::Polyhedron{F}
     normals::Vector{SVector{3,F}}
+    offsets::Vector{F}
     edgedirections::Vector{SVector{3,F}}
+    centrosymmetric::Bool
     rmin::F
     rmax::F
     skin::F
@@ -72,9 +74,20 @@ function _polyhedronspecies(p::Polyhedron{F}, colors, locking, twists,
                           _perface(locking, n, "locking flags"),
                           _perface(twists, n, "twists"), usecycle, tol, tol / rmin)
 
+    normals = facenormals(p)
+    offsets = [dot(normals[i], facecentroid(p, i)) for i in 1:n]
     return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
-        g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol
+        g, sites, p, normals, offsets, _edgedirections(p), _iscentrosymmetric(p), rmin, rmax, tol
     ))
+end
+
+# Is the solid carried onto itself by inversion through its centre? Corners are centred, so this
+# is just "every corner has an opposite". Cheap to ask once, and it is what makes the difference
+# body of two translates equal to the solid at twice the size; see `translate_overlap`.
+function _iscentrosymmetric(p::Polyhedron{F}) where {F}
+    cs = corners(p)
+    atol = sqrt(eps(F)) * maximum(norm, cs)
+    return all(c -> any(c2 -> isapprox(-c, c2; atol), cs), cs)
 end
 
 """
@@ -113,8 +126,11 @@ function Base.show(io::Core.IO, ps::PolyhedronParticleSpecies)
 end
 
 function Base.copy(ps::PolyhedronParticleSpecies)
+    # The shape and everything derived from it are shared, not copied: they are immutable, and
+    # `overlap` uses `shape ===` to recognize two particles of one species as translates.
     return typeof(ps)(
-        copy(ps.g), copy(ps.sites), ps.shape, ps.normals, ps.edgedirections, ps.rmin, ps.rmax, ps.skin
+        copy(ps.g), copy(ps.sites), ps.shape, ps.normals, ps.offsets, ps.edgedirections,
+        ps.centrosymmetric, ps.rmin, ps.rmax, ps.skin
     )
 end
 
@@ -123,6 +139,39 @@ nsites(p::PolyhedronParticleSpecies) = length(p.sites)
 bindingsites(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolyhedronParticleSpecies) = true
 bounding_radius(ps::PolyhedronParticleSpecies) = ps.rmax
+
+"""
+    _tiles(ps::PolyhedronParticleSpecies)
+
+True for a cube whose binding sites are aligned with its own edges. See [`_tiles`](@ref) for
+what this claims and what it is worth.
+
+Cubes only, out of the several solids that tile space, because a cube is the one where nothing
+else has to be checked. All six faces are congruent, so any bond the rules permit joins two
+faces that are actually flush — a box with an `a×a` face and an `a×b` face would let a bond
+place two boxes overlapping at a mismatched face, and no longer tiling. All six stabilisers are
+4, so every bond has a single registration, and `locking` cannot open a second one that tips a
+neighbour off the lattice the way a prism's square side face would.
+
+That leaves the sites. A bond's relative rotation is fixed by the two frames, and it maps the
+cubic lattice to itself exactly when each frame is built on the cube's own edges — so each
+site's twist reference must point along an edge direction. Whole dart steps keep it there, and
+`twists` of a fraction of a step do not, which is precisely when the partner arrives turned off
+the lattice and free to overlap something.
+"""
+function _tiles(ps::PolyhedronParticleSpecies{F}) where {F}
+    p = ps.shape
+    atol = sqrt(eps(F)) * ps.rmax
+    ncorners(p) == 8 && nfaces(p) == 6 && ps.centrosymmetric || return false
+    # Equidistant corners and equidistant faces: among the boxes, that is the cube.
+    all(c -> isapprox(norm(c), ps.rmax; atol), corners(p)) || return false
+    all(d -> isapprox(d, ps.rmin; atol), ps.offsets) || return false
+    # And every site's twist reference lies along an edge, so no bond leaves the lattice.
+    return all(1:nsites(ps)) do i
+        ez = bindingsites(ps, i).pose.psi[:, 3]
+        any(e -> isapprox(abs(dot(e, ez)), 1; atol=sqrt(eps(F))), ps.edgedirections)
+    end
+end
 
 """
     shape(ps::PolyhedronParticleSpecies)
@@ -139,11 +188,20 @@ function overlap(
 )
     spcs1, pose1 = p1
     spcs2, pose2 = p2
+    skin = spcs1.skin + spcs2.skin
+    t = pose2.x - pose1.x
     # Outer and inner spheres first; both are measured from the origin, which the centred
     # corners of a `Polyhedron` make the solid's centroid.
-    d = norm(pose1.x - pose2.x)
+    d = norm(t)
     d >= spcs1.rmax + spcs2.rmax && return false
-    d < (spcs1.rmin + spcs2.rmin) - (spcs1.skin + spcs2.skin) && return true
+    d < (spcs1.rmin + spcs2.rmin) - skin && return true
+
+    # Two identically oriented particles of one centrally symmetric species are translates of
+    # each other, and the whole question is then one point against the faces of the doubled
+    # solid — O(#faces), against a candidate set that is quadratic in the edges. This is the
+    # case a lattice is made of, and cubes, boxes, even prisms and most Platonic solids qualify.
+    spcs1.shape === spcs2.shape && spcs1.centrosymmetric && _sameorientation(pose1, pose2) &&
+        return translate_overlap(spcs1.normals, spcs1.offsets, pose1.psi \ t, skin)
 
     # Separating axes. 3D needs more candidates than 2D: the face normals of both solids, plus
     # the cross products of their edge directions, which catch the edge-on-edge configurations
@@ -154,9 +212,22 @@ function overlap(
         (cross(pose1.psi * e1, pose2.psi * e2)
          for e1 in spcs1.edgedirections, e2 in spcs2.edgedirections),
     ))
-    return sat_overlap(axes, corners(spcs1), pose1, corners(spcs2), pose2,
-                       spcs1.skin + spcs2.skin)
+    return sat_overlap(axes, corners(spcs1), pose1, corners(spcs2), pose2, skin)
 end
+
+# Do the two particles carry the same orientation, so that one is a translate of the other?
+# Tight on purpose: the fast path it guards is exact only for an exact translate, and a pair
+# that misses it merely pays the full axis set.
+#
+# Central symmetry is not a technicality here, and dropping it was tried and measured wrong. The
+# faces of a Minkowski difference body `K ⊕ (−K)` come from three sources, and only two of them
+# are faces of `K`: the third is *edge against edge*, which is why separating axes need cross
+# products at all. A tetrahedron's difference body is a cuboctahedron, whose six square faces
+# belong to no face of the tetrahedron — so for a solid that is not centrally symmetric, its own
+# face normals do not decide even the aligned case. When `K = −K` the difference body is `2K`
+# and the third source contributes nothing, which is exactly the condition tested here.
+@inline _sameorientation(pose1::Pose{D,F}, pose2::Pose{D,F}) where {D,F} =
+    isapprox(pose1.psi, pose2.psi; atol=sqrt(eps(F)), rtol=zero(F))
 
 """
     UnitTetrahedron

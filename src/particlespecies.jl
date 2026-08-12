@@ -17,6 +17,40 @@ the geometric predicates take, since neither a species nor a pose alone is a thi
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
 """
+    _tiles(ps::ParticleSpecies)
+
+Whether `ps` is a shape that tiles space, placed so that **every bond it can make carries a
+tile of that tiling onto another tile**. Default `false`; a species opts in.
+
+What this buys is the whole overlap question at once. If it holds for every species in a
+[`BindingRules`](@ref), then by induction every particle of every reachable assembly sits on a
+cell of one tiling — each bond moves a cell to a cell, and there is nowhere else to be. Distinct
+cells of a tiling have disjoint interiors, so two particles can only overlap by occupying the
+*same* cell, which is to say by having coincident centres. A subtraction settles it, and no
+geometry runs at all.
+
+Both halves matter, and the second is the one that is easy to lose. A cube tiles space, but a
+cube whose binding site has been turned by a fraction of a dart step hands its partner over
+rotated by that fraction, off the lattice and free to overlap a third cube in the ordinary way.
+So a species must check its *sites*, not just its shape. It must also be sure of its size: two
+tilings at different scales share no cells, which is why the caller additionally requires one
+size across the species.
+
+This is a promise about geometry, so it is derived and never given. The property is global —
+it is precisely what overlap checking exists to catch, a ring closing badly or a chain folding
+back into itself — so it cannot be inferred from the bond table, only from shapes known to
+tile. Anything not recognised falls back to the real overlap test and is merely slower.
+"""
+_tiles(::ParticleSpecies) = false
+
+# Do all species agree on scale? Cells of two tilings at different sizes are unrelated, so
+# `_tiles` per species says nothing about a mixture of them.
+function _samesize(pss::AbstractVector{<:ParticleSpecies})
+    r = bounding_radius(first(pss))
+    return all(ps -> isapprox(bounding_radius(ps), r; rtol=sqrt(eps(float(typeof(r))))), pss)
+end
+
+"""
     numtype(::ParticleSpecies)
 
 Return the numeric element type, derived from the `BindingSite` type parameter.

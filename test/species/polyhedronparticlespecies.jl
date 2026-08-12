@@ -8,7 +8,7 @@ using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
             collect_compatible_pairs, tocanon, toorig, BindingRules, Polyform, nbonds,
             site_symmetry, PatchySphere
-using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
+using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
 @testset "PolyhedronParticleSpecies" begin
     solids = [
@@ -293,6 +293,54 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
         @test overlap(ps => id, ps => id)
         @test !overlap(ps => id, ps => shifted(10.0))
     end
+
+    # Identically oriented particles of one centrally symmetric species take an exact O(faces)
+    # route instead of separating axes. "Exact" has to mean exact, so check it against the full
+    # candidate set over random configurations, spread across the band between the inner and
+    # outer spheres where neither sphere fast path decides.
+    #
+    # The non-centrosymmetric solids are here because the fast path was *wrong* without that
+    # condition, and only random testing said so. A Minkowski difference body's faces come from
+    # three sources and only two are faces of the solid; the third is edge against edge, which
+    # is why separating axes need cross products at all. A tetrahedron's difference body is a
+    # cuboctahedron, whose six square faces belong to no face of the tetrahedron.
+    function fullsat(s1, pose1, s2, pose2)
+        axes = Iterators.flatten((
+            (pose1.psi * n for n in s1.normals), (pose2.psi * n for n in s2.normals),
+            (cross(pose1.psi * e1, pose2.psi * e2)
+             for e1 in s1.edgedirections, e2 in s2.edgedirections)))
+        return Roly.sat_overlap(axes, corners(s1), pose1, corners(s2), pose2, s1.skin + s2.skin)
+    end
+    P(x, R=one(RotMatrix3{Float64})) = Pose{3,Float64,RotMatrix3{Float64}}(SVector{3}(x), R)
+
+    Random.seed!(20260812)
+    for shp in (Cube(), Prism(6), Prism(3), Tetrahedron(), Dodecahedron(), Octahedron(),
+                Antiprism(4), Polyhedron([SVector(x, y, z) for x in (-1.0, 1.0)
+                                          for y in (-2.0, 2.0) for z in (-3.0, 3.0)]))
+        ps = PolyhedronParticleSpecies(shp)
+        rmin, rmax = Roly.inradius(shp), Roly.bounding_radius(shp)
+        disagreements = 0
+        overlapping = 0
+        for _ in 1:4000
+            u = normalize(SVector{3}(randn(3)))
+            t = u * (rand() < 0.6 ? 2rmin + 2(rmax - rmin) * rand() : 4rmax * rand())
+            # Mostly aligned, which is the case the fast path exists for, but not only.
+            pose2 = P(t, rand() < 0.7 ? one(RotMatrix3{Float64}) :
+                         RotMatrix3(rand(RotMatrix{3,Float64})))
+            got = overlap(ps => P(zeros(3)), ps => pose2)
+            got == fullsat(ps, P(zeros(3)), ps, pose2) || (disagreements += 1)
+            got && (overlapping += 1)
+        end
+        @test disagreements == 0
+        # The sampling has to straddle the boundary, or the agreement above is vacuous.
+        @test 0.1 < overlapping / 4000 < 0.9
+    end
+    @test PolyhedronParticleSpecies(Cube()).centrosymmetric
+    @test PolyhedronParticleSpecies(Octahedron()).centrosymmetric
+    @test PolyhedronParticleSpecies(Prism(6)).centrosymmetric
+    @test !PolyhedronParticleSpecies(Tetrahedron()).centrosymmetric
+    @test !PolyhedronParticleSpecies(Prism(3)).centrosymmetric
+    @test !PolyhedronParticleSpecies(Antiprism(4)).centrosymmetric
 
     # Number of proper rigid motions mapping an assembly onto itself, computed from the
     # particle poses alone. Every symmetry maps particle 1 onto some particle, which fixes
