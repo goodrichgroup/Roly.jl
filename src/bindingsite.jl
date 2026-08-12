@@ -86,10 +86,14 @@ Base.:*(site::BindingSite, p) = _respecify(site, site.pose * p, site.color, site
 posetype(::BindingSite{P}) where P = P
 posetype(::Type{<:BindingSite{P}}) where P = P
 
+# The face-to-face rotation on its own, without a pose to apply it to; see `standard_offset`.
+@inline standard_rotation(::Type{F}, ::Val{2}, r::Integer=0, L::Integer=1) where {F} = Angle2d{F}(π)
+@inline standard_rotation(::Type{F}, ::Val{3}, r::Integer=0, L::Integer=1) where {F} =
+    RotXYZ{F}(2F(π) * r / L, 0, π)
+
 """
     standard_offset(b::BindingSite{<:Pose{D,F}}, r=0, L=1) where {D,F}
     standard_offset(p::Pose{D,F}, r=0, L=1)
-    standard_rotation(::Type{F}, ::Val{D}, r=0, L=1)
 
 Calculate the offset between binding site `b` and a partner attached in registration `r` of `L`.
 We employ the convention that attached binding sites are "facing each other": their poses are
@@ -105,9 +109,6 @@ survives regauging either site, and form the `L` multiples of `2π/L` that
 [`bondperiod`](@ref) counts. `r = 0` is the frames' own choice, and is the only registration
 when neither site has anything to be ambiguous about.
 """
-@inline standard_rotation(::Type{F}, ::Val{2}, r::Integer=0, L::Integer=1) where {F} = Angle2d{F}(π)
-@inline standard_rotation(::Type{F}, ::Val{3}, r::Integer=0, L::Integer=1) where {F} =
-    RotXYZ{F}(2F(π) * r / L, 0, π)
 @inline standard_offset(b::BindingSite{<:Pose{D,F}}, r::Integer=0, L::Integer=1) where {D,F} =
     b.pose * standard_rotation(F, Val(D), r, L)
 @inline standard_offset(p::Pose{D,F}, r::Integer=0, L::Integer=1) where {D,F} =

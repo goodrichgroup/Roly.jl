@@ -284,7 +284,7 @@ sides-from-caps are symmetries of the particle, and propagating under the 24 lea
 side faces a quarter turn apart.
 
 Correctness, and that the slack is exactly `stab` rather than merely `gauge`, is proved in
-`twist-references.md`. The ordering it forces is worth noting: labels are needed to know the
+`docs/src/orientation.md`. The ordering it forces is worth noting: labels are needed to know the
 group, and propagation only ever moves a dart within its gauge orbit, so `facegauge` and
 `siteorbits` — which compare frames up to gauge — may be computed first and are unaffected.
 """

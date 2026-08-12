@@ -20,6 +20,52 @@ If all building blocks share the same shape, pass a single species. Otherwise, p
 
 Roly ships with a few built-in species. In 2D: [`UnitTriangle`](@ref), [`UnitSquare`](@ref), [`UnitHexagon`](@ref) and [`PolygonParticleSpecies`](@ref) (regular polygons), and [`PatchyDisk`](@ref) (a disk with binding sites on its rim). In 3D: [`UnitTetrahedron`](@ref), [`UnitCube`](@ref), [`UnitOctahedron`](@ref), [`UnitDodecahedron`](@ref), [`UnitIcosahedron`](@ref), [`UnitPyramid`](@ref), [`UnitPrism`](@ref), [`UnitAntiprism`](@ref) and [`PolyhedronParticleSpecies`](@ref) (convex polyhedra with one binding site per face), and [`PatchySphere`](@ref) (a sphere whose patches inherit a polyhedron's rotation group). See the [custom species page](custom_species.md) to define your own.
 
+## Colors, and the symmetry that follows from them
+
+A species is described by *coloring* its binding sites. Colors are what the bond table refers to, and they are the whole statement: which sites the particle cannot tell apart follows from the coloring together with the geometry, and Roly derives it.
+
+```jldoctest workflow
+julia> symmetrynumber(PolyhedronParticleSpecies(Cube()))                  # every face distinct
+1
+
+julia> symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))  # all faces alike
+24
+
+julia> caps = [abs(facenormal(Cube(), i)[3]) > 0.5 ? 2 : 1 for i in 1:6];
+
+julia> symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=caps))     # caps apart from sides
+8
+```
+
+A solid's faces come in no particular order, so the third example picks its two caps by their normals rather than by index. The result is `D_4`: distinguishing two opposite faces leaves the 4-fold axis through them and the 2-fold axes across it. There is no `labels` keyword to override this — a labelling claiming more symmetry than the shape has would merge structures that are genuinely different, silently, so it is derived by [`siteorbits`](@ref) rather than given.
+
+Two further keywords control what a bond at a face *means*, rather than which bonds exist:
+
+- `locking` — whether a site holds its partner in the orientation its frame names. The default, `true`, gives one attachment unless the particle's own symmetry makes the frame ambiguous. `false` admits every orientation the face geometrically permits.
+- `twists` — an angle in radians turning a face's site about its own normal, which selects *which* relative orientation the bond means.
+
+Both take one value for the species or one per face. See [Orientation and registrations](orientation.md).
+
+## Naming a symmetry instead of a solid
+
+The solid constructors — [`Cube`](@ref), [`Prism`](@ref), [`Antiprism`](@ref) and the rest — build a [`Polyhedron`](@ref) directly. When what matters is the symmetry rather than the shape, name the rotation group and let Roly pick a solid realizing it:
+
+```jldoctest workflow
+julia> Polyhedron(Octahedral())
+Polyhedron{Float64}:
+ - corners: 	8
+ - edges: 	12
+ - faces: 	6 (6×4-gon)
+
+julia> grouporder(Dihedral(5))
+10
+
+julia> nsites(PatchySphere(Dihedral(5)))
+7
+```
+
+The groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref), [`Octahedral`](@ref) and [`Icosahedral`](@ref) — the proper (rotation-only) point groups, which are the only ones a rigid body can have.
+
 ## Enumerating polyforms
 
 `polyenum` walks through every polyform allowed by a set of binding rules:
@@ -88,11 +134,20 @@ Because `REJECT` prunes the entire subtree, the constraint must be monotone: if 
 
 ## Visualizing polyforms
 
-Roly ships a [Makie](https://docs.makie.org) extension for 2D visualization. Load any Makie backend to activate it:
+Roly ships a [Makie](https://docs.makie.org) extension. Load any Makie backend to activate it:
 
 ```julia
 using GLMakie      # or CairoMakie, WGLMakie, ...
 render(polys[end]) # display a single polyform
 ```
 
-`polyformplot!(ax, poly)` draws a polyform onto an existing Makie axis.
+[`render`](@ref) picks a 2D or 3D axis to match the polyform's dimension. **For 3D, use a backend with a depth buffer — GLMakie or WGLMakie.** CairoMakie sorts primitives instead of depth-testing them, so a 3D polyform renders with visible artifacts where faces meet: faint seams inside transparent faces and a jagged fringe where a patch interpenetrates its body. 2D output is fine in any backend.
+
+A species renders too, which is the quickest way to see how its faces are colored and which way its sites face:
+
+```julia
+render(PolyhedronParticleSpecies(Prism(3); colors=[1, 2, 2, 2, 1]))
+render(UnitCube; bindingrules=sys)   # sites no bond can use are drawn inert
+```
+
+[`polyformplot!`](@ref)`(ax, poly)` draws onto an existing Makie axis.

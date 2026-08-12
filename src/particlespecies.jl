@@ -6,6 +6,14 @@ concrete `BindingSite` type.
 """
 abstract type ParticleSpecies{D,B<:BindingSite} end
 
+"""
+    SpeciesAndPose{SPC}
+
+A species paired with a placement, `species => pose`: one particle, positioned. This is what
+the geometric predicates take, since neither a species nor a pose alone is a thing in space —
+[`overlap`](@ref) and [`could_contact`](@ref) are both written
+`overlap(spcs1 => pose1, spcs2 => pose2)`.
+"""
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
 """

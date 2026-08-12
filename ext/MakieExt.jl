@@ -24,16 +24,7 @@ function Makie.plot!(p::PolyformPlot{<:Tuple{<:ParticleSpecies}})
     return p
 end
 
-"""
-    render(p; hidedecorations=true, kwargs...)
-
-Draw a `Polyform` or `ParticleSpecies` into a fresh figure, picking a 2D or 3D axis to match
-its dimension.
-
-3D output needs a backend with a depth buffer — GLMakie or WGLMakie. CairoMakie sorts
-primitives instead of depth-testing them, so faces of a polyform will occlude each other
-incorrectly.
-"""
+# Documented on the stub in `Roly`, so that Documenter finds it without loading this extension.
 function render(p; hidedecorations=true, kwargs...)
     f = Figure()
     ax = dimension(p) == 3 ? Axis3(f[1, 1], aspect=:data) : Axis(f[1, 1], aspect=DataAspect())

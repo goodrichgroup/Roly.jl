@@ -14,6 +14,19 @@ posetype
 ```@docs
 BindingSite
 color
+```
+
+### Bonds and registrations
+
+How many distinct ways a partner may attach at a site, and which one a given attachment is.
+See [Orientation and registrations](orientation.md) for what the numbers mean.
+
+```@docs
+twistfreedom
+bondperiod
+nregistrations
+registration
+standard_offset
 contact_pairing
 ```
 
@@ -29,10 +42,21 @@ nedges
 facecentroid
 facenormal
 edgemidpoint
+minedgelength
+inradius
 rotationgroup
 geometriclabels
+facegauge
+siteorbits
+site_symmetry
+sitestabilisers
 dartencoding
 cycleencoding
+```
+
+### Rotation groups
+
+```@docs
 RotationGroup
 Cyclic
 Dihedral
@@ -40,6 +64,11 @@ Tetrahedral
 Octahedral
 Icosahedral
 grouporder
+```
+
+### Solids
+
+```@docs
 Tetrahedron
 Cube
 Octahedron
@@ -54,6 +83,7 @@ Antiprism
 
 ```@docs
 ParticleSpecies
+SpeciesAndPose
 bindingsites
 nsites
 graphrep
@@ -62,6 +92,8 @@ symmetrynumber
 bounding_radius
 could_contact
 overlap
+sat_overlap
+edgenormals
 ```
 
 ### Built-in species
@@ -121,4 +153,38 @@ polyenum
 polygen
 countpolyforms
 PolyformCount
+```
+
+An enumeration reports why it stopped as an `RSStatus`: `Finished` if it ran to completion, and
+otherwise `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`. A callback returns
+`ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
+
+## Visualization
+
+Provided by the Makie extension, so a backend has to be loaded.
+
+```@docs
+render
+polyformplot
+polyformplot!
+```
+
+## Internals
+
+Not public API — names, signatures and behaviour may change without notice. They are listed
+because the reasoning behind Roly's orientation model lives in their docstrings, and the public
+ones refer to them.
+
+```@docs
+Roly._canonical_faces
+Roly._propagate_faces
+Roly._facesites
+Roly._derive_faces
+Roly._cycle_suffices
+Roly._siteturns
+Roly._site_symmetries
+Roly._check_encoding
+Roly._check_labelling
+Roly._recolor!
+Roly.raise!
 ```
