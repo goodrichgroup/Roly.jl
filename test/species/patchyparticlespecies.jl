@@ -183,3 +183,40 @@ end
     ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3))
     @test symmetrynumber(ps) == site_symmetry(ps) == 3
 end
+
+@testset "patch twists set the bond registry" begin
+    using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_compatible_pairs,
+                nparticles
+    using Graphs: cycle_digraph
+    using NautyGraphs: NautyDiGraph
+    using Rotations: RotMatrix3, rotation_angle
+
+    # A patch is one graph vertex, so it pins no turn about its own normal and its frame names
+    # the bond outright: `patch_twists` is the keyed-connector knob, and turning one turns the
+    # partner it holds. Nothing else in the package exercises the 3D general constructor.
+    pos = [SVector(1.0, 0.0, 0.0), SVector(-1.0, 0.0, 0.0),
+           SVector(0.0, 1.0, 0.0), SVector(0.0, -1.0, 0.0)]
+    function dimer(twists)
+        ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(4)), 1.0, pos, twists;
+                                   colors=[1, 2, 3, 4])
+        @test all(i -> Roly.bindingsites(ps, i).gauge == 1, 1:4)
+        sys = BindingRules([1 1 1 2], ps)
+        poly = Polyform(sys, 1)
+        for (site, loc, r) in collect_compatible_pairs(poly)
+            trial = copy(poly)
+            ismissing(raise!(trial, site, loc, r)) && continue
+            @test r == 0                      # gauge 1 on both sides, so one registration
+            return trial.particles[2].pose
+        end
+        return nothing
+    end
+
+    straight = dimer(zeros(4))
+    turned = dimer([0.0, π / 2, 0.0, 0.0])
+    @test !isnothing(straight) && !isnothing(turned)
+    # Same place, since the twist is about the bond axis...
+    @test isapprox(straight.x, turned.x; atol=1e-8)
+    # ...and a quarter turn apart, which is the point of it.
+    @test !isapprox(straight.psi, turned.psi; atol=1e-8)
+    @test isapprox(rotation_angle(RotMatrix3(straight.psi * inv(turned.psi))), π / 2; atol=1e-8)
+end
