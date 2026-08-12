@@ -3,9 +3,10 @@ using Roly: Polyhedron, Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron
             Pyramid, Prism, Antiprism,
             corners, ncorners, faces, facevertices, nfaces, nedges, facedegree,
             facecentroid, facecentroids, facenormal, facenormals, edgemidpoint,
-            edgelength, bounding_radius, inradius,
-            rotationgroup, geometriclabels, dartencoding, cycleencoding, sitegraph,
-            facegauge
+            minedgelength, bounding_radius, inradius,
+            rotationgroup, geometriclabels, dartencoding, cycleencoding,
+            facegauge, RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral,
+            Icosahedral, grouporder
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
 
 @testset "encoding" begin
@@ -49,12 +50,12 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
         @test isapprox(sum(corners(p)) / ncrn, zero(SVector{3,Float64}); atol=1e-12)
     end
 
-    @test isapprox(edgelength(Cube(2.5)), 2.5)
+    @test isapprox(minedgelength(Cube(2.5)), 2.5)
     @test isapprox(bounding_radius(Cube(2.0)), sqrt(3.0))
     @test facedegree(Prism(5), 1) in (5, 4)
     @test length(facevertices(Cube(), 1)) == 4
     # Prism(4) with the default height is a cube, and Antiprism(3) a regular octahedron.
-    @test isapprox(edgelength(Prism(4)), 1.0)
+    @test isapprox(minedgelength(Prism(4)), 1.0)
     @test length(unique(round.([norm(corners(Antiprism(3))[f[k]] - corners(Antiprism(3))[f[mod1(k+1, 3)]])
                                 for f in faces(Antiprism(3)) for k in 1:3]; digits=8))) == 1
 
@@ -171,15 +172,22 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
         @test symnum(cycleencoding(nfac)[1]) == symnum(dartencoding(p)[1]) == 1
     end
 
-    for (sym, n, order) in [(:T, 0, 12), (:O, 0, 24), (:I, 0, 60),
-                            (:C, 3, 3), (:C, 6, 6), (:D, 3, 6), (:D, 5, 10)]
-        p = Polyhedron(sym, n)
-        @test length(rotationgroup(p)) == order
-        @test symnum(sitegraph(sym, n; labels=geometriclabels(p))[1]) == order
+    # Naming a rotation group gives a solid realizing it, and the group's order is what the
+    # solid's own rotations and its dart encoding both come out at.
+    for group in [Tetrahedral(), Octahedral(), Icosahedral(),
+                  Cyclic(3), Cyclic(6), Dihedral(3), Dihedral(5)]
+        p = Polyhedron(group)
+        @test length(rotationgroup(p)) == grouporder(group)
+        @test symnum(dartencoding(group; labels=geometriclabels(p))[1]) == grouporder(group)
     end
-    @test_throws ArgumentError Polyhedron(:C)
-    @test_throws ArgumentError Polyhedron(:T, 3)
-    @test_throws ArgumentError Polyhedron(:X)
+    @test grouporder.([Cyclic(4), Dihedral(4), Tetrahedral(), Octahedral(), Icosahedral()]) ==
+          [4, 8, 12, 24, 60]
+    @test sprint(show, Cyclic(5)) == "Cyclic(5)"
+    @test sprint(show, Dihedral(5)) == "Dihedral(5)"
+    # A group whose smallest realization is a solid: a pyramid or prism needs at least 3 sides.
+    @test_throws ArgumentError Polyhedron(Cyclic(2))
+    @test_throws ArgumentError Polyhedron(Dihedral(2))
+    @test nfaces(Polyhedron(Octahedral(); a=2.0)) == 6
 
     # Faces derived from the corners alone match the closed-surface requirement, and a
     # user-supplied solid needs nothing but its corners.

@@ -126,21 +126,19 @@ end
         @test symmetrynumber(PatchySphere(shp, 2.0; colors=geometriclabels(shp))) == order
         @test order == length(rotationgroup(shp))
         @test nv(graphrep(ps)) == np
-        @test nv(graphrep(PatchySphere(shp, 2.0; encoding=:dart))) == 2 * Roly.nedges(shp)
+        @test nv(graphrep(dartsphere(shp, 2.0))) == 2 * Roly.nedges(shp)
     end
 
-    # Naming a rotation group resolves to the same solid Polyhedron(sym) gives.
-    @test nsites(PatchySphere(:T)) == 4
-    @test nsites(PatchySphere(:O)) == 6
-    @test nsites(PatchySphere(:I)) == 12
-    @test nsites(PatchySphere(:D, 5)) == 7
-    @test nsites(PatchySphere(:C, 6)) == 7
-    @test_throws ArgumentError PatchySphere(:X)
-    @test_throws ArgumentError PatchySphere(Cube(); encoding=:nonsense)
+    # Naming a rotation group resolves to the solid `Polyhedron` realizes it with.
+    @test nsites(PatchySphere(Tetrahedral())) == 4
+    @test nsites(PatchySphere(Octahedral())) == 6
+    @test nsites(PatchySphere(Icosahedral())) == 12
+    @test nsites(PatchySphere(Dihedral(5))) == 7
+    @test nsites(PatchySphere(Cyclic(6))) == 7
     @test_throws ArgumentError PatchySphere(Cube(); colors=1:5)
 
     # Spheres overlap by radius alone.
-    ps = PatchySphere(:O, 0, 1.0)
+    ps = PatchySphere(Octahedral(), 1.0)
     id = Pose{3,Float64,RotMatrix3{Float64}}(SVector(0.0, 0.0, 0.0), one(RotMatrix3{Float64}))
     apart(d) = Pose{3,Float64,RotMatrix3{Float64}}(SVector(d, 0.0, 0.0), one(RotMatrix3{Float64}))
     @test overlap(ps => id, ps => id)

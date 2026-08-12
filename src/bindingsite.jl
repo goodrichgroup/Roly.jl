@@ -199,8 +199,8 @@ end
     r == 0 && return 0, 0
     K % L == 0 || throw(ArgumentError(
         "a bond in $L registrations cannot be encoded by sites of $k1 and $k2 graph vertices: " *
-        "$L must divide lcm($k1, $k2) = $K. Give the sites more vertices (encoding=:dart) or " *
-        "declare a smaller gauge."
+        "$L must divide lcm($k1, $k2) = $K. Give the sites more vertices, i.e. a graph built " *
+        "by `dartencoding` rather than `cycleencoding`, or declare a smaller gauge."
     ))
     s1, s2 = K ÷ k1, K ÷ k2
     t = r * K ÷ L

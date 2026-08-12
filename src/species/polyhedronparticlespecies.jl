@@ -15,7 +15,7 @@ struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
 end
 
 """
-    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0, encoding=:auto)
+    PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0)
 
 Build a particle species from the polyhedron `p`, with one binding site at each face centroid.
 
@@ -49,15 +49,20 @@ frame alone. Twisting one face of a symmetry orbit differently from its fellows 
 orbit, lowering the symmetry number — deliberately breaking a symmetry is what this is for, and
 the graph records the break. A twist shared across an orbit leaves the symmetry intact, since
 turns about a site's own normal commute with its stabiliser.
+
+The graph encoding is chosen rather than asked for: the sparse one whenever it provably carries
+everything the dart encoding would, see `_cycle_suffices`.
 """
-function PolyhedronParticleSpecies(
-    p::Polyhedron{F}; colors=1:nfaces(p), locking=true, twists=0, encoding::Symbol=:auto
-) where {F}
+PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0) =
+    _polyhedronspecies(p, colors, locking, twists, nothing)
+
+# `usecycle` forces an encoding; see `_facesites`. Internal, and the reason the public
+# constructor above is a one-liner.
+function _polyhedronspecies(p::Polyhedron{F}, colors, locking, twists,
+                            usecycle::Union{Nothing,Bool}) where {F}
     n = nfaces(p)
     length(colors) == n ||
         throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
-    encoding in (:auto, :dart, :cycle) ||
-        throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
 
     rmin = inradius(p)
     rmax = bounding_radius(p)
@@ -65,7 +70,7 @@ function PolyhedronParticleSpecies(
 
     g, sites = _facesites(p, fs -> _faceposes(p, fs), colors,
                           _perface(locking, n, "locking flags"),
-                          _perface(twists, n, "twists"), encoding, tol, tol / rmin)
+                          _perface(twists, n, "twists"), usecycle, tol, tol / rmin)
 
     return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
         g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol

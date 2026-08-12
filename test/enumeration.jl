@@ -234,27 +234,33 @@ end;
     # chiral C₃ and C₄, which no other enumeration test reaches.
     opposite(p, i) = findfirst(j -> isapprox(dot(Roly.facenormal(p, i), Roly.facenormal(p, j)), -1;
                                              atol=1e-8), 1:nfaces(p))
-    function chainspecies(name, alike)
-        a, b = alike ? (1, 1) : (1, 2)
-        name === :disk && return PatchyDisk([0.0, π]; colors=[a, b])
-        name === :square && return PolygonParticleSpecies(4, 1.0; colors=[a, 3, b, 3])
-        if name === :prism
-            p = Prism(3, 1.0; h=2.0)
-            caps = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) > 1e-8]
-            return PolyhedronParticleSpecies(
-                p; colors=[i == caps[1] ? a : i == caps[2] ? b : 3 for i in 1:nfaces(p)]
-            )
-        end
+    # Each entry builds a species whose two bonding sites carry colors `a` and `b`, and states
+    # the symmetry numbers it should have with those two distinct and with them alike.
+    function prismchain(a, b)
+        p = Prism(3, 1.0; h=2.0)
+        caps = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) > 1e-8]
+        return PolyhedronParticleSpecies(
+            p; colors=[i == caps[1] ? a : i == caps[2] ? b : 3 for i in 1:nfaces(p)]
+        )
+    end
+    function cubechain(a, b)
         p = Cube()
         return PolyhedronParticleSpecies(
             p; colors=[i == 1 ? a : i == opposite(p, 1) ? b : 3 for i in 1:nfaces(p)]
         )
     end
+    chains = [
+        ("disk", (a, b) -> PatchyDisk([0.0, π]; colors=[a, b]), (1, 2)),
+        ("square", (a, b) -> PolygonParticleSpecies(4, 1.0; colors=[a, 3, b, 3]), (1, 2)),
+        ("prism", prismchain, (3, 6)),
+        ("cube", cubechain, (4, 8)),
+    ]
 
     N = 5
-    for (name, symnums) in ((:disk, (1, 2)), (:square, (1, 2)), (:prism, (3, 6)), (:cube, (4, 8)))
+    for (name, build, symnums) in chains
+        chainspecies(alike) = alike ? build(1, 1) : build(1, 2)
         for (alike, want_sym) in zip((false, true), symnums)
-            ps = chainspecies(name, alike)
+            ps = chainspecies(alike)
             @test symmetrynumber(ps) == want_sym
             # The two bonding sites, found by color so each geometry can index its own faces.
             s1 = findfirst(i -> color(bindingsites(ps, i)) == 1, 1:nsites(ps))
@@ -262,7 +268,7 @@ end;
 
             for k in 1:3
                 bonds = reduce(vcat, [[s s1 t s2] for s in 1:k for t in 1:k])
-                sys = BindingRules(bonds, [chainspecies(name, alike) for _ in 1:k])
+                sys = BindingRules(bonds, [chainspecies(alike) for _ in 1:k])
                 @test nspecies(sys) == k
                 want = alike ? [(k^n + k^cld(n, 2)) ÷ 2 for n in 1:N] : [k^n for n in 1:N]
                 @test [polyenum(sys; maxsize=n)[1] for n in 1:N] == cumsum(want)

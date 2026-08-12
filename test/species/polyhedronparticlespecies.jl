@@ -125,7 +125,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
         @test symmetrynumber(geo) == order == length(rotationgroup(shp))
         # Distinct labels give 1, regardless of encoding.
         @test symmetrynumber(PolyhedronParticleSpecies(shp)) == 1
-        @test symmetrynumber(PolyhedronParticleSpecies(shp; encoding=:dart)) == 1
+        @test symmetrynumber(dartspecies(shp)) == 1
     end
 
     ### Encoding validation
@@ -134,17 +134,16 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     # species built above already satisfies it; check it explicitly across the library.
     for (_, ps, shp, _, order) in solids
         # Distinct labels: both encodings describe the arrangement, and both give 1.
-        for enc in (:auto, :dart, :cycle)
-            distinct = PolyhedronParticleSpecies(shp; encoding=enc)
+        for build in (PolyhedronParticleSpecies, dartspecies, cyclespecies)
+            distinct = build(shp)
             @test symmetrynumber(distinct) == site_symmetry(distinct) == 1
         end
         # Repeated labels: only the dart encoding carries the rotation group, and forcing the
-        # sparse one is now rejected rather than silently reporting the cyclic order.
-        geo = PolyhedronParticleSpecies(shp; encoding=:dart, colors=geometriclabels(shp))
+        # sparse one is rejected rather than silently reporting the cyclic order.
+        geo = dartspecies(shp; colors=geometriclabels(shp))
         @test symmetrynumber(geo) == site_symmetry(geo) == order
         order == nfaces(shp) ||
-            @test_throws ArgumentError PolyhedronParticleSpecies(shp; encoding=:cycle,
-                                                                 colors=geometriclabels(shp))
+            @test_throws ArgumentError cyclespecies(shp; colors=geometriclabels(shp))
     end
     for (shp, order) in [(Tetrahedron(), 12), (Cube(), 24), (Dodecahedron(), 60), (Prism(5), 10)]
         sphere = PatchySphere(shp, 1.0; colors=geometriclabels(shp))
@@ -205,10 +204,10 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     # The sparse encoding imposes a cyclic order, which is not the symmetry of a tetrahedral
     # or octahedral patch arrangement: it claims n where the truth is |G|. This is the failure
     # that using `cycleencoding`/`dartencoding` does *not* rule out on its own.
-    @test_throws ArgumentError PatchySphere(Tetrahedron(), 1.0; colors=fill(1, 4), encoding=:cycle)
-    @test_throws ArgumentError PatchySphere(Cube(), 1.0; colors=fill(1, 6), encoding=:cycle)
+    @test_throws ArgumentError cyclesphere(Tetrahedron(), 1.0; colors=fill(1, 4))
+    @test_throws ArgumentError cyclesphere(Cube(), 1.0; colors=fill(1, 6))
     # The dart encoding is the one that describes them.
-    @test symmetrynumber(PatchySphere(Tetrahedron(), 1.0; colors=fill(1, 4), encoding=:dart)) == 12
+    @test symmetrynumber(dartsphere(Tetrahedron(), 1.0; colors=fill(1, 4))) == 12
 
     # A cube with the two caps distinguished from the four sides keeps the 4-fold axis
     # and the 2-fold axes through it: D_4, of order 8.
@@ -218,16 +217,14 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=[2, 1, 1, 1, 1, 1])) == 4
 
     shp = Cube()
-    # :auto takes the cheap encoding when it is provably equivalent, the dart encoding
-    # when a repeated label means the graph has to carry the rotation group.
+    # The constructor takes the sparse encoding when it is provably equivalent, and the dart
+    # encoding when a repeated label means the graph has to carry the rotation group.
     @test nv(graphrep(PolyhedronParticleSpecies(shp))) == 6
     @test nv(graphrep(PolyhedronParticleSpecies(shp; colors=fill(1, 6)))) == 24
-    @test nv(graphrep(PolyhedronParticleSpecies(shp; encoding=:dart))) == 24
-    @test nv(graphrep(PolyhedronParticleSpecies(shp; encoding=:cycle))) == 6
-    @test all(length(bindingsites(PolyhedronParticleSpecies(shp; encoding=:dart), i).vertices) == 4
-              for i in 1:6)
+    @test nv(graphrep(dartspecies(shp))) == 24
+    @test nv(graphrep(cyclespecies(shp))) == 6
+    @test all(length(bindingsites(dartspecies(shp), i).vertices) == 4 for i in 1:6)
 
-    @test_throws ArgumentError PolyhedronParticleSpecies(shp; encoding=:nonsense)
     @test_throws ArgumentError PolyhedronParticleSpecies(shp; colors=1:5)
 
     ps = PolyhedronParticleSpecies(Cube(); colors=[3, 1, 4, 1, 5, 9])
@@ -255,7 +252,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     # stabilisers with it. Given a graph roomy enough to hold the result -- here the dart
     # encoding, asked for explicitly -- a prism whose faces all start out distinct can be
     # recolored into its full D_3 and the derived quantities follow.
-    prism = PolyhedronParticleSpecies(Prism(3, 1.0; h=2.0); colors=1:5, encoding=:dart)
+    prism = dartspecies(Prism(3, 1.0; h=2.0); colors=1:5)
     @test symmetrynumber(prism) == site_symmetry(prism) == 1
     @test Roly.sitestabilisers(prism) == fill(1, 5)
 
@@ -325,8 +322,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     ]
 
     for (name, shp, bonds, maxn) in systems
-        results = map((:cycle, :dart)) do enc
-            sys = BindingRules(bonds, PolyhedronParticleSpecies(shp; encoding=enc))
+        results = map((cyclespecies, dartspecies)) do build
+            sys = BindingRules(bonds, build(shp))
             polys = polygen(sys; maxsize=maxn)
             (counts=[count(p -> nparticles(p) == k, polys) for k in 1:maxn],
              sigmas=sort([(nparticles(p), symmetrynumber(p)) for p in polys]),
@@ -381,7 +378,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations
     # Sites of different sizes may bond: a prism's 4-vertex square faces to its 5-vertex
     # pentagonal ones. `contact_pairing` joins them at gcd(4, 5) = 1 vertex, so the bond
     # carries one edge instead of four.
-    prism = PolyhedronParticleSpecies(Prism(5); encoding=:dart)
+    prism = dartspecies(Prism(5))
     squares = [i for i in 1:7 if facedegree(Prism(5), i) == 4]
     pentagons = [i for i in 1:7 if facedegree(Prism(5), i) == 5]
 
@@ -428,7 +425,7 @@ end
     # On a particle with no symmetry to hide behind, the twist is the bond registry outright.
     # Turning only the mate's face turns the partner by exactly one dart step, not two.
     function dimer(t)
-        ps = PolyhedronParticleSpecies(Tetrahedron(); twists=[0.0, t, 0.0, 0.0], encoding=:dart)
+        ps = dartspecies(Tetrahedron(); twists=[0.0, t, 0.0, 0.0])
         @test symmetrynumber(ps) == 1
         poly = Polyform(BindingRules([1 1 1 2], ps), 1)
         for (site, loc, r) in collect_compatible_pairs(poly)

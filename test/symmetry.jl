@@ -86,7 +86,7 @@ end
         ("polyiamonds",     BindingRules([1 1 1 1], faced(Prism(3, 1.0; h=2.0), sidefaces(Prism(3, 1.0; h=2.0)))), 4),
         ("prism3, h=a",     BindingRules([1 1 1 1], faced(Prism(3), sidefaces(Prism(3)))), 4),
         ("cube, distinct",  BindingRules([1 1 1 2], PolyhedronParticleSpecies(Cube())), 4),
-        ("cube, dart enc",  BindingRules([1 1 1 2], PolyhedronParticleSpecies(Cube(); encoding=:dart)), 4),
+        ("cube, dart enc",  BindingRules([1 1 1 2], dartspecies(Cube())), 4),
         ("twisted prism",   BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);
                                 colors=[2, 1, 1, 1, 2], twists=[0.0, π/2, 0.0, 0.0, 0.0])), 4),
         ("free side faces", BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);

@@ -78,12 +78,13 @@ function PatchyDisk(angles, r=1; colors=1:length(angles))
 end
 
 """
-    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, twists=0, encoding=:auto)
-    PatchySphere(sym::Symbol, n=0, r=1; kwargs...)
+    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, twists=0)
+    PatchySphere(group::RotationGroup, r=1; a=1.0, kwargs...)
 
 A 3D sphere of radius `r` carrying one patch per face of `p`, so that the patches inherit the
-solid's rotation group. The second form names a rotation group instead of a solid, resolved
-by [`Polyhedron`](@ref): `PatchySphere(:T)`, `PatchySphere(:O)`, `PatchySphere(:D, 5)`.
+solid's rotation group. The second form names a [`RotationGroup`](@ref) instead of a solid,
+resolved by [`Polyhedron`](@ref): `PatchySphere(Tetrahedral())`, `PatchySphere(Octahedral())`,
+`PatchySphere(Dihedral(5))`.
 
 Patches sit where the face centroid directions pierce the sphere, and share the graph
 encoding, the labelling rules and the binding site frame convention of
@@ -91,15 +92,18 @@ encoding, the labelling rules and the binding site frame convention of
 polyhedron species and a patchy sphere built from the same solid have interchangeable encodings
 and can share one set of `BindingRules`.
 """
-function PatchySphere(
-    p::Polyhedron{F}, r::Real=1; colors=1:nfaces(p), locking=true, twists=0,
-    encoding::Symbol=:auto
-) where {F}
+PatchySphere(p::Polyhedron, r::Real=1; colors=1:nfaces(p), locking=true, twists=0) =
+    _patchysphere(p, r, colors, locking, twists, nothing)
+
+PatchySphere(group::RotationGroup, r::Real=1; a=1.0, kwargs...) =
+    PatchySphere(Polyhedron(group; a), r; kwargs...)
+
+# `usecycle` forces an encoding; see `_facesites`.
+function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists,
+                       usecycle::Union{Nothing,Bool}) where {F}
     n = nfaces(p)
     length(colors) == n ||
         throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
-    encoding in (:auto, :dart, :cycle) ||
-        throw(ArgumentError("encoding must be :auto, :dart or :cycle, got :$encoding"))
 
     r = F(r)
     tol = sqrt(eps(F)) * r
@@ -116,12 +120,9 @@ function PatchySphere(
     end
 
     g, sites = _facesites(p, patchposes, colors, _perface(locking, n, "locking flags"),
-                          _perface(twists, n, "twists"), encoding, tol, tol / r)
+                          _perface(twists, n, "twists"), usecycle, tol, tol / r)
     return _check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
-
-PatchySphere(sym::Symbol, n::Integer=0, r::Real=1; a=1.0, kwargs...) =
-    PatchySphere(Polyhedron(sym, n; a), r; kwargs...)
 
 function Base.show(io::Core.IO, ps::PatchyParticleSpecies{D}) where {D}
     return print(io, "$(D)d PatchyParticleSpecies with $(nsites(ps)) sites")

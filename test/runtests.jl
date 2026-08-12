@@ -4,6 +4,8 @@ using Rotations, StaticArrays, LinearAlgebra, Random
 using NautyGraphs
 using CairoMakie
 
+include("testutils.jl")
+
 @testset verbose=true "Roly" begin
     include("pose.jl")
     include("bindingsite.jl")

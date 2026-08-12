@@ -1,4 +1,78 @@
 """
+    RotationGroup
+
+A proper (or *chiral*) point group: the rotations carrying a rigid body onto itself, without
+the reflections a full point group would also contain. These are the only groups a particle can
+have, which is why Roly names them and not the point groups.
+
+The five families are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref),
+[`Octahedral`](@ref) and [`Icosahedral`](@ref). A `RotationGroup` is a way of *asking* for a
+shape — `Polyhedron(Octahedral())` is a cube — rather than something computed from one; use
+[`rotationgroup`](@ref) to get the actual rotations of a solid.
+
+Spelled out rather than abbreviated to the customary `C`, `D`, `T`, `O`, `I`, all of which are
+taken: `T` is the universal type-parameter convention, `I` is `LinearAlgebra.I`, and `D` is
+Roly's dimension parameter throughout (`ParticleSpecies{D,B}`, `Pose{D,F}`). Exporting the
+short names would shadow them on `using Roly`.
+"""
+abstract type RotationGroup end
+
+"""
+    Cyclic(n)
+
+The rotation group `C_n`: `n` turns about a single axis, and nothing else. Order `n`, realized
+by [`Pyramid`](@ref).
+"""
+struct Cyclic{N} <: RotationGroup end
+Cyclic(n::Integer) = Cyclic{Int(n)}()
+
+"""
+    Dihedral(n)
+
+The rotation group `D_n`: the `n` turns about a principal axis together with the `n` half turns
+about axes perpendicular to it. Order `2n`, realized by [`Prism`](@ref) and [`Antiprism`](@ref).
+"""
+struct Dihedral{N} <: RotationGroup end
+Dihedral(n::Integer) = Dihedral{Int(n)}()
+
+"""
+    Tetrahedral()
+
+The rotation group `T` of a regular tetrahedron, of order 12.
+"""
+struct Tetrahedral <: RotationGroup end
+
+"""
+    Octahedral()
+
+The rotation group `O` shared by the cube and the regular octahedron, of order 24.
+"""
+struct Octahedral <: RotationGroup end
+
+"""
+    Icosahedral()
+
+The rotation group `I` shared by the regular dodecahedron and icosahedron, of order 60.
+"""
+struct Icosahedral <: RotationGroup end
+
+Base.show(io::Core.IO, ::Cyclic{N}) where {N} = print(io, "Cyclic($N)")
+Base.show(io::Core.IO, ::Dihedral{N}) where {N} = print(io, "Dihedral($N)")
+
+"""
+    grouporder(group::RotationGroup)
+
+Return the number of rotations in `group`. A solid realizing it has this symmetry number when
+all of its faces are alike, which is what `length(rotationgroup(Polyhedron(group)))` measures
+the hard way.
+"""
+grouporder(::Cyclic{N}) where {N} = N
+grouporder(::Dihedral{N}) where {N} = 2N
+grouporder(::Tetrahedral) = 12
+grouporder(::Octahedral) = 24
+grouporder(::Icosahedral) = 60
+
+"""
     Polyhedron{F}
 
 A convex polyhedron, stored as a list of `corners` and a list of `faces`.
@@ -269,16 +343,29 @@ function _derive_faces(corners::Vector{SVector{3,F}}) where {F}
         any(pl -> isapprox(pl[1], nrm; atol) && isapprox(pl[2], d; atol), planes) && continue
 
         push!(planes, (nrm, d))
-        push!(faces, _wind_ccw(corners, findall(c -> abs(dot(nrm, c) - d) <= atol, corners), nrm))
+        push!(faces, _wind_counterclockwise!(
+            corners, findall(c -> abs(dot(nrm, c) - d) <= atol, corners), nrm
+        ))
     end
     return faces
 end
 
-function _wind_ccw(corners::Vector{SVector{3,F}}, idxs::Vector{Int}, nrm::SVector{3,F}) where {F}
+"""
+    _wind_counterclockwise!(corners, idxs, nrm)
+
+Sort `idxs` — the corners lying on one supporting plane — into counter-clockwise order seen
+from outside, i.e. looking down `nrm`. In place, since the caller hands over a fresh `findall`.
+
+The angle about the face centroid is what orders them, and `atan` is the honest way to get it:
+a half-plane comparator avoids the transcendental but is more code and easier to get wrong,
+for no measurable gain at these sizes.
+"""
+function _wind_counterclockwise!(corners::Vector{SVector{3,F}}, idxs::Vector{Int},
+                                 nrm::SVector{3,F}) where {F}
     c = sum(corners[i] for i in idxs) / length(idxs)
     u = normalize(corners[first(idxs)] - c)
     v = cross(nrm, u)
-    return sort(idxs; by=i -> atan(dot(corners[i] - c, v), dot(corners[i] - c, u)))
+    return sort!(idxs; by=i -> atan(dot(corners[i] - c, v), dot(corners[i] - c, u)))
 end
 
 """
@@ -357,9 +444,10 @@ facenormals(p::Polyhedron) = [facenormal(p, i) for i in 1:nfaces(p)]
 """
     edgemidpoint(p::Polyhedron, i, k)
 
-Return the midpoint of the `k`th edge of the `i`th face of `p`, i.e. the edge running from
-corner `k` to corner `k+1` of that face. The `k = 1` midpoint is the twist reference of the
-face's binding site.
+Return the midpoint of edge `k` of face `i` of `p`. Both arguments are indices into `p`, the
+first over its faces and the second over that face's own edges, of which edge `k` is the one
+running from the face's `k`th corner to its `k+1`th — not an edge from corner `i` to corner
+`k`. The `k = 1` midpoint is the twist reference of the face's binding site.
 """
 function edgemidpoint(p::Polyhedron, i::Integer, k::Integer)
     f = p.faces[i]
@@ -381,11 +469,13 @@ Return the distance from the origin to the closest face centroid of `p`.
 inradius(p::Polyhedron) = minimum(norm(facecentroid(p, i)) for i in 1:nfaces(p))
 
 """
-    edgelength(p::Polyhedron)
+    minedgelength(p::Polyhedron)
 
-Return the length of the shortest edge of `p`.
+Return the length of the shortest edge of `p`. Named for what it returns: the edges of a
+`Polyhedron` need not all be the same length, and only the library solids built to an edge
+length `a` have a single one.
 """
-function edgelength(p::Polyhedron)
+function minedgelength(p::Polyhedron)
     return minimum(
         norm(p.corners[f[k]] - p.corners[f[mod1(k + 1, length(f))]]) for f in p.faces for k in eachindex(f)
     )
@@ -408,8 +498,8 @@ rotationgroup(p::Polyhedron) = _rotationgroup(corners(p), faces(p))
 function _rotationgroup(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     atol = sqrt(eps(F)) * maximum(norm, cs)
 
-    # An orthonormal frame attached to dart k of face i: along the edge, along the outward
-    # normal, and their cross product.
+    # An orthonormal frame attached to dart k of face i, i.e. to that face's kth edge: along
+    # the edge, along the outward normal, and their cross product.
     function dartframe(i, k)
         f = faces[i]
         e1 = normalize(cs[f[mod1(k + 1, length(f))]] - cs[f[k]])
@@ -422,7 +512,7 @@ function _rotationgroup(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) wh
     for i in eachindex(faces), k in eachindex(faces[i])
         # every potential symmetry rotation maps the ref frame to some other dartframe, and is therefore
         # given by the matrix
-        R = dartframe(i, k) * transpose(Mref)
+        R = dartframe(i, k) * Mref'
         # R is a symmetry if every corners is mapped to some other corner
         all(c -> any(c2 -> isapprox(R * c, c2; atol), cs), cs) || continue
         push!(group, RotMatrix3{F}(R))
@@ -517,15 +607,20 @@ end
 """
     dartencoding(p::Polyhedron; labels=1:nfaces(p))
     dartencoding(faces::Vector{Vector{Int}}; labels=1:length(faces))
+    dartencoding(group::RotationGroup; a=1.0, labels=...)
 
 Return `(g, ranges)`, the dart encoding of `p` and the graph vertices belonging to each face.
 
 The second form takes the face lists directly, for species that have re-wound them with
 [`_propagate_faces`](@ref): a site's vertex range has to start at the dart its frame points
-at, so the encoding and the poses must be built from the same lists.
+at, so the encoding and the poses must be built from the same lists. The third names a
+[`RotationGroup`](@ref) instead of a solid, and encodes whichever solid [`Polyhedron`](@ref)
+realizes it with.
 
-A *dart* is one corner of one face, so a face of degree `k` owns `k` darts and the graph has
-`2 * nedges(p)` vertices in total. The encoding consists of
+A *dart* is a half-edge: one of the two directed traversals of a polyhedron edge, the one
+belonging to a given face. Each edge therefore has two darts, one per adjoining face, a face of
+degree `k` owns `k` of them, and the graph has `2 * nedges(p)` vertices in total. The encoding
+consists of
 
 1. a directed `k`-cycle through each face's own darts, following the face's counter-clockwise
    winding, and
@@ -535,8 +630,14 @@ The automorphism group of the resulting `g` is the polyhedron's rotational symme
 `labels` assigns one symmetry label per face, inherited by that face's darts: all labels
 distinct gives a symmetry number of 1, all labels equal gives the full rotation group, and
 merging some faces gives the subgroup preserving that labelling.
+
+For the Platonic solids this is a Cayley digraph of that group: the rotations act freely and
+transitively on the darts, so the darts *are* the group elements and `|Aut| = 2 * nedges(p)`
+— 12 = 2·6, 24 = 2·12, 60 = 2·30. It stops being one as soon as the solid is less symmetric
+than its face lattice: a prism has `|G| = 2n` but `2E = 6n`.
 """
 dartencoding(p::Polyhedron; labels=1:nfaces(p)) = dartencoding(faces(p); labels)
+dartencoding(group::RotationGroup; a=1.0, kwargs...) = dartencoding(Polyhedron(group; a); kwargs...)
 
 function dartencoding(fs::Vector{Vector{Int}}; labels=1:length(fs))
     length(labels) == length(fs) ||
@@ -544,14 +645,14 @@ function dartencoding(fs::Vector{Vector{Int}}; labels=1:length(fs))
 
     # graph vertices for each face of the polyhedron
     ranges = Vector{UnitRange{Int}}(undef, length(fs))
-    o = 0
+    ndarts = 0
     for (i, f) in enumerate(fs)
-        ranges[i] = (o + 1):(o + length(f))
-        o += length(f)
+        ranges[i] = (ndarts + 1):(ndarts + length(f))
+        ndarts += length(f)
     end
 
     vertex_labels = Cint[labels[i] for (i, f) in enumerate(fs) for _ in f]
-    g = NautyDiGraph(o; vertex_labels)
+    g = NautyDiGraph(ndarts; vertex_labels)
 
     # Dart k of face i sits on the directed edge f[k] -> f[k+1]. Its partner is the dart of
     # the adjacent face carrying the reversed edge
@@ -561,14 +662,14 @@ function dartencoding(fs::Vector{Vector{Int}}; labels=1:length(fs))
     end
 
     for (i, f) in enumerate(fs)
-        d0 = first(ranges[i])
+        v0 = first(ranges[i])
         for k in eachindex(f)
-            d = d0 + k - 1
-            add_edge!(g, d, d0 + mod(k, length(f)))
+            v = v0 + k - 1
+            add_edge!(g, v, v0 + mod(k, length(f)))
             partner = dart_of_edge[(f[mod1(k + 1, length(f))], f[k])]
-            if d < partner
-                add_edge!(g, d, partner)
-                add_edge!(g, partner, d)
+            if v < partner
+                add_edge!(g, v, partner)
+                add_edge!(g, partner, v)
             end
         end
     end
@@ -611,12 +712,18 @@ function _perface(x, n::Integer, what::AbstractString)
 end
 
 """
-    _facesites(p, poseof, colors, locking, twists, encoding, touching_tol, alignment_tol)
+    _facesites(p, poseof, colors, locking, twists, usecycle, touching_tol, alignment_tol)
 
 Build the graph and binding sites of a species carrying one site per face of `p`, shared by
 [`PolyhedronParticleSpecies`](@ref) and [`PatchySphere`](@ref). They differ only in where a
 site sits and how its frame is built, which is what `poseof` supplies: it maps a list of face
 corner lists to the poses of the corresponding sites.
+
+`usecycle` picks the encoding: `nothing` takes the cheap one whenever [`_cycle_suffices`](@ref)
+says it is equivalent, which is what the species constructors pass, and `true`/`false` force
+one. Forcing is not a modelling choice and so is not a keyword of any public constructor — it
+exists for the tests, which check that the two agree wherever both are valid and that the cheap
+one is rejected where it is not.
 
 The order is forced. A face's first corner is its site's twist reference, and settling it takes
 three steps, each needing the one before:
@@ -635,8 +742,9 @@ propagation just established. Splitting is always safe: the graph then distingui
 less; and a twist shared across an orbit preserves equivariance, since turns about a site's own
 normal commute with its stabiliser.
 """
-function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists, encoding::Symbol,
-                    touching_tol::Real, alignment_tol::Real) where {F}
+function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists,
+                    usecycle::Union{Nothing,Bool}, touching_tol::Real,
+                    alignment_tol::Real) where {F}
     n = nfaces(p)
     gauges = facegauge(p)
     labels = siteorbits(poseof(faces(p)), gauges, collect(zip(colors, twists)))
@@ -653,9 +761,8 @@ function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists, encoding:
              for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
     stabs = sitestabilisers(poses, gauges, labels)
 
-    usecycle = encoding === :cycle ||
-        (encoding === :auto && _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
-    g, ranges = usecycle ? cycleencoding(n; labels) : dartencoding(fs; labels)
+    cyclic = something(usecycle, _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
+    g, ranges = cyclic ? cycleencoding(n; labels) : dartencoding(fs; labels)
 
     sites = [BindingSite(poses[i], colors[i], ranges[i], touching_tol, alignment_tol,
                          gauges[i], stabs[i], locking[i]) for i in 1:n]
@@ -682,43 +789,29 @@ asking for exactly the registrations a single vertex cannot record.
 """
 _cycle_suffices(qs, labels) = allunique(labels) && all(isone, qs)
 
-"""
-    Polyhedron(sym::Symbol, n=0; a=1.0)
-
-Return a polyhedron realizing the proper rotation group named by `sym`, with edge length `a`:
-
-| `sym` | group   | solid           | order |
-|:------|:--------|:----------------|:------|
-| `:C`  | `C_n`   | `Pyramid(n)`    | `n`   |
-| `:D`  | `D_n`   | `Prism(n)`      | `2n`  |
-| `:T`  | `T`     | `Tetrahedron()` | 12    |
-| `:O`  | `O`     | `Cube()`        | 24    |
-| `:I`  | `I`     | `Dodecahedron()`| 60    |
-
-`:C` and `:D` require `n`. The alternative realizations `Octahedron()`, `Icosahedron()` and
-`Antiprism(n)` have the same groups and are constructed by name.
-"""
-function Polyhedron(sym::Symbol, n::Integer=0; a=1.0)
-    if sym in (:C, :D)
-        n >= 3 || throw(ArgumentError("$sym requires n >= 3, got n=$n"))
-        return sym === :C ? Pyramid(n, a) : Prism(n, a)
-    end
-    n == 0 || throw(ArgumentError("$sym takes no n"))
-    sym === :T && return Tetrahedron(a)
-    sym === :O && return Cube(a)
-    sym === :I && return Dodecahedron(a)
-    return throw(ArgumentError("unknown rotation group $sym, expected one of :C, :D, :T, :O, :I"))
-end
 
 """
-    sitegraph(sym::Symbol, n=0; labels)
+    Polyhedron(group::RotationGroup; a=1.0)
 
-Shorthand for `dartencoding(Polyhedron(sym, n); labels)`: the graph encoding of the proper
-rotation group named by `sym`. See [`Polyhedron`](@ref) for the solid each symbol resolves to.
+Return a polyhedron realizing the proper rotation `group`, with edge length `a`:
+
+| `group`         | solid            | order |
+|:----------------|:-----------------|:------|
+| `Cyclic(n)`     | `Pyramid(n)`     | `n`   |
+| `Dihedral(n)`   | `Prism(n)`       | `2n`  |
+| `Tetrahedral()` | `Tetrahedron()`  | 12    |
+| `Octahedral()`  | `Cube()`         | 24    |
+| `Icosahedral()` | `Dodecahedron()` | 60    |
+
+One realization per group, since a group does not determine a shape. The alternatives
+`Octahedron()`, `Icosahedron()` and `Antiprism(n)` have the same groups and are constructed by
+name.
 """
-function sitegraph(sym::Symbol, n::Integer=0; kwargs...)
-    return dartencoding(Polyhedron(sym, n); kwargs...)
-end
+Polyhedron(::Cyclic{N}; a=1.0) where {N} = Pyramid(N, a)
+Polyhedron(::Dihedral{N}; a=1.0) where {N} = Prism(N, a)
+Polyhedron(::Tetrahedral; a=1.0) = Tetrahedron(a)
+Polyhedron(::Octahedral; a=1.0) = Cube(a)
+Polyhedron(::Icosahedral; a=1.0) = Dodecahedron(a)
 
 ################################################################################
 # Solid library

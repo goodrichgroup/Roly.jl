@@ -33,7 +33,13 @@ rotationgroup
 geometriclabels
 dartencoding
 cycleencoding
-sitegraph
+RotationGroup
+Cyclic
+Dihedral
+Tetrahedral
+Octahedral
+Icosahedral
+grouporder
 Tetrahedron
 Cube
 Octahedron

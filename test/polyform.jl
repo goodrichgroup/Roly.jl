@@ -108,7 +108,7 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     end
 
     # Same for a 3D species, whose 24-vertex graph really does get permuted.
-    s3 = BindingRules([1 1 1 2], PolyhedronParticleSpecies(Cube(); encoding=:dart))
+    s3 = BindingRules([1 1 1 2], dartspecies(Cube()))
     mono3 = Polyform(s3, 1)
     for e in edges(graphrep(species(s3, 1)))
         @test has_edge(graphrep(mono3), tocanon(mono3, e.src), tocanon(mono3, e.dst))
