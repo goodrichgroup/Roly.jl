@@ -104,4 +104,16 @@
     e2 = particleenvironments(dimerrules; depth=2)
     @test length(e2) == 4
     @test Set(Environment(e.graph, e.rootvertices, 1, e.rules) for e in e2) == e1
+
+    # crop reproduces direct extraction at the smaller radius, on every root of every cluster
+    for s in polygen(chainrules; maxsize=5), p in 1:nparticles(s)
+        env2 = ParticleEnvironment(s, p; depth=2)
+        @test crop(env2, 1) == ParticleEnvironment(s, p; depth=1)
+        @test crop(env2, 2) === env2
+        @test nv(crop(env2, 0).graph) == nv(graphrep(Roly.species(chainrules, 1)))
+    end
+    # enumerated depth-2 classes crop onto valid depth-1 classes
+    e1chain = Set(particleenvironments(chainrules; depth=1))
+    @test all(crop(e, 1) in e1chain for e in particleenvironments(chainrules; depth=2))
+    @test_throws ArgumentError crop(first(e1chain), 2)
 end

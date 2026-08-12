@@ -27,7 +27,7 @@ export bonds, bondindex, interior_edges, exterior_edges, subpolyform
 
 # Environments
 export Environment, ParticleEnvironment, BondEnvironment
-export particleenvironments, bondenvironments
+export particleenvironments, bondenvironments, crop
 
 # Enumeration
 export ACCEPT, REJECT, BREAK

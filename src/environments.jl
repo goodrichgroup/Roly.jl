@@ -440,3 +440,45 @@ function bondenvironments(env::ParticleEnvironment)
     end
     return out
 end
+
+"""
+    crop(env::ParticleEnvironment, depth)
+
+The environment of the same root at a smaller `depth`: the radius-`depth` sub-ball.
+
+Distances inside a ball equal the ambient distances to the root, so the crop of the ball is the
+ball the ambient structure would have produced at the smaller radius.
+"""
+function crop(env::ParticleEnvironment, depth::Integer)
+    0 <= depth <= env.depth || throw(ArgumentError("`depth` must lie in [0, $(env.depth)]"))
+    depth == env.depth && return env
+    g = env.graph
+    comp, compverts = _components(g)
+    ncomp = length(compverts)
+    rootcomp = comp[env.rootvertices[1]]
+
+    adj = [Int[] for _ in 1:ncomp]
+    for v in vertices(g), w in outneighbors(g, v)
+        (has_edge(g, w, v) && comp[v] != comp[w]) || continue
+        push!(adj[comp[v]], comp[w])
+    end
+
+    dist = fill(-1, ncomp)
+    queue = zeros(Int, ncomp)
+    bfs!(c -> adj[c], dist, queue, (rootcomp,); maxdepth=depth)
+
+    verts = Int[]
+    pos = zeros(Int, nv(g))
+    for c in 1:ncomp
+        dist[c] >= 0 || continue
+        for v in compverts[c]
+            push!(verts, v)
+            pos[v] = length(verts)
+        end
+    end
+
+    # the root's mark survives the crop unchanged, so no relabeling is needed
+    h = g[verts]
+    old2new = invperm(collect(Int, canonize!(h)))
+    return Environment(h, (old2new[pos[env.rootvertices[1]]],), Int(depth), env.rules)
+end
