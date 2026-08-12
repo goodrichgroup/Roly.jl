@@ -904,6 +904,16 @@ end
 
 Return the site permutations induced by the rotations about the particle origin that carry
 every site onto one with the same `keys` entry, matching position and orientation.
+
+!!! warning "Particles only"
+    This rests on a particle's sites having *distinct positions*, which makes a rotation
+    determined by where it sends site 1, and makes the site map injective for free. Neither
+    holds for an assembled [`Polyform`](@ref): a bond puts two sites in the same place, so one
+    rotation is recorded once per site coincident with site 1 — reporting 16 for a two-cube
+    assembly whose shape has 8 — and a non-injective map can satisfy the pointwise conditions.
+    Counting an assembly's symmetries needs deduplication by rotation and an explicit
+    bijectivity test, and then the permutation is no longer well defined, which is why the
+    check lives in `test/symmetry.jl` rather than here.
 """
 function _site_symmetries(poses, gauges, keys)
     n = length(poses)
