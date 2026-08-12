@@ -409,9 +409,9 @@ end
     # lands on both sides of the face-to-face flip. Here that is 2*90 = 180 degrees, which is a
     # symmetry of the prism about a side face (stab = 2), so the lattice is untouched however
     # far the sides are turned -- and the symmetry number holds, the orbit being intact.
-    for t in 0:3
+    for t in (0, π/2, π, 3π/2)
         ps = PolyhedronParticleSpecies(shp; colors,
-                                       twists=[i in sides ? t : 0 for i in 1:nfaces(shp)])
+                                       twists=[i in sides ? t : 0.0 for i in 1:nfaces(shp)])
         @test symmetrynumber(ps) == 6
         @test counts(BindingRules([1 first(sides) 1 first(sides)], ps)) == [1, 2, 3, 6, 10]
     end
@@ -420,7 +420,7 @@ end
     # record it or the graph would keep claiming a symmetry the frames no longer have. The twist
     # is folded into the key `siteorbits` groups by, so the orbit splits.
     split = PolyhedronParticleSpecies(shp; colors,
-                                      twists=[i == first(sides) ? 1 : 0 for i in 1:nfaces(shp)])
+                                      twists=[i == first(sides) ? π/2 : 0.0 for i in 1:nfaces(shp)])
     @test symmetrynumber(split) == site_symmetry(split) == 2
     @test length(unique(Roly.labels(graphrep(split)))) == 3
     @test symmetrynumber(PolyhedronParticleSpecies(shp; colors)) == 6
@@ -428,7 +428,7 @@ end
     # On a particle with no symmetry to hide behind, the twist is the bond registry outright.
     # Turning only the mate's face turns the partner by exactly one dart step, not two.
     function dimer(t)
-        ps = PolyhedronParticleSpecies(Tetrahedron(); twists=[0, t, 0, 0], encoding=:dart)
+        ps = PolyhedronParticleSpecies(Tetrahedron(); twists=[0.0, t, 0.0, 0.0], encoding=:dart)
         @test symmetrynumber(ps) == 1
         poly = Polyform(BindingRules([1 1 1 2], ps), 1)
         for (site, loc, r) in collect_compatible_pairs(poly)
@@ -438,12 +438,12 @@ end
         end
         return nothing
     end
-    a, b = dimer(0), dimer(1)
+    a, b = dimer(0.0), dimer(2π/3)
     @test !isnothing(a) && !isnothing(b)
     @test isapprox(rotation_angle(RotMatrix3(a.particles[2].pose.psi * inv(b.particles[2].pose.psi))),
                    2π / 3; atol=1e-8)
     # A triangular face has three darts, so three steps is the identity.
-    @test isapprox(dimer(3).particles[2].pose.psi, a.particles[2].pose.psi; atol=1e-8)
+    @test isapprox(dimer(2π).particles[2].pose.psi, a.particles[2].pose.psi; atol=1e-8)
 
     # And the encoding notices, which is the whole reason the twist rotates the face's corner
     # list rather than just its frame. `contact_pairing` anchors on the first vertex of each
@@ -452,6 +452,21 @@ end
     # different assemblies would share a canonical form and be merged.
     @test graphrep(a) != graphrep(b)
 
-    @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0, 1])
+    # Any angle, not just whole dart steps. A tetrahedron face has three darts, so 2π/3 lands
+    # back on a dart and 0.4 does not; both are allowed and both turn the partner by exactly
+    # the angle asked for.
+    for θ in (0.4, 1.0, 2π/3 + 0.1)
+        a, b = dimer(0.0), dimer(θ)
+        @test isapprox(rotation_angle(RotMatrix3(a.particles[2].pose.psi *
+                                                 inv(b.particles[2].pose.psi))), θ; atol=1e-8)
+    end
+    # A twist shared across an orbit leaves the symmetry alone, since turns about a site's own
+    # normal commute with its stabiliser; turning one face differently splits the orbit.
+    uniform = PolyhedronParticleSpecies(shp; colors, twists=[i in sides ? 0.37 : 0.0 for i in 1:nfaces(shp)])
+    @test symmetrynumber(uniform) == site_symmetry(uniform) == 6
+    partial = PolyhedronParticleSpecies(shp; colors, twists=[i == first(sides) ? 0.37 : 0.0 for i in 1:nfaces(shp)])
+    @test symmetrynumber(partial) == site_symmetry(partial) == 2
+
+    @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0.0, 1.0])
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); locking=[true, false])
 end

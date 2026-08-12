@@ -37,17 +37,18 @@ every orientation the face geometrically permits: a triangular prism with square
 2-fold about them, so `locking=true` bonds its prisms coplanar, while freeing a side face also
 allows the neighbour stood on its side. See [`nregistrations`](@ref).
 
-`twists` turns a face's binding site about its own normal, in whole dart steps — one step being
-`2π/degree` — and likewise takes one value or one per face. This is the bond *registry*: which
-relative orientation a bond means, as opposed to how many it admits. Note that turning both
-faces of a bond by the same amount does not cancel, it turns the partner by twice that: the
-offset appears on both sides of the face-to-face flip, and `Δ·Rx(-θ) = Rx(θ)·Δ`.
+`twists` turns a face's binding site about its own normal, by an angle in radians, and likewise
+takes one value or one per face. This is the bond *registry*: which relative orientation a bond
+means, as opposed to how many it admits. Note that turning both faces of a bond by the same
+amount does not cancel, it turns the partner by twice that — the offset appears on both sides
+of the face-to-face flip, and `Δ·Rx(-θ) = Rx(θ)·Δ`.
 
-Whole steps, not free angles, because the frame and the dart numbering have to move together;
-turning the frame alone would leave [`contact_pairing`](@ref) anchoring the bond on the wrong
-pair of vertices. Twisting one face of a symmetry orbit differently from its fellows splits the
-orbit, lowering the symmetry number — deliberately breaking a symmetry is exactly what this is
-for, and the graph then records the break.
+Any angle is allowed. Whole dart steps, `2π/degree`, are taken by rotating the face's corner
+list so that the frame and the vertex numbering move together; whatever is left over turns the
+frame alone. Twisting one face of a symmetry orbit differently from its fellows splits the
+orbit, lowering the symmetry number — deliberately breaking a symmetry is what this is for, and
+the graph records the break. A twist shared across an orbit leaves the symmetry intact, since
+turns about a site's own normal commute with its stabiliser.
 """
 function PolyhedronParticleSpecies(
     p::Polyhedron{F}; colors=1:nfaces(p), locking=true, twists=0, encoding::Symbol=:auto

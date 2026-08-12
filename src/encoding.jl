@@ -604,7 +604,7 @@ per site.
 _twistfreedoms(gauges, stabs, locking) = [l ? s : g for (g, s, l) in zip(gauges, stabs, locking)]
 
 function _perface(x, n::Integer, what::AbstractString)
-    x isa Union{Bool,Integer} && return fill(x, n)
+    x isa Union{Bool,Real} && return fill(x, n)
     length(x) == n ||
         throw(ArgumentError("expected $n $what, one per face, got $(length(x))"))
     return collect(x)
@@ -628,12 +628,12 @@ three steps, each needing the one before:
 3. [`_propagate_faces`](@ref) then re-winds along that group, pinning the references up to
    `stab`, which is the strength bonds need.
 
-`twists` is applied last, as a per-face rotation of the corner list — a whole dart step rather
-than a free angle, because the frame and the dart numbering have to move together or
-[`contact_pairing`](@ref) would anchor a bond on the wrong pair. It is folded into the key
-`siteorbits` groups by, alongside the color, so that twisting one face of an orbit differently
-from its fellows splits that orbit rather than silently breaking the equivariance propagation
-just established. Splitting is always safe: the graph then distinguishes more, not less.
+`twists` is applied last, as a per-face angle about the site's own normal. It is folded into
+the key `siteorbits` groups by, alongside the color, so that twisting one face of an orbit
+differently from its fellows splits that orbit rather than silently breaking the equivariance
+propagation just established. Splitting is always safe: the graph then distinguishes more, not
+less; and a twist shared across an orbit preserves equivariance, since turns about a site's own
+normal commute with its stabiliser.
 """
 function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists, encoding::Symbol,
                     touching_tol::Real, alignment_tol::Real) where {F}
@@ -642,8 +642,15 @@ function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists, encoding:
     labels = siteorbits(poseof(faces(p)), gauges, collect(zip(colors, twists)))
 
     fs = _propagate_faces(corners(p), faces(p), labels)
-    fs = [circshift(f, -mod(t, length(f))) for (f, t) in zip(fs, twists)]
-    poses = poseof(fs)
+    # A twist is an angle about the site's own normal. Whole dart steps are taken by rotating
+    # the face's corner list, which moves the frame and the vertex numbering together and keeps
+    # `contact_pairing`'s anchor on a pair of coincident darts; the remainder is applied to the
+    # frame alone. That remainder is fine: the anchor has to be consistent and to tell
+    # registrations apart, not to mark a physical coincidence, and both survive.
+    steps = [round(Int, t * length(f) / (2F(π))) for (f, t) in zip(fs, twists)]
+    fs = [circshift(f, -mod(m, length(f))) for (f, m) in zip(fs, steps)]
+    poses = [pose * RotX(F(t) - 2F(π) * m / length(f))
+             for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
     stabs = sitestabilisers(poses, gauges, labels)
 
     usecycle = encoding === :cycle ||

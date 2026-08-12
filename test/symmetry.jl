@@ -88,10 +88,20 @@ end
         ("cube, distinct",  BindingRules([1 1 1 2], PolyhedronParticleSpecies(Cube())), 4),
         ("cube, dart enc",  BindingRules([1 1 1 2], PolyhedronParticleSpecies(Cube(); encoding=:dart)), 4),
         ("twisted prism",   BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);
-                                colors=[2, 1, 1, 1, 2], twists=[0, 1, 0, 0, 0])), 4),
+                                colors=[2, 1, 1, 1, 2], twists=[0.0, π/2, 0.0, 0.0, 0.0])), 4),
         ("free side faces", BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);
                                 colors=[2, 1, 1, 1, 2],
                                 locking=[true, false, false, false, true])), 3),
+        # Fractional twists: shared across an orbit, so the symmetry should survive, and the
+        # graph should keep up with it. This is the case the whole-dart-step restriction used
+        # to forbid.
+        ("fractional, uniform", BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);
+                                colors=[2, 1, 1, 1, 2],
+                                twists=[0.0, 0.37, 0.37, 0.37, 0.0])), 4),
+        # ...and one face turned differently, which breaks the orbit on purpose.
+        ("fractional, split", BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);
+                                colors=[2, 1, 1, 1, 2],
+                                twists=[0.0, 0.37, 0.0, 0.0, 0.0])), 4),
     ]
 
     for (name, sys, maxsize) in cases
