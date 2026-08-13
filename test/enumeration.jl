@@ -276,3 +276,47 @@ end;
         end
     end
 end;
+
+# Reference enumerations carried over from an earlier implementation.
+#
+# `data/enumeration_reference.txt` holds 2725 assembly systems together with the size counts
+# each produced under commit 1bfe470, the last revision of the old implementation.
+# One system per line, `geometry|bond rows|expected counts`, the bond rows comma-separated and
+# each row `species1 site1 species2 site2`.
+@testset "reference enumerations" begin
+    referencespecies(s) = s === :square   ? UnitSquare :
+                          s === :triangle ? UnitTriangle :
+                          s === :hexagon  ? UnitHexagon :
+                          error("unknown geometry $s")
+
+    # Structures per size, which pins down far more than the total: two implementations can
+    # agree on how many structures exist while disagreeing about where they sit.
+    function sizecounts(sys)
+        counts = Int[]
+        polyenum(sys) do _, n
+            while length(counts) < n
+                push!(counts, 0)
+            end
+            counts[n] += 1
+            return ACCEPT
+        end
+        return counts
+    end
+
+    mismatches = String[]
+    nchecked = 0
+    for (i, line) in enumerate(eachline(joinpath(@__DIR__, "data", "enumeration_reference.txt")))
+        isempty(line) && continue
+        geom, table, want = split(line, '|')
+        bonds = reduce(vcat, (reshape(parse.(Int, split(r, ' ')), 1, 4)
+                              for r in split(table, ',')))
+        expected = parse.(Int, split(want, ','))
+        counts = sizecounts(BindingRules(bonds, referencespecies(Symbol(geom))))
+        counts == expected || push!(mismatches, "system $i: got $counts, want $expected")
+        nchecked += 1
+    end
+
+    @test mismatches == String[]
+    # Guards against a truncated or unreadable data file passing silently.
+    @test nchecked == 2725
+end;
