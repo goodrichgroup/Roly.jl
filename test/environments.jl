@@ -116,4 +116,14 @@
     e1chain = Set(particleenvironments(chainrules; depth=1))
     @test all(crop(e, 1) in e1chain for e in particleenvironments(chainrules; depth=2))
     @test_throws ArgumentError crop(first(e1chain), 2)
+
+    # bond-environment crops and root extraction agree with direct computation on every bond
+    for s in polygen(chainrules; maxsize=5), b in bonds(s)
+        be = BondEnvironment(s, b; depth=1)
+        @test crop(be, 0) == BondEnvironment(s, b; depth=0)
+        @test crop(be, 1) === be
+        @test rootenvironment(be, 1, 1) == ParticleEnvironment(s, b.first.particle; depth=1)
+        @test rootenvironment(be, 2, 1) == ParticleEnvironment(s, b.second.particle; depth=1)
+        @test rootenvironment(be, 1, 0) == ParticleEnvironment(s, b.first.particle; depth=0)
+    end
 end

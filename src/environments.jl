@@ -482,3 +482,84 @@ function crop(env::ParticleEnvironment, depth::Integer)
     old2new = invperm(collect(Int, canonize!(h)))
     return Environment(h, (old2new[pos[env.rootvertices[1]]],), Int(depth), env.rules)
 end
+
+"""
+    crop(env::BondEnvironment, depth)
+
+The environment of the same bond at a smaller `depth`: particles within `depth` of either root.
+"""
+function crop(env::BondEnvironment, depth::Integer)
+    0 <= depth <= env.depth || throw(ArgumentError("`depth` must lie in [0, $(env.depth)]"))
+    depth == env.depth && return env
+    g = env.graph
+    comp, compverts = _components(g)
+    adj = _componentadjacency(g, comp, length(compverts))
+
+    dist = fill(-1, length(compverts))
+    queue = zeros(Int, length(compverts))
+    bfs!(c -> adj[c], dist, queue,
+         (comp[env.rootvertices[1]], comp[env.rootvertices[2]]); maxdepth=depth)
+
+    verts, pos = _keptvertices(compverts, dist, nv(g))
+    # both roots keep their marks, so the labels carry over unchanged
+    h = g[verts]
+    old2new = invperm(collect(Int, canonize!(h)))
+    return Environment(h, (old2new[pos[env.rootvertices[1]]], old2new[pos[env.rootvertices[2]]]),
+                       Int(depth), env.rules)
+end
+
+"""
+    rootenvironment(env::Environment, i, depth)
+
+The [`ParticleEnvironment`](@ref) of root `i` of `env` at radius `depth`, extracted from `env`.
+
+Valid whenever the radius-`depth` ball of that root lies inside `env` (for a bond environment,
+any `depth <= env.depth`).
+"""
+function rootenvironment(env::Environment{N}, i::Integer, depth::Integer) where {N}
+    1 <= i <= N || throw(ArgumentError("`env` has $N roots"))
+    0 <= depth <= env.depth || throw(ArgumentError("`depth` must lie in [0, $(env.depth)]"))
+    g = env.graph
+    offset = _markoffset(env.rules)
+    comp, compverts = _components(g)
+    adj = _componentadjacency(g, comp, length(compverts))
+    rootcomp = comp[env.rootvertices[i]]
+
+    dist = fill(-1, length(compverts))
+    queue = zeros(Int, length(compverts))
+    bfs!(c -> adj[c], dist, queue, (rootcomp,); maxdepth=depth)
+
+    verts, pos = _keptvertices(compverts, dist, nv(g))
+    h = g[verts]
+    for (k, v) in enumerate(verts)
+        # strip every root mark, then re-mark the requested root as the sole root
+        l = mod1(labels(h)[k], offset)
+        setlabel!(h, k, l + (comp[v] == rootcomp ? offset : 0))
+    end
+    old2new = invperm(collect(Int, canonize!(h)))
+    return Environment(h, (old2new[pos[env.rootvertices[i]]],), Int(depth), env.rules)
+end
+
+# Particle-level adjacency of an environment graph (bond edges are bidirectional).
+function _componentadjacency(g, comp, ncomp)
+    adj = [Int[] for _ in 1:ncomp]
+    for v in vertices(g), w in outneighbors(g, v)
+        (has_edge(g, w, v) && comp[v] != comp[w]) || continue
+        push!(adj[comp[v]], comp[w])
+    end
+    return adj
+end
+
+# Vertices of the components reached by a crop search, with their positions in the kept order.
+function _keptvertices(compverts, dist, nvg)
+    verts = Int[]
+    pos = zeros(Int, nvg)
+    for c in eachindex(compverts)
+        dist[c] >= 0 || continue
+        for v in compverts[c]
+            push!(verts, v)
+            pos[v] = length(verts)
+        end
+    end
+    return verts, pos
+end
