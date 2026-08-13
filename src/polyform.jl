@@ -482,7 +482,10 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
             site = bindingsites(part, sys, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
-            for siteloc in compatible_sitelocs(sys, color(site))
+            # One mate site per orbit, not one per site: the rest attach to the same structure,
+            # and building them only to have the canonical form reject them is most of the work
+            # an enumeration used to do. See `_orbit_representatives`.
+            for siteloc in attachment_reps(sys, color(site))
                 mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
                 for r in 0:(nregistrations(site, mate) - 1)
                     push!(pairs, (site, siteloc, r))

@@ -116,7 +116,11 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
             @test isapprox((b.pose.x - a.pose.x)[3], 0; atol=1e-8)
             grown += 1
         end
-        @test grown == length(sides)^2
+        # One candidate per open side, not one per (open side, mate side) pair: the sticky faces
+        # are a single symmetry orbit, so attaching through any of them gives the same dimer and
+        # `collect_compatible_pairs` offers only a representative. It used to offer all of them
+        # and let the canonical form discard the repeats, at the cost of a nauty call each.
+        @test grown == length(sides)
     end
 
     for (name, _, shp, nf, order) in solids

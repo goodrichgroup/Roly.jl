@@ -122,3 +122,73 @@ end
         @test [polyenum(slow; maxsize=i)[1] for i in eachindex(want)] == counts
     end
 end
+
+@testset "attachment orbit representatives" begin
+    using Roly: compatible_sitelocs, attachment_reps, siteloc2color, collect_compatible_pairs,
+                raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
+                Cube, Prism, nfaces, color, bindingsites
+    using NautyGraphs: NautyDiGraph
+
+    # A cube with every face alike has one orbit of six sites, so six compatible mates collapse
+    # to one representative. With every face distinct there is nothing to collapse.
+    alike = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
+    @test length(compatible_sitelocs(alike, 1)) == 6
+    @test length(attachment_reps(alike, 1)) == 1
+
+    distinct = BindingRules(reduce(vcat, [[1 i 1 j] for i in 1:6 for j in i:6]),
+                            PolyhedronParticleSpecies(Cube()))
+    for c in 1:Roly.ncolors(distinct)
+        @test length(attachment_reps(distinct, c)) == length(compatible_sitelocs(distinct, c))
+    end
+
+    # The claim itself, checked rather than argued: the children reachable through *every*
+    # compatible mate site are exactly the children reachable through the representatives.
+    # Anything dropped is a repeat, so the two sets of canonical forms must be equal.
+    function children(poly, sitelocs_of)
+        sys = Roly.bindingrules(poly)
+        out = Set{NautyDiGraph}()
+        for orig_v in Roly.canonical_vertices(poly)
+            part = Roly.particle_from_leadingvertex(poly, orig_v)
+            isnothing(part) && continue
+            for k in 1:Roly.nsites(part, sys)
+                site = bindingsites(part, sys, k)
+                Roly._isbound_vertex(poly, part, first(site.vertices)) && continue
+                Roly.isinert(sys, color(site)) && continue
+                for siteloc in sitelocs_of(sys, color(site))
+                    mate = bindingsites(Roly.species(sys, siteloc[1]), siteloc[2])
+                    for r in 0:(Roly.nregistrations(site, mate) - 1)
+                        trial = copy(poly)
+                        ismissing(raise!(trial, site, siteloc, r)) && continue
+                        push!(out, copy(graphrep(trial)))
+                    end
+                end
+            end
+        end
+        return out
+    end
+
+    sides(p) = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) < 1e-8]
+    p3 = Prism(3, 1.0; h=2.0)
+    systems = [
+        ("cubes",     alike),
+        ("prisms",    BindingRules([1 first(sides(p3)) 1 first(sides(p3))],
+                          PolyhedronParticleSpecies(p3;
+                              colors=[i in sides(p3) ? 1 : 2 for i in 1:nfaces(p3)]))),
+        ("hexagons",  BindingRules([1 1 1 1], PolygonParticleSpecies(6, 1.0; colors=fill(1, 6)))),
+        ("triangles", BindingRules([1 1 1 1], PolygonParticleSpecies(3, 1.0; colors=fill(1, 3)))),
+    ]
+    for (name, sys) in systems
+        poly = Polyform(sys, 1)
+        for _ in 1:3     # monomer, then grow, so the host is asymmetric in later rounds too
+            @test children(poly, compatible_sitelocs) == children(poly, attachment_reps)
+            nxt = nothing
+            for (site, loc, r) in collect_compatible_pairs(poly)
+                trial = copy(poly)
+                ismissing(raise!(trial, site, loc, r)) && continue
+                nxt = trial; break
+            end
+            isnothing(nxt) && break
+            poly = nxt
+        end
+    end
+end

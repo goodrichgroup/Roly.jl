@@ -26,6 +26,7 @@ struct BindingRules{D,PS<:ParticleSpecies}
     _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
     _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
+    _attachment_reps::Vector{Vector{BindingSiteLoc}}
     _isinert::BitVector
     _onlattice::Bool
 end
@@ -69,12 +70,14 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
             append!(compatible_sitelocs_cache[c], color2siteloc[c2])
         end
     end
+    attachment_reps = [_orbit_representatives(particlespecies, ls)
+                       for ls in compatible_sitelocs_cache]
     isinert_cache = BitVector(!any(intmat[:, c]) for c in 1:ncolors)
 
     return BindingRules{D,PS}(intmat, particlespecies, nbonds, nsites, ncolors,
                                 color2siteloc, siteloc2color,
                                 bondlist, bondedsites, bondedspecies,
-                                compatible_sitelocs_cache, isinert_cache,
+                                compatible_sitelocs_cache, attachment_reps, isinert_cache,
                                 all(_tiles(ps) for ps in particlespecies) &&
                                     _samesize(particlespecies))
 end
@@ -210,6 +213,53 @@ Return the particle species that contains the binding site with color `color`.
 @inline function color2species(sys::BindingRules, color::Integer)
     return color2siteloc(sys, color)[1][1]
 end
+
+"""
+    _orbit_representatives(particlespecies, sitelocs)
+
+Keep one site per symmetry orbit: of any two entries of `sitelocs` on the same species carrying
+the same graph label, only the first survives.
+
+This is what makes attaching a particle cost one candidate per *distinguishable* way of doing
+it rather than one per site. Two sites of a free particle with the same label are, by
+construction, in one orbit of the rotations preserving its coloring — that is what
+[`siteorbits`](@ref) computes and what `_check_encoding` confirms the graph agrees with — so a
+rotation of the incoming particle carries one onto the other. Attaching through either therefore
+produces the same structure: the same region of space occupied, and graphs related by an
+isomorphism that is the identity on everything already placed.
+
+The saving is the species' own symmetry, and it is most of the search. Building both and letting
+the canonical form notice is what happened before, at the price of a graph copy, a bond, and a
+call to nauty each time — 88% of all candidates in a polycube enumeration, where a cube's six
+faces are one orbit and five of every six attachments were rediscoveries of the first.
+
+Dropping a site can only ever lose a *repeat*, never a structure, which is what makes this safe
+to do before the geometry is known: the two children are equal, so whichever survives stands for
+both.
+"""
+function _orbit_representatives(particlespecies::AbstractVector{<:ParticleSpecies},
+                                sitelocs::AbstractVector{BindingSiteLoc})
+    reps = BindingSiteLoc[]
+    seen = Set{Tuple{Int,Int}}()
+    for (spc, k) in sitelocs
+        labs = labels(graphrep(particlespecies[spc]))
+        key = (spc, Int(labs[first(bindingsites(particlespecies[spc], k).vertices)]))
+        key in seen && continue
+        push!(seen, key)
+        push!(reps, (spc, k))
+    end
+    return reps
+end
+
+"""
+    attachment_reps(sys::BindingRules, color::Integer)
+
+The sites a particle may be attached *through* to a site of `color`, one per symmetry orbit.
+
+[`compatible_sitelocs`](@ref) lists every site the interaction matrix permits; this lists the
+ones that lead to distinguishable structures. See [`_orbit_representatives`](@ref).
+"""
+@inline attachment_reps(sys::BindingRules, color::Integer) = sys._attachment_reps[color]
 
 """
     isinert(sys::BindingRules, siteloc::BindingSiteLoc)
