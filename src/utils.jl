@@ -28,29 +28,6 @@ function sat_overlap(axes, corners1, pose1, corners2, pose2, skin::Real)
 end
 
 """
-    translate_overlap(normals, offsets, t, skin)
-
-Return `true` unless a centrally symmetric convex body and an identically oriented copy of
-itself, offset by `t`, are separated by a `skin` of clearance. `normals` and `offsets` are the
-body's outward face normals and the distances from its centre to those faces; `t` is the offset
-expressed in the body's own frame, so all three are in body coordinates and no rotation happens
-here.
-
-Exact, and O(#faces) where [`sat_overlap`](@ref) is O(#faces × #corners) with a quadratic
-candidate set behind it. Two bodies `K` and `K + t` meet exactly when `t` lies in the difference
-body `K ⊕ (−K)`, whose faces are those of `K` together with their opposites — and that is `2K`
-when `K` is centrally symmetric, so the whole question is whether `t` clears each face plane at
-twice its offset. Both conditions matter: the shapes must be the same, and the body must be
-centrally symmetric, or the difference body is not `2K` and the offsets are wrong.
-"""
-function translate_overlap(normals, offsets, t, skin::Real)
-    for (nrm, d) in zip(normals, offsets)
-        abs(dot(nrm, t)) >= 2d - skin && return false
-    end
-    return true
-end
-
-"""
     edgenormals(corners, pose)
 
 The outward-ish normals of a 2D polygon's edges, in world coordinates: candidate separating

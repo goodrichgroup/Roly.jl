@@ -294,16 +294,18 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test !overlap(ps => id, ps => shifted(10.0))
     end
 
-    # Identically oriented particles of one centrally symmetric species take an exact O(faces)
-    # route instead of separating axes. "Exact" has to mean exact, so check it against the full
-    # candidate set over random configurations, spread across the band between the inner and
-    # outer spheres where neither sphere fast path decides.
+    # `overlap` answers with the bounding and inscribed spheres where it can and separating axes
+    # otherwise, and the two have to agree. Check against the full candidate set over random
+    # configurations, spread across the band between the two spheres where neither decides.
     #
-    # The non-centrosymmetric solids are here because the fast path was *wrong* without that
-    # condition, and only random testing said so. A Minkowski difference body's faces come from
-    # three sources and only two are faces of the solid; the third is edge against edge, which
-    # is why separating axes need cross products at all. A tetrahedron's difference body is a
-    # cuboctahedron, whose six square faces belong to no face of the tetrahedron.
+    # This began as the guard on an exact fast path for translates of a centrally symmetric
+    # solid, and earned its keep immediately: the first version dropped the central-symmetry
+    # condition and this caught 1673 disagreements in 20000 tetrahedron configurations. A
+    # Minkowski difference body's faces come from three sources and only two are faces of the
+    # solid; the third is edge against edge, which is why separating axes need cross products at
+    # all, and a tetrahedron's difference body is a cuboctahedron. The fast path itself is gone —
+    # it measured as worth nothing once the on-lattice shortcut existed — but a randomized check
+    # that `overlap` agrees with the axes it is derived from is worth keeping either way.
     function fullsat(s1, pose1, s2, pose2)
         axes = Iterators.flatten((
             (pose1.psi * n for n in s1.normals), (pose2.psi * n for n in s2.normals),
