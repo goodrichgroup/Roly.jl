@@ -9,7 +9,6 @@ struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
     shape::Polyhedron{F}
     normals::Vector{SVector{3,F}}
     edgedirections::Vector{SVector{3,F}}
-    centrosymmetric::Bool
     rmin::F
     rmax::F
     skin::F
@@ -74,17 +73,8 @@ function _polyhedronspecies(p::Polyhedron{F}, colors, locking, twists,
                           _perface(twists, n, "twists"), usecycle, tol, tol / rmin)
 
     return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
-        g, sites, p, facenormals(p), _edgedirections(p), _iscentrosymmetric(p), rmin, rmax, tol
+        g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol
     ))
-end
-
-# Is the solid carried onto itself by inversion through its centre? Corners are centred, so this
-# is just "every corner has an opposite". Cheap to ask once, and part of recognizing a cube in
-# `_tiles`.
-function _iscentrosymmetric(p::Polyhedron{F}) where {F}
-    cs = corners(p)
-    atol = sqrt(eps(F)) * maximum(norm, cs)
-    return all(c -> any(c2 -> isapprox(-c, c2; atol), cs), cs)
 end
 
 """
@@ -126,7 +116,7 @@ function Base.copy(ps::PolyhedronParticleSpecies)
     # The shape and everything derived from it are shared, not copied: immutable, and read only.
     return typeof(ps)(
         copy(ps.g), copy(ps.sites), ps.shape, ps.normals, ps.edgedirections,
-        ps.centrosymmetric, ps.rmin, ps.rmax, ps.skin
+        ps.rmin, ps.rmax, ps.skin
     )
 end
 
@@ -136,38 +126,6 @@ bindingsites(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolyhedronParticleSpecies) = true
 bounding_radius(ps::PolyhedronParticleSpecies) = ps.rmax
 
-"""
-    _tiles(ps::PolyhedronParticleSpecies)
-
-True for a cube whose binding sites are aligned with its own edges. See [`_tiles`](@ref) for
-what this claims and what it is worth.
-
-Cubes only, out of the several solids that tile space, because a cube is the one where nothing
-else has to be checked. All six faces are congruent, so any bond the rules permit joins two
-faces that are actually flush — a box with an `a×a` face and an `a×b` face would let a bond
-place two boxes overlapping at a mismatched face, and no longer tiling. All six stabilisers are
-4, so every bond has a single registration, and `locking` cannot open a second one that tips a
-neighbour off the lattice the way a prism's square side face would.
-
-That leaves the sites. A bond's relative rotation is fixed by the two frames, and it maps the
-cubic lattice to itself exactly when each frame is built on the cube's own edges — so each
-site's twist reference must point along an edge direction. Whole dart steps keep it there, and
-`twists` of a fraction of a step do not, which is precisely when the partner arrives turned off
-the lattice and free to overlap something.
-"""
-function _tiles(ps::PolyhedronParticleSpecies{F}) where {F}
-    p = ps.shape
-    atol = sqrt(eps(F)) * ps.rmax
-    ncorners(p) == 8 && nfaces(p) == 6 && ps.centrosymmetric || return false
-    # Equidistant corners and equidistant faces: among the boxes, that is the cube.
-    all(c -> isapprox(norm(c), ps.rmax; atol), corners(p)) || return false
-    all(i -> isapprox(norm(facecentroid(p, i)), ps.rmin; atol), 1:nfaces(p)) || return false
-    # And every site's twist reference lies along an edge, so no bond leaves the lattice.
-    return all(1:nsites(ps)) do i
-        ez = bindingsites(ps, i).pose.psi[:, 3]
-        any(e -> isapprox(abs(dot(e, ez)), 1; atol=sqrt(eps(F))), ps.edgedirections)
-    end
-end
 
 """
     shape(ps::PolyhedronParticleSpecies)

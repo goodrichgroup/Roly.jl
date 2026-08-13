@@ -78,13 +78,6 @@ end
         ("triangles",           BindingRules([1 1 1 1], poly(3))),
         ("hexagons",            BindingRules([1 1 1 1], poly(6))),
         ("squares, 2 species",  BindingRules([1 1 2 1], [poly(4), poly(4)])),
-        ("polycubes",           BindingRules([1 1 1 1], faced(Cube(), 1:6))),
-        # Prism(4) at its default height *is* a cube, which a check on the constructor's name
-        # would miss and a check on the geometry does not.
-        ("cubes as Prism(4)",   BindingRules([1 1 1 1], faced(Prism(4), 1:6))),
-        # A whole dart step turns a cube's site onto another of its own edges, so the partner
-        # still arrives lattice-aligned.
-        ("cubes, dart twist",   BindingRules([1 1 1 1], faced(Cube(), 1:6; twists=π/2))),
     ]
         @test sys._onlattice
     end
@@ -96,11 +89,11 @@ end
         ("squares, two sizes",  BindingRules([1 1 2 1], [poly(4), poly(4, 2.0)])),
         # Same size, but a square and a triangle bond into no one tiling.
         ("squares + triangles", BindingRules([1 1 2 1], [poly(4), poly(3)])),
-        # A fraction of a dart step hands the partner over turned off the lattice, which is
-        # exactly the case the site check exists to catch.
-        ("cubes, 0.37 twist",   BindingRules([1 1 1 1], faced(Cube(), 1:6; twists=0.37))),
-        # Prisms tile, but a bond between a cap and a side does not carry a cell to a cell, and
-        # the species cannot tell which bonds the rules will allow.
+        # 3D does not opt in at all. Cubes tile space and a cube version was written and
+        # measured: 1.9% on polycubes, where nauty dominates, against the subtlest part of the
+        # check to get right. Prisms tile too, and would additionally need the bond table, since
+        # a cap-to-side bond does not carry a cell to a cell.
+        ("polycubes",           BindingRules([1 1 1 1], faced(Cube(), 1:6))),
         ("square prisms",       BindingRules([1 1 1 1], faced(Prism(4, 1.0; h=2.0),
                                                              sides(Prism(4, 1.0; h=2.0))))),
         ("tetrahedra",          BindingRules([1 1 1 1],
@@ -128,11 +121,4 @@ end
         @test !slow._onlattice
         @test [polyenum(slow; maxsize=i)[1] for i in eachindex(want)] == counts
     end
-
-    # And in 3D, where the shortcut replaces a separating-axis test rather than a cheap one.
-    cubes = BindingRules([1 1 1 1], faced(Cube(), 1:6))
-    polycubes = [1, 1, 2, 8, 29, 166]                        # https://oeis.org/A000162
-    @test [polyenum(cubes; maxsize=i)[1] for i in eachindex(polycubes)] == cumsum(polycubes)
-    @test [polyenum(withoutlattice(cubes); maxsize=i)[1] for i in eachindex(polycubes)] ==
-          cumsum(polycubes)
 end

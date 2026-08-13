@@ -337,12 +337,6 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         # The sampling has to straddle the boundary, or the agreement above is vacuous.
         @test 0.1 < overlapping / 4000 < 0.9
     end
-    @test PolyhedronParticleSpecies(Cube()).centrosymmetric
-    @test PolyhedronParticleSpecies(Octahedron()).centrosymmetric
-    @test PolyhedronParticleSpecies(Prism(6)).centrosymmetric
-    @test !PolyhedronParticleSpecies(Tetrahedron()).centrosymmetric
-    @test !PolyhedronParticleSpecies(Prism(3)).centrosymmetric
-    @test !PolyhedronParticleSpecies(Antiprism(4)).centrosymmetric
 
     # Number of proper rigid motions mapping an assembly onto itself, computed from the
     # particle poses alone. Every symmetry maps particle 1 onto some particle, which fixes

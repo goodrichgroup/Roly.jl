@@ -40,6 +40,12 @@ This is a promise about geometry, so it is derived and never given. The property
 it is precisely what overlap checking exists to catch, a ring closing badly or a chain folding
 back into itself — so it cannot be inferred from the bond table, only from shapes known to
 tile. Anything not recognised falls back to the real overlap test and is merely slower.
+
+**Only 2D opts in**, and that is a measurement rather than an omission. Skipping the geometry is
+worth 4.4% (squares), 8.4% (hexagons) and 10.7% (triangles), where a plane tiling makes overlap
+a comparatively large share of a cheap enumeration. The 3D version was written, for cubes, and
+came to 1.9% on polycubes — nauty dominates there — against the subtlest part of the check to
+get right and a silent wrong answer if it were ever wrong. It was deleted again.
 """
 _tiles(::ParticleSpecies) = false
 
