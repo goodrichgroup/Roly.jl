@@ -364,6 +364,12 @@ function lower!(poly::Polyform)
     visited = zeros(Bool, nv_g)
     queue = zeros(Cint, nv_g)
 
+    # The scan runs over graph vertices, but the question is about *particles*, and a particle
+    # owns as many vertices as its species has darts — 24 for a cube. Asking `is_cutset` once
+    # per vertex therefore asked the same question up to 24 times in a row, which was most of
+    # the calls: 19.8 per `lower!` for polycubes where at most a handful of particles are ever
+    # examined. `tested` is indexed by leading vertex, since that is what names a particle.
+    tested = falses(nv_g)
     part = nothing
     for v in Iterators.reverse(canonical_vertices(poly))
         # Walk backward from v to find the leading vertex of its particle.
@@ -372,6 +378,8 @@ function lower!(poly::Polyform)
             v = k
             break
         end
+        tested[v] && continue
+        tested[v] = true
 
         part = particle_from_leadingvertex(poly, v)
         is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) || break
