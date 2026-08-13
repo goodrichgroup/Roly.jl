@@ -141,12 +141,19 @@ end
         @test length(attachment_reps(distinct, c)) == length(compatible_sitelocs(distinct, c))
     end
 
-    # The claim itself, checked rather than argued: the children reachable through *every*
-    # compatible mate site are exactly the children reachable through the representatives.
-    # Anything dropped is a repeat, so the two sets of canonical forms must be equal.
-    function children(poly, sitelocs_of)
+    # The claim itself, checked rather than argued, on both sides of the bond: the children
+    # reachable through *every* compatible mate site and from *every* open host site are exactly
+    # those reachable from the representatives. Anything dropped is a repeat, so the two sets of
+    # canonical forms must be equal.
+    #
+    # The host side is here because getting it wrong is silent and expensive. nauty's orbit array
+    # is indexed by the numbering it was handed, and `canonize=true` then permutes the graph, so
+    # reading the partition against the graph afterwards merges unrelated vertices — which merged
+    # open sites and quietly lost most of the polycubes. See `orbitreps!`.
+    function children(poly, sitelocs_of; allsites=true)
         sys = Roly.bindingrules(poly)
         out = Set{NautyDiGraph}()
+        usedorbits = Set{Int}()
         for orig_v in Roly.canonical_vertices(poly)
             part = Roly.particle_from_leadingvertex(poly, orig_v)
             isnothing(part) && continue
@@ -154,6 +161,11 @@ end
                 site = bindingsites(part, sys, k)
                 Roly._isbound_vertex(poly, part, first(site.vertices)) && continue
                 Roly.isinert(sys, color(site)) && continue
+                if !allsites
+                    rep = poly.orbits[Roly.tocanon(poly, first(site.vertices))]
+                    rep in usedorbits && continue
+                    push!(usedorbits, rep)
+                end
                 for siteloc in sitelocs_of(sys, color(site))
                     mate = bindingsites(Roly.species(sys, siteloc[1]), siteloc[2])
                     for r in 0:(Roly.nregistrations(site, mate) - 1)
@@ -180,7 +192,9 @@ end
     for (name, sys) in systems
         poly = Polyform(sys, 1)
         for _ in 1:3     # monomer, then grow, so the host is asymmetric in later rounds too
-            @test children(poly, compatible_sitelocs) == children(poly, attachment_reps)
+            every = children(poly, compatible_sitelocs)
+            @test every == children(poly, attachment_reps)
+            @test every == children(poly, attachment_reps; allsites=false)
             nxt = nothing
             for (site, loc, r) in collect_compatible_pairs(poly)
                 trial = copy(poly)

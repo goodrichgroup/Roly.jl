@@ -116,11 +116,13 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
             @test isapprox((b.pose.x - a.pose.x)[3], 0; atol=1e-8)
             grown += 1
         end
-        # One candidate per open side, not one per (open side, mate side) pair: the sticky faces
-        # are a single symmetry orbit, so attaching through any of them gives the same dimer and
-        # `collect_compatible_pairs` offers only a representative. It used to offer all of them
-        # and let the canonical form discard the repeats, at the cost of a nauty call each.
-        @test grown == length(sides)
+        # Exactly one candidate, where there used to be `length(sides)^2`. A monomer's sticky
+        # faces are a single orbit on both sides of the bond — one orbit of the host's own
+        # symmetry to attach *at*, and one of the incoming particle's to attach *through* — and
+        # every one of those pairings gives the same dimer. `collect_compatible_pairs` offers a
+        # representative of each; it used to offer all of them and let the canonical form throw
+        # the repeats away, at the cost of a graph copy and a nauty call each.
+        @test grown == 1
     end
 
     for (name, _, shp, nf, order) in solids

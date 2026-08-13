@@ -7,6 +7,7 @@ sites, represented by a directed graph.
 mutable struct Polyform{D,P<:Particle,S<:BindingRules,G<:AbstractNautyGraph}
     graphrep::G
     sigma::Int
+    orbits::Vector{Int}
     canon2orig::Vector{Int}
     orig2canon::Vector{Int}
     particles::Vector{P}
@@ -21,7 +22,7 @@ Create an empty polyform containing no particles.
 function Polyform(sys::BindingRules{D}) where {D}
     P = posetype(sys)
     g = NautyDiGraph(0)
-    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, 1, Int[], Int[], Particle{P}[], sys)
+    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, 1, Int[], Int[], Int[], Particle{P}[], sys)
 end
 
 """
@@ -34,18 +35,25 @@ function Polyform(sys::BindingRules{D}, i::Integer) where {D}
     ps = species(sys, i)
     g = copy(graphrep(ps))
     part = Particle(sys, i; leading_vertex=1)
-    cvs = convert(Vector{Int}, canonize!(g))
-    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys)
+    # `nauty(; canonize=true)` is what `canonize!` does anyway, and it also hands back the
+    # automorphism group, so the orbits come for free rather than from a second call.
+    perm, autg = nauty(g; canonize=true)
+    cvs = convert(Vector{Int}, perm)
+    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(
+        g, symmetrynumber(ps), orbitreps!(Int[], autg, perm), cvs, invperm(cvs), [part], sys
+    )
 end
 
 function Base.copy(p::Polyform)
     return typeof(p)(
-        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon), copy(p.particles), p.bindingrules
+        copy(p.graphrep), p.sigma, copy(p.orbits), copy(p.canon2orig), copy(p.orig2canon),
+        copy(p.particles), p.bindingrules
     )
 end
 function Base.copy!(dst::Polyform, src::Polyform)
     copy!(dst.graphrep, src.graphrep)
     dst.sigma = src.sigma
+    copy!(resize!(dst.orbits, length(src.orbits)), src.orbits)
     copy!(dst.canon2orig, src.canon2orig)
     copy!(dst.orig2canon, src.orig2canon)
     copy!(dst.particles, src.particles)
@@ -335,6 +343,7 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::I
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
+    orbitreps!(poly.orbits, autg, perm)
 
     return poly
 end
@@ -424,6 +433,7 @@ function _remove_particle!(poly::Polyform, part::Particle)
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
+    orbitreps!(poly.orbits, autg, perm)
     return poly
 end
 
@@ -483,6 +493,12 @@ end
 function collect_compatible_pairs!(pairs, poly::Polyform)
     sys = bindingrules(poly)
     empty!(pairs)
+    # The other half of the sibling problem. Two *open sites of the assembly* lying in one orbit
+    # of its automorphism group are interchangeable by a symmetry of everything already built,
+    # so attaching the same partner to either gives the same structure — the mirror of the
+    # incoming particle's orbits, which `_orbit_representatives` handles. nauty computes the
+    # orbit partition on its way to `sigma` and `raise!` keeps it, so this costs a lookup.
+    used = falses(length(poly.orbits))
     for orig_v in canonical_vertices(poly)
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
@@ -490,6 +506,10 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
             site = bindingsites(part, sys, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
+            # Orbits index the graph, which is in canonical order; site vertices are not.
+            rep = poly.orbits[tocanon(poly, first(site.vertices))]
+            used[rep] && continue
+            used[rep] = true
             # One mate site per orbit, not one per site: the rest attach to the same structure,
             # and building them only to have the canonical form reject them is most of the work
             # an enumeration used to do. See `_orbit_representatives`.

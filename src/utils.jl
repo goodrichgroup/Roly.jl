@@ -41,6 +41,35 @@ edgenormals(corners, pose) = (
 )
 
 """
+    orbitreps!(dest, autg, canonperm)
+
+Fill `dest` with one orbit label per vertex, indexed by *canonical* position, resizing it to fit.
+Two vertices carry the same label exactly when some automorphism of the graph maps one onto the
+other.
+
+Two conversions happen here, and both are easy to get wrong — this exists so that only one place
+has to know about them. Candidate for moving upstream into NautyGraphs.
+
+`autg.orbits` names each vertex's orbit by a representative, numbered from 0 as nauty does, so
+the labels are shifted by one. More importantly it is indexed by the vertex numbering nauty was
+*given*, whereas `nauty(g; canonize=true)` goes on to permute `g` into canonical order — so
+reading it against the graph afterwards reads the wrong vertices. `canonperm` is that same call's
+permutation, and composing with it puts the partition back in step with the graph. Skipping this
+silently merges unrelated vertices, and merging open binding sites loses whole structures.
+
+Two vertices in one orbit are interchangeable by a symmetry of the whole graph, which is what
+makes the partition worth keeping: attaching a particle at either of two open sites in one orbit
+gives the same structure, so only one of them need be tried.
+"""
+function orbitreps!(dest::AbstractVector{Int}, autg, canonperm)
+    resize!(dest, length(autg.orbits))
+    @inbounds for i in eachindex(canonperm)
+        dest[i] = Int(autg.orbits[canonperm[i]]) + 1
+    end
+    return dest
+end
+
+"""
     is_cutset(g, vs[; target, visited, queue])
 
 Return `true` if removing vertices `vs` from `g` disconnects the graph.
