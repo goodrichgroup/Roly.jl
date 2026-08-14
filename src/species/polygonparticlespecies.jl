@@ -18,12 +18,7 @@ end
 Construct a regular `n`-gon with edge length `a`. Each edge carries one binding site.
 
 `colors` assigns interaction colors to the binding sites, which is what the interaction matrix
-uses to decide which sites bond. It is also all that needs saying: the particle's symmetry
-follows from it, since two edges are interchangeable exactly when a rotation carries one onto
-the other and they are the same color (see [`siteorbits`](@ref)).
-
-So the default `colors=1:n` gives every edge its own identity and a symmetry number of 1, while
-`colors=fill(1, n)` makes all edges the same sticky stuff and gives the full `n`.
+uses to decide which sites bond.
 """
 function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real}
     r_in = convert(F, 0.5a * cot(π / n))
@@ -70,11 +65,7 @@ nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolygonParticleSpecies) = true
 
-# The three regular polygons that tile the plane. Nothing else about the species can take a
-# bond off the tiling: every site sits at an edge midpoint facing out, all edges of a regular
-# polygon are the same length, and a 2D bond has a single registration — the half turn that
-# brings the two edges flush. So the shape is the whole condition here, and `_samesize` on the
-# caller's side is the rest of it.
+# The three regular polygons that tile the plane.
 _tiles(ps::PolygonParticleSpecies) = nsites(ps) in (3, 4, 6)
 
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
@@ -82,12 +73,11 @@ function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPos
     spcs2, pose2 = p2
     skin = spcs1.skin + spcs2.skin
     d = norm(pose1.x - pose2.x)
-    # The two spheres decide it outright often enough to be worth asking first.
+
+    # check in and out radii first
     d >= spcs1.rmax + spcs2.rmax && return false
     d < (spcs1.rmin + spcs2.rmin) - skin && return true
-    # Otherwise separating axes, for which a 2D polygon's edge normals are a sufficient
-    # candidate set. There is nothing cheaper to reach for here: 2D has no cross-product axes to
-    # avoid, so this is already the small candidate set that the 3D species works to reduce to.
+
     return sat_overlap(Iterators.flatten((edgenormals(spcs1.corners, pose1),
                                           edgenormals(spcs2.corners, pose2))),
                        spcs1.corners, pose1, spcs2.corners, pose2, skin)

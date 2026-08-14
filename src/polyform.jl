@@ -35,8 +35,6 @@ function Polyform(sys::BindingRules{D}, i::Integer) where {D}
     ps = species(sys, i)
     g = copy(graphrep(ps))
     part = Particle(sys, i; leading_vertex=1)
-    # `nauty(; canonize=true)` is what `canonize!` does anyway, and it also hands back the
-    # automorphism group, so the orbits come for free rather than from a second call.
     perm, autg = nauty(g; canonize=true)
     cvs = convert(Vector{Int}, perm)
     return Polyform{D,Particle{P},typeof(sys),typeof(g)}(
@@ -117,11 +115,8 @@ to the corresponding stable original vertex index.
 @inline toorig(p::Polyform, v::Integer) = p.canon2orig[v]
 
 function _apply_perm!(poly::Polyform, perm)
-    # Permuting through `orig2canon` rather than in place is not a detour. Writing
-    # `canon2orig .= @view canon2orig[perm]` reads and writes one array, so broadcasting cannot
-    # tell the two apart and defensively copies the source — an allocation the size of the
-    # graph on every nauty call, which is the hottest path in the package. `orig2canon` is
-    # rebuilt from the result three lines later, so borrowing it as scratch costs nothing.
+    # `orig2canon` is rebuilt from the result three lines below, 
+    # so we borrow it as scratch buffer
     resize!(poly.orig2canon, length(poly.canon2orig))
     @inbounds for i in eachindex(poly.orig2canon, perm)
         poly.orig2canon[i] = poly.canon2orig[perm[i]]
@@ -132,7 +127,7 @@ function _apply_perm!(poly::Polyform, perm)
     @inbounds for i in eachindex(poly.canon2orig)
         poly.orig2canon[poly.canon2orig[i]] = i
     end
-    return nothing
+    return
 end
 
 @inline canonical_vertices(p::Polyform) = p.canon2orig
@@ -166,9 +161,7 @@ Return a lazy iterator over the external edges of `graphrep(p)`, corresponding t
 Return `true` if the original graph vertices `u` and `v` belong to the same particle.
 
 Each particle owns a contiguous block of original vertices starting at its leading vertex, so
-`u` and `v` are split apart exactly when some leading vertex falls between them. Testing for
-that directly avoids assuming anything about the order of `p.particles`, which `lower!` does
-not preserve, and needs no sorted copy.
+`u` and `v` are split apart exactly when some leading vertex falls between them.
 """
 @inline function _same_particle(p::Polyform, u::Integer, v::Integer)
     lo, hi = minmax(u, v)
@@ -383,11 +376,7 @@ function lower!(poly::Polyform)
     visited = zeros(Bool, nv_g)
     queue = zeros(Cint, nv_g)
 
-    # The scan runs over graph vertices, but the question is about *particles*, and a particle
-    # owns as many vertices as its species has darts — 24 for a cube. Asking `is_cutset` once
-    # per vertex therefore asked the same question up to 24 times in a row, which was most of
-    # the calls: 19.8 per `lower!` for polycubes where at most a handful of particles are ever
-    # examined. `tested` is indexed by leading vertex, since that is what names a particle.
+    # keep track of particles tested for safe removal, since we attempt removal for every site
     tested = falses(nv_g)
     part = nothing
     for v in Iterators.reverse(canonical_vertices(poly))
@@ -427,11 +416,7 @@ function _remove_particle!(poly::Polyform, part::Particle)
     rem_vertices!(graphrep(poly), vs)
     deleteat!(poly.canon2orig, vs)
 
-    # Deleting the block compacts the original vertex numbering: everything that sat above it
-    # slides down by the block's size. That goes for the canonical vertex map *and* for the
-    # surviving particles — without the latter their `leading_vertex`, and hence every
-    # `BindingSite.vertices` range derived from it, points past the end of the graph and the
-    # next bond is attached to the wrong vertices.
+    # shift remaining indices and leading vertices
     for i in eachindex(poly.canon2orig)
         poly.canon2orig[i] > last(vs0) && (poly.canon2orig[i] -= length(vs0))
     end
@@ -509,17 +494,15 @@ child built by attaching to `host` — or `0` if there is none.
 This is what lets [`collect_compatible_pairs!`](@ref) discard a candidate without building it,
 and it rests on three facts lining up:
 
-  - nauty numbers canonical vertices in order of colour, and `vertexlabels2labptn` orders the
-    colour classes by increasing vertex label, so canonical position runs with label.
+  - nauty numbers canonical vertices in order of color, and `NautyGraphs.vertexlabels2labptn` orders the
+    color classes by increasing vertex label, so canonical position runs with label.
   - `_adjust_labels_and_colors` gives species `s` a label block strictly above species `s-1`,
-    so *species index order is label order* and a bare index comparison decides which of two
+    so species index order is label order and a bare index comparison decides which of two
     particles sits higher in the canonical numbering.
   - `lower!` scans canonical positions downward for the first removable particle.
 
 Together: `lower!` deletes out of the highest label class that still holds a removable
-particle. A particle stays removable once another one is attached elsewhere — attaching cannot
-disconnect what removing it leaves behind — so the parent's own removability is a sufficient
-test, and the host is excluded because the new particle hangs off it.
+particle.
 """
 function _deletable_above(poly::Polyform, host::Particle, target, visited, queue)
     sys = bindingrules(poly)
@@ -540,32 +523,29 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
     empty!(pairs)
     nv_g = nv(graphrep(poly))
     target, visited, queue = zeros(Bool, nv_g), zeros(Bool, nv_g), zeros(Cint, nv_g)
-    # The other half of the sibling problem. Two *open sites of the assembly* lying in one orbit
-    # of its automorphism group are interchangeable by a symmetry of everything already built,
-    # so attaching the same partner to either gives the same structure — the mirror of the
-    # incoming particle's orbits, which `_orbit_representatives` handles. nauty computes the
-    # orbit partition on its way to `sigma` and `raise!` keeps it, so this costs a lookup.
+
+    # Two open sites of the assembly lying in one orbit of its automorphism group are interchangeable
+    # by a symmetry of everything already built, so attaching the same partner to either gives the same structure.
     used = falses(length(poly.orbits))
     for orig_v in canonical_vertices(poly)
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
-        # Per host, not per candidate: which species this host's children could lose instead of
-        # the particle being attached.
+
+        # Which species the children formbed by attaching to part could lose
         deletable = _deletable_above(poly, part, target, visited, queue)
         for k in 1:nsites(part, sys)
             site = bindingsites(part, sys, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
-            # Orbits index the graph, which is in canonical order; site vertices are not.
+
+            # Orbits index the graph, which is in canonical order
             rep = poly.orbits[tocanon(poly, first(site.vertices))]
             used[rep] && continue
             used[rep] = true
-            # One mate site per orbit, not one per site: the rest attach to the same structure,
-            # and building them only to have the canonical form reject them is most of the work
-            # an enumeration used to do. See `_orbit_representatives`.
+
+            # only keep one partner site per orbit
             for siteloc in attachment_reps(sys, color(site))
-                # The new particle is always removable — deleting it leaves exactly `poly`,
-                # which is connected — and it is the whole of its own label class from the
+                # The new particle is always removable, and it is its own label class from the
                 # attaching species. So `lower!` stops at that class unless something strictly
                 # above it survives, and if something does, the deletion is not the particle we
                 # are about to attach: the child would be rejected, so never build it.

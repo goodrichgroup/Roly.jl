@@ -36,8 +36,8 @@ end
 """
     polyenum([f], rules::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
 
-Iterate over all structures (polyforms) allowed by `rules` using _reverse-search_.
-Structures are generated up to size `maxsize`, and the enumeration terminates after `maxstrs`
+Iterate over all polyforms allowed by `rules` using _reverse search_.
+Polyforms are generated up to size `maxsize`, and the enumeration terminates after `maxstrs`
 structures have been generated. Use the function `f` to process generated structures and impose
 constraints.
 

@@ -19,39 +19,14 @@ end
 
 Build a particle species from the polyhedron `p`, with one binding site at each face centroid.
 
-`colors` assigns interaction colors to the binding sites, and is all that needs saying: the
-particle's symmetry follows from it, since two faces are interchangeable exactly when a
-rotation of the solid carries one onto the other and they are the same color (see
-[`siteorbits`](@ref)).
+`colors` assigns interaction colors to the binding sites, which is what the interaction matrix
+uses to decide which sites bond.
 
-So `colors=1:nfaces(p)` gives every face its own identity and a symmetry number of 1;
-`colors=fill(1, nfaces(p))` makes them all alike and recovers the solid's full rotation group;
-and colouring the caps of a cube apart from its sides leaves the subgroup that preserves that
-split.
-
-`locking` says whether a site holds its partner in the orientation its frame names, and takes
-either one flag for the whole species or one per face. The default, `true`, is the ordinary
-reading of an oriented binding site, and leaves a bond with a single registration unless the
-particle's own symmetry makes the frame ambiguous. Setting a face rotation-free instead admits
-every orientation the face geometrically permits: a triangular prism with square sides is only
-2-fold about them, so `locking=true` bonds its prisms coplanar, while freeing a side face also
-allows the neighbour stood on its side. See [`nregistrations`](@ref).
+`locking` says whether a bond locks orientation, or is free to bond in all geometrically permitted
+relative orientations.
 
 `twists` turns a face's binding site about its own normal, by an angle in radians, and likewise
-takes one value or one per face. This is the bond *registry*: which relative orientation a bond
-means, as opposed to how many it admits. Note that turning both faces of a bond by the same
-amount does not cancel, it turns the partner by twice that — the offset appears on both sides
-of the face-to-face flip, and `Δ·Rx(-θ) = Rx(θ)·Δ`.
-
-Any angle is allowed. Whole dart steps, `2π/degree`, are taken by rotating the face's corner
-list so that the frame and the vertex numbering move together; whatever is left over turns the
-frame alone. Twisting one face of a symmetry orbit differently from its fellows splits the
-orbit, lowering the symmetry number — deliberately breaking a symmetry is what this is for, and
-the graph records the break. A twist shared across an orbit leaves the symmetry intact, since
-turns about a site's own normal commute with its stabiliser.
-
-The graph encoding is chosen rather than asked for: the sparse one whenever it provably carries
-everything the dart encoding would, see `_cycle_suffices`.
+takes one value or one per face.
 """
 PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0) =
     _polyhedronspecies(p, colors, locking, twists, nothing)
@@ -82,9 +57,6 @@ end
 
 The binding site frames of `p`'s faces, given face corner lists `fs`: local x along the
 outward normal, local z pointing at the midpoint of each face's first edge.
-
-`fs` is passed separately rather than read from `p` because [`_propagate_faces`](@ref) re-winds
-the lists, and the frames and the encoding have to be built from the same ones.
 """
 function _faceposes(p::Polyhedron{F}, fs::Vector{Vector{Int}}) where {F}
     P = Pose{3,F,RotMatrix3{F}}
@@ -113,9 +85,8 @@ function Base.show(io::Core.IO, ps::PolyhedronParticleSpecies)
 end
 
 function Base.copy(ps::PolyhedronParticleSpecies)
-    # The shape and everything derived from it are shared, not copied: immutable, and read only.
     return typeof(ps)(
-        copy(ps.g), copy(ps.sites), ps.shape, ps.normals, ps.edgedirections,
+        copy(ps.g), copy(ps.sites), copy(ps.shape), copy(ps.normals), copy(ps.edgedirections),
         ps.rmin, ps.rmax, ps.skin
     )
 end
@@ -125,7 +96,6 @@ nsites(p::PolyhedronParticleSpecies) = length(p.sites)
 bindingsites(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolyhedronParticleSpecies) = true
 bounding_radius(ps::PolyhedronParticleSpecies) = ps.rmax
-
 
 """
     shape(ps::PolyhedronParticleSpecies)
@@ -144,15 +114,13 @@ function overlap(
     spcs2, pose2 = p2
     skin = spcs1.skin + spcs2.skin
     t = pose2.x - pose1.x
-    # Outer and inner spheres first; both are measured from the origin, which the centred
-    # corners of a `Polyhedron` make the solid's centroid.
+
+    # check in and out radii first
     d = norm(t)
     d >= spcs1.rmax + spcs2.rmax && return false
     d < (spcs1.rmin + spcs2.rmin) - skin && return true
 
-    # Separating axes. 3D needs more candidates than 2D: the face normals of both solids, plus
-    # the cross products of their edge directions, which catch the edge-on-edge configurations
-    # no face normal separates.
+    # separating axes
     axes = Iterators.flatten((
         (pose1.psi * nrm for nrm in spcs1.normals),
         (pose2.psi * nrm for nrm in spcs2.normals),
@@ -212,8 +180,7 @@ UnitPyramid(n::Integer, a::Real=1.0; h::Real=a, kwargs...) =
 A prism over a regular `n`-gon with edge length `a`, with one binding site per face.
 Rotation group `D_n`, except for `UnitPrism(4)` whose default height makes it a cube.
 """
-UnitPrism(n::Integer, a::Real=1.0; h::Real=a, kwargs...) =
-    PolyhedronParticleSpecies(Prism(n, a; h); kwargs...)
+UnitPrism(n::Integer, a::Real=1.0; h::Real=a, kwargs...) = PolyhedronParticleSpecies(Prism(n, a; h); kwargs...)
 
 """
     UnitAntiprism(n, a=1.0; kwargs...)

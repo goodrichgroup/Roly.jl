@@ -1,7 +1,7 @@
 """
     PatchyParticleSpecies{D,F,B}
 
-A `D`-dimensional sphere of radius `r` with binding sites on its surface (a disk in 2D).
+A `D`-dimensional sphere of radius `r` with binding sites on its surface.
 """
 struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,B}
     g::NautyDiGraph
@@ -11,19 +11,11 @@ struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,B}
 end
 
 """
-    PatchyParticleSpecies(g, r, poses; colors=eachindex(poses))
+    PatchyParticleSpecies(g::NautyDiGraph, r, poses; colors=eachindex(poses))
 
-General constructor, and the expert path: you supply the graph's *structure*, one vertex per
-patch, and its automorphism group must match the symmetry of `patch_positions`.
-[`_check_encoding`](@ref) verifies that it does. Site `i` occupies graph vertex `i`
-(`vertices = i:i`); for truncated sites (several graph vertices per site) build the graph and
-`BindingSite`s by hand.
+Construct a `D`-dimensional sphere of radius `r` with binding sites on its surface.
 
-Vertex labels are *not* yours to set — they are derived from `colors` and the patch geometry
-like every other species, and whatever `g` arrives with is overwritten. What the graph
-contributes is the resolution one vertex per patch can carry, which is why a patch arrangement
-with a genuine 3D rotation group cannot be encoded this way at all: a single vertex per site
-has no room for it, which is what [`dartencoding`](@ref) exists to provide.
+General constructor, requiring manual encoding of the particle's symmetry into a `NautyDiGraph`.
 """
 function PatchyParticleSpecies(
     g::NautyDiGraph,
@@ -67,6 +59,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles))
     tol = sqrt(eps(F)) * r
     positions = [SVector(r * cos(F(phi)), r * sin(F(phi))) for phi in angles]
     poses = [normal_pose(positions[i], F(0)) for i in 1:n]
+
     # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
     gauges = ones(Int, n)
     labels = siteorbits(poses, gauges, collect(colors))
@@ -81,16 +74,10 @@ end
     PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, twists=0)
     PatchySphere(group::RotationGroup, r=1; a=1.0, kwargs...)
 
-A 3D sphere of radius `r` carrying one patch per face of `p`, so that the patches inherit the
-solid's rotation group. The second form names a [`RotationGroup`](@ref) instead of a solid,
-resolved by [`Polyhedron`](@ref): `PatchySphere(Tetrahedral())`, `PatchySphere(Octahedral())`,
-`PatchySphere(Dihedral(5))`.
+A 3D sphere of radius `r` carrying one patch per face of polyhedron `p`, so that the patches inherit the
+polyhedron's rotation group.
 
-Patches sit where the face centroid directions pierce the sphere, and share the graph
-encoding, the labelling rules and the binding site frame convention of
-[`PolyhedronParticleSpecies`](@ref), including its `locking` and `twists` keywords — so a
-polyhedron species and a patchy sphere built from the same solid have interchangeable encodings
-and can share one set of `BindingRules`.
+See [`PolyhedronParticleSpecies`](@ref) for documentation of the keyword arguments.
 """
 PatchySphere(p::Polyhedron, r::Real=1; colors=1:nfaces(p), locking=true, twists=0) =
     _patchysphere(p, r, colors, locking, twists, nothing)
@@ -98,9 +85,7 @@ PatchySphere(p::Polyhedron, r::Real=1; colors=1:nfaces(p), locking=true, twists=
 PatchySphere(group::RotationGroup, r::Real=1; a=1.0, kwargs...) =
     PatchySphere(Polyhedron(group; a), r; kwargs...)
 
-# `usecycle` forces an encoding; see `_facesites`.
-function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists,
-                       usecycle::Union{Nothing,Bool}) where {F}
+function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists, usecycle::Union{Nothing,Bool}) where {F}
     n = nfaces(p)
     length(colors) == n ||
         throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
@@ -138,7 +123,7 @@ bindingsites(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
 isconvex(::PatchyParticleSpecies) = true
 
 function could_contact(
-    p1::SpeciesAndPose{<:PatchyParticleSpecies}, p2::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...
+    ::SpeciesAndPose{<:PatchyParticleSpecies}, ::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...
 )
     return true # this check would be identical with overlap, so no need to do it twice
 end

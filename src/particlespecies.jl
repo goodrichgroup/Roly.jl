@@ -20,32 +20,7 @@ const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
     _tiles(ps::ParticleSpecies)
 
 Whether `ps` is a shape that tiles space, placed so that **every bond it can make carries a
-tile of that tiling onto another tile**. Default `false`; a species opts in.
-
-What this buys is the whole overlap question at once. If it holds for every species in a
-[`BindingRules`](@ref), then by induction every particle of every reachable assembly sits on a
-cell of one tiling — each bond moves a cell to a cell, and there is nowhere else to be. Distinct
-cells of a tiling have disjoint interiors, so two particles can only overlap by occupying the
-*same* cell, which is to say by having coincident centres. A subtraction settles it, and no
-geometry runs at all.
-
-Both halves matter, and the second is the one that is easy to lose. A cube tiles space, but a
-cube whose binding site has been turned by a fraction of a dart step hands its partner over
-rotated by that fraction, off the lattice and free to overlap a third cube in the ordinary way.
-So a species must check its *sites*, not just its shape. It must also be sure of its size: two
-tilings at different scales share no cells, which is why the caller additionally requires one
-size across the species.
-
-This is a promise about geometry, so it is derived and never given. The property is global —
-it is precisely what overlap checking exists to catch, a ring closing badly or a chain folding
-back into itself — so it cannot be inferred from the bond table, only from shapes known to
-tile. Anything not recognised falls back to the real overlap test and is merely slower.
-
-**Only 2D opts in**, and that is a measurement rather than an omission. Skipping the geometry is
-worth 4.4% (squares), 8.4% (hexagons) and 10.7% (triangles), where a plane tiling makes overlap
-a comparatively large share of a cheap enumeration. The 3D version was written, for cubes, and
-came to 1.9% on polycubes — nauty dominates there — against the subtlest part of the check to
-get right and a silent wrong answer if it were ever wrong. It was deleted again.
+tile of that tiling onto another tile**. Default `false`, a species may opt in.
 """
 _tiles(::ParticleSpecies) = false
 
@@ -113,16 +88,6 @@ function nsites end
     setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
 
 Assign colors to the binding sites of particle species `p`.
-
-A coloring is the whole statement of which sites are interchangeable and of how many ways a
-partner can attach at each, so this re-derives the graph labelling and the stabilisers along
-with it; see [`_recolor!`](@ref). Species get it for free by keeping their binding sites in a
-field named `sites`, which is part of the interface — a species storing them elsewhere defines
-its own method.
-
-Throws if the new coloring needs a graph the species does not have, leaving it untouched: only
-the labels are rewritten, never the structure, so a species built with distinct colors cannot
-be recolored into a symmetry its graph has no room for.
 """
 function setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
     _recolor!(p, p.sites, colors)
@@ -176,11 +141,10 @@ The symmetry number is equal to the size of the automorphism group
 of `graphrep(p)`.
 """
 function symmetrynumber(p::ParticleSpecies)
-    # Deliberately without `canonize`: a species' graph must stay in construction order, since
-    # `BindingSite.vertices` indexes it directly and `bindingsites(::Particle, …)` reaches those
+    # DO NOT `canonize` here: a species' graph must stay in construction order, since
+    # `BindingSite.vertices` indexes it directly and `bindingsites(::Particle, ...)` reaches those
     # vertices by shifting the range by a leading vertex. Reordering here would silently
-    # decouple the two. Canonical order belongs to `Polyform`, which canonises its own *copy*
-    # and keeps `canon2orig` to translate.
+    # decouple the two.
     _, autg = nauty(graphrep(p))
     return convert(Int, autg.n)
 end

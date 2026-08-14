@@ -83,6 +83,8 @@ struct Polyhedron{F<:AbstractFloat}
     end
 end
 
+Base.copy(p::Polyhedron) = Polyhedron(copy(p.corners), [copy(f) for f in p.faces])
+
 """
     Polyhedron(corners, faces)
     Polyhedron(corners)

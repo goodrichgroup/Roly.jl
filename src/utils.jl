@@ -5,15 +5,12 @@ Return `true` unless some axis in `axes` separates the two convex bodies, i.e. `
 overlap, with a `skin` of clearance counting as separated.
 
 Two convex bodies are disjoint exactly when some axis exists on which their projections do not
-overlap, and it is enough to test a finite candidate set — which is all that differs between
-dimensions, so it is the caller's to supply. In 2D the edge normals of both polygons suffice;
-in 3D it takes both solids' face normals *and* the cross products of their edge directions,
+overlap, and it is enough to test a finite candidate set. In 2D the edge normals of both polygons suffice.
+In 3D it takes both solids' face normals and the cross products of their edge directions,
 which catch the edge-on-edge configurations no face normal separates.
 
 Axes need not be normalised or even nonzero: each is scaled here, and a degenerate one (from
-parallel edges, say) carries no information and is skipped. Normalising is not cosmetic —
-`skin` is a length, so comparing it against projections along an unnormalised axis would scale
-the tolerance by that axis's magnitude.
+parallel edges, say) carries no information and is skipped.
 """
 function sat_overlap(axes, corners1, pose1, corners2, pose2, skin::Real)
     for axis in axes
@@ -30,7 +27,7 @@ end
 """
     edgenormals(corners, pose)
 
-The outward-ish normals of a 2D polygon's edges, in world coordinates: candidate separating
+The normals of a 2D polygon's edges, in world coordinates: candidate separating
 axes for [`sat_overlap`](@ref). Only the direction matters, so the sign is not fixed.
 """
 edgenormals(corners, pose) = (
@@ -43,23 +40,17 @@ edgenormals(corners, pose) = (
 """
     orbitreps!(dest, autg, canonperm)
 
-Fill `dest` with one orbit label per vertex, indexed by *canonical* position, resizing it to fit.
+Fill `dest` with one orbit label per vertex, indexed by canonical position, resizing it to fit.
 Two vertices carry the same label exactly when some automorphism of the graph maps one onto the
 other.
 
-Two conversions happen here, and both are easy to get wrong — this exists so that only one place
-has to know about them. Candidate for moving upstream into NautyGraphs.
+Two conversions happen here. Candidate for moving upstream into NautyGraphs.
 
 `autg.orbits` names each vertex's orbit by a representative, numbered from 0 as nauty does, so
 the labels are shifted by one. More importantly it is indexed by the vertex numbering nauty was
 *given*, whereas `nauty(g; canonize=true)` goes on to permute `g` into canonical order — so
 reading it against the graph afterwards reads the wrong vertices. `canonperm` is that same call's
-permutation, and composing with it puts the partition back in step with the graph. Skipping this
-silently merges unrelated vertices, and merging open binding sites loses whole structures.
-
-Two vertices in one orbit are interchangeable by a symmetry of the whole graph, which is what
-makes the partition worth keeping: attaching a particle at either of two open sites in one orbit
-gives the same structure, so only one of them need be tried.
+permutation, and composing with it puts the partition back in step with the graph.
 """
 function orbitreps!(dest::AbstractVector{Int}, autg, canonperm)
     resize!(dest, length(autg.orbits))

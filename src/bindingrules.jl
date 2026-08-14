@@ -40,8 +40,6 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
     color2siteloc, siteloc2color = _make_bindingsite_lookuptables(particlespecies)
 
     nsites = length(siteloc2color)
-    # Colors index the interaction matrix, so what it has to span is the largest color, not the
-    # number of distinct ones — those differ as soon as a species leaves gaps in its colors.
     ncolors = maximum(keys(color2siteloc))
 
     intmat = _parse_intmat(bonds, siteloc2color, ncolors)
@@ -217,25 +215,14 @@ end
 """
     _orbit_representatives(particlespecies, sitelocs)
 
-Keep one site per symmetry orbit: of any two entries of `sitelocs` on the same species carrying
+Return one site per symmetry orbit: of any two entries of `sitelocs` on the same species carrying
 the same graph label, only the first survives.
 
-This is what makes attaching a particle cost one candidate per *distinguishable* way of doing
+This is what makes attaching a particle cost one candidate per distinguishable way of doing
 it rather than one per site. Two sites of a free particle with the same label are, by
-construction, in one orbit of the rotations preserving its coloring — that is what
-[`siteorbits`](@ref) computes and what `_check_encoding` confirms the graph agrees with — so a
-rotation of the incoming particle carries one onto the other. Attaching through either therefore
-produces the same structure: the same region of space occupied, and graphs related by an
-isomorphism that is the identity on everything already placed.
-
-The saving is the species' own symmetry, and it is most of the search. Building both and letting
-the canonical form notice is what happened before, at the price of a graph copy, a bond, and a
-call to nauty each time — 88% of all candidates in a polycube enumeration, where a cube's six
-faces are one orbit and five of every six attachments were rediscoveries of the first.
-
-Dropping a site can only ever lose a *repeat*, never a structure, which is what makes this safe
-to do before the geometry is known: the two children are equal, so whichever survives stands for
-both.
+construction, in one orbit of the rotations preserving its coloring. That is what
+[`siteorbits`](@ref) computes and what `_check_encoding` confirms the graph agrees with.
+Attaching through either therefore produces the same structure.
 """
 function _orbit_representatives(particlespecies::AbstractVector{<:ParticleSpecies},
                                 sitelocs::AbstractVector{BindingSiteLoc})
@@ -254,7 +241,7 @@ end
 """
     attachment_reps(sys::BindingRules, color::Integer)
 
-The sites a particle may be attached *through* to a site of `color`, one per symmetry orbit.
+The sites a particle may be attached through to a site of `color`, one per symmetry orbit.
 
 [`compatible_sitelocs`](@ref) lists every site the interaction matrix permits; this lists the
 ones that lead to distinguishable structures. See [`_orbit_representatives`](@ref).
@@ -334,13 +321,9 @@ end
 """
     _adjust_labels_and_colors(particlespecies)
 
-Shift each species' colors and graph labels into disjoint global ranges, on copies, so that
+Shift each species' colors and graph labels into disjoint global ranges, so that
 species built independently do not collide and a site's color indexes the interaction matrix
 directly.
-
-Colors are *shifted*, not renumbered per site, so sites the user gave the same color keep it:
-a color is an interaction identity, and two sites sharing one must go on bonding alike.
-Colors are shifted before labels, since recoloring a species rederives its labels.
 """
 function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {PS<:ParticleSpecies}
     particlespecies = PS[copy(ps) for ps in particlespecies]
