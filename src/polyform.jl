@@ -500,9 +500,46 @@ function collect_open_bindingsites(poly::Polyform)
     return collect_open_bindingsites!(sites, poly)
 end
 
+"""
+    _deletable_above(poly, host)
+
+The largest species index among the particles of `poly` that `lower!` could delete from any
+child built by attaching to `host` — or `0` if there is none.
+
+This is what lets [`collect_compatible_pairs!`](@ref) discard a candidate without building it,
+and it rests on three facts lining up:
+
+  - nauty numbers canonical vertices in order of colour, and `vertexlabels2labptn` orders the
+    colour classes by increasing vertex label, so canonical position runs with label.
+  - `_adjust_labels_and_colors` gives species `s` a label block strictly above species `s-1`,
+    so *species index order is label order* and a bare index comparison decides which of two
+    particles sits higher in the canonical numbering.
+  - `lower!` scans canonical positions downward for the first removable particle.
+
+Together: `lower!` deletes out of the highest label class that still holds a removable
+particle. A particle stays removable once another one is attached elsewhere — attaching cannot
+disconnect what removing it leaves behind — so the parent's own removability is a sufficient
+test, and the host is excluded because the new particle hangs off it.
+"""
+function _deletable_above(poly::Polyform, host::Particle, target, visited, queue)
+    sys = bindingrules(poly)
+    best = 0
+    n = nparticles(poly)
+    for part in poly.particles
+        part === host && continue
+        species_index(part) > best || continue
+        n > 1 && is_cutset(graphrep(poly), sort!([tocanon(poly, w) for w in graphvertices(part, sys)]);
+                           target, visited, queue) && continue
+        best = species_index(part)
+    end
+    return best
+end
+
 function collect_compatible_pairs!(pairs, poly::Polyform)
     sys = bindingrules(poly)
     empty!(pairs)
+    nv_g = nv(graphrep(poly))
+    target, visited, queue = zeros(Bool, nv_g), zeros(Bool, nv_g), zeros(Cint, nv_g)
     # The other half of the sibling problem. Two *open sites of the assembly* lying in one orbit
     # of its automorphism group are interchangeable by a symmetry of everything already built,
     # so attaching the same partner to either gives the same structure — the mirror of the
@@ -512,6 +549,9 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
     for orig_v in canonical_vertices(poly)
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
+        # Per host, not per candidate: which species this host's children could lose instead of
+        # the particle being attached.
+        deletable = _deletable_above(poly, part, target, visited, queue)
         for k in 1:nsites(part, sys)
             site = bindingsites(part, sys, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
@@ -524,6 +564,12 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
             # and building them only to have the canonical form reject them is most of the work
             # an enumeration used to do. See `_orbit_representatives`.
             for siteloc in attachment_reps(sys, color(site))
+                # The new particle is always removable — deleting it leaves exactly `poly`,
+                # which is connected — and it is the whole of its own label class from the
+                # attaching species. So `lower!` stops at that class unless something strictly
+                # above it survives, and if something does, the deletion is not the particle we
+                # are about to attach: the child would be rejected, so never build it.
+                siteloc[1] < deletable && continue
                 mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
                 for r in 0:(nregistrations(site, mate) - 1)
                     push!(pairs, (site, siteloc, r))
