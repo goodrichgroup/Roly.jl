@@ -1,10 +1,6 @@
 # Helpers shared across the test suite.
 
-# Which graph encoding a species gets is not a modelling choice, so the public constructors pick
-# it -- the sparse one whenever it provably carries everything the dart encoding would -- and do
-# not expose the choice. These reach the internal builders to force one, which is how the suite
-# checks that the two agree wherever both are valid, and that the sparse one is rejected where
-# it is not.
+# helper functions to override encoding choice
 dartspecies(p; colors=1:Roly.nfaces(p), locking=true, twists=0) =
     Roly._polyhedronspecies(p, colors, locking, twists, false)
 cyclespecies(p; colors=1:Roly.nfaces(p), locking=true, twists=0) =
@@ -15,9 +11,7 @@ dartsphere(p, r=1; colors=1:Roly.nfaces(p), locking=true, twists=0) =
 cyclesphere(p, r=1; colors=1:Roly.nfaces(p), locking=true, twists=0) =
     Roly._patchysphere(p, r, colors, locking, twists, true)
 
-# The same rules with the on-lattice shortcut switched off, so a system that takes it can be
-# enumerated both ways and the two answers compared. `_onlattice` is derived in the constructor
-# and there is deliberately no way to set it, hence the field surgery.
+# helper function to disable the onlattice check
 function withoutlattice(sys::BindingRules)
     vals = Any[getfield(sys, f) for f in fieldnames(typeof(sys))]
     vals[findfirst(==(:_onlattice), collect(fieldnames(typeof(sys))))] = false

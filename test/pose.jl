@@ -53,12 +53,9 @@ using StaticArrays, Rotations
     @test isapprox(p6 / p5, Pose(-Z + Z, RZ * RY'); atol=1e-12)
     @test isapprox(p5 \ p6, Pose(-X - Z, RY' * RZ); atol=1e-12)
     @test isapprox(p6 \ p5, Pose(-X - Z, RZ' * RY); atol=1e-12)
-end
-@testset "pose rotation types convert" begin
+
     # Rotation types are not closed under multiplication, so a pose can arrive parameterised
-    # differently from the field it is being stored into. 3D species all use `RotMatrix3` so
-    # this does not come up in the hot path, but `Pose` should still behave as a parametric
-    # type rather than erroring.
+    # differently from the field it is being stored into.
     p = Pose(SVector(1.0, 2.0, 3.0), RotXYZ(0.1, 0.2, 0.3))
     q = convert(Pose{3,Float64,RotMatrix3{Float64}}, p)
     @test q isa Pose{3,Float64,RotMatrix3{Float64}}

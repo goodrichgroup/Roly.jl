@@ -1,9 +1,3 @@
-# Geometric symmetry of assembled polyforms, checked against the graph's symmetry number.
-#
-# `sigma` is what identifies structures and what weights them, so if it ever disagreed with the
-# geometry the enumeration would merge or split structures with nothing to say so. The species
-# constructors check this for *particles* via `_check_encoding`; nothing checked it for the
-# assemblies built out of them, which is the case that actually matters.
 using Roly
 using Roly: bindingsites, nsites, color, _siteturns, raise!, collect_compatible_pairs, Polyform
 using LinearAlgebra, StaticArrays, Rotations
@@ -12,7 +6,7 @@ using LinearAlgebra, StaticArrays, Rotations
 Count the proper rotations about a polyform's centroid that map its oriented binding sites onto
 themselves, matching position, color, and frame up to each receiving site's own gauge.
 
-Two subtleties, both learned the hard way:
+Two subtleties:
 
   * a rotation is pinned by where it sends site 1, *unless* two sites share a position -- which
     is exactly what a bond does. So candidates must be deduplicated, or every rotation is
@@ -55,10 +49,7 @@ end
 geometric_symmetry(poly) = length(site_rotations(poly))
 
 """
-The strongest reading: rotations mapping the union of the particles' actual corner sets onto
-itself. `geometric_symmetry` compares site frames only up to each site's gauge, which is the
-resolution the graph works at -- so on its own it could agree with `sigma` by sharing a blind
-spot. Checking the solid closes that, for the species that have one.
+Totations mapping the union of the particles' actual corner sets onto itself. 
 """
 function body_symmetry(poly, sys, rotations)
     bs = [bindingsites(poly, i) for i in 1:nsites(poly)]
@@ -69,7 +60,7 @@ function body_symmetry(poly, sys, rotations)
     return count(Q -> all(p -> any(q -> isapprox(Q * p, q; atol=1e-7), pts), pts), rotations)
 end
 
-@testset "polyform symmetry matches the graph" begin
+@testset "symmetry" begin
     sidefaces(p) = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) < 1e-8]
     faced(shp, sticky) = PolyhedronParticleSpecies(
         shp; colors=[i in sticky ? 1 : 2 for i in 1:nfaces(shp)])
@@ -93,12 +84,11 @@ end
                                 colors=[2, 1, 1, 1, 2],
                                 locking=[true, false, false, false, true])), 3),
         # Fractional twists: shared across an orbit, so the symmetry should survive, and the
-        # graph should keep up with it. This is the case the whole-dart-step restriction used
-        # to forbid.
+        # graph should keep up with it.
         ("fractional, uniform", BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);
                                 colors=[2, 1, 1, 1, 2],
                                 twists=[0.0, 0.37, 0.37, 0.37, 0.0])), 4),
-        # ...and one face turned differently, which breaks the orbit on purpose.
+        # One face turned differently, which breaks the orbit on purpose.
         ("fractional, split", BindingRules([1 2 1 2], PolyhedronParticleSpecies(Prism(3);
                                 colors=[2, 1, 1, 1, 2],
                                 twists=[0.0, 0.37, 0.0, 0.0, 0.0])), 4),
@@ -111,13 +101,13 @@ end
         for poly in polys
             rots = site_rotations(poly)
             @test symmetrynumber(poly) == length(rots)
-            # ...and for a solid, every one of those really does map the body onto itself, so
+            # For a solid, every one of those really does map the body onto itself, so
             # the agreement is not two views sharing the graph's resolution.
             polyhedral && @test body_symmetry(poly, sys, rots) == length(rots)
         end
     end
 
-    # Multi-species too, where the colors of two species must not be conflated.
+    # Multi-species: the colors of two species must not be conflated.
     disks = [PatchyDisk([0.0, π]; colors=[1, 1]) for _ in 1:2]
     multi = BindingRules(reduce(vcat, [[s 1 t 1] for s in 1:2 for t in 1:2]), disks)
     for poly in polygen(multi; maxsize=4)

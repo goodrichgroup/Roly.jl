@@ -8,6 +8,11 @@ using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
             collect_compatible_pairs, tocanon, toorig, BindingRules, Polyform, nbonds,
             site_symmetry, PatchySphere
+
+using Roly: PolyhedronParticleSpecies, Prism, Tetrahedron, BindingRules, Polyform,
+            raise!, collect_compatible_pairs, symmetrynumber, graphrep, nfaces
+using Rotations: RotMatrix3, rotation_angle
+using LinearAlgebra: inv
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
 @testset "PolyhedronParticleSpecies" begin
@@ -46,9 +51,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test occursin("$nf sites", sprint(show, ps))
     end
 
-    # The package convention: outward normal on local x. Roly additionally fixes local z
-    # at the midpoint of the face's first edge, which is what makes the bond twist
-    # well defined.
+    # The package convention: outward normal on local x. Additionally fix local z
+    # at the midpoint of the face's first edge
     for (name, ps, shp, nf, _) in solids
         for i in 1:nf
             psi = bindingsites(ps, i).pose.psi
@@ -62,13 +66,11 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # The twist references have to agree up to `stab` under every label-preserving rotation:
     # that is what `_propagate_faces` establishes, and what makes bonds between symmetry-related
     # faces equivalent. `_canonical_faces` on its own only gets them to agree up to `gauge`,
-    # which is strictly weaker wherever a face is more symmetric than the body around it. The
-    # proof is in twist-references.md; this checks it holds for every element of the group, not
-    # just the ones the construction happened to use.
+    # which is strictly weaker wherever a face is more symmetric than the body around it.
     # Tetrahedron and octahedron are here for the cases with no translation-mated faces at all:
     # a tetrahedron has no antiparallel pair, and an octahedron's are related by inversion,
     # which is not a proper rotation. Neither has an orientation-free convention to find, and
-    # neither needs one — propagation asks only for consistency along the rotations there are.
+    # neither needs one; propagation asks only for consistency along the rotations there are.
     for (name, shp) in [("Cube", Cube()), ("Prism(4,h=2)", Prism(4, 1.0; h=2.0)),
                         ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3)),
                         ("Antiprism(4)", Antiprism(4)), ("Dodecahedron", Dodecahedron()),
@@ -98,7 +100,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         end
     end
 
-    # And the payoff: bonding two faces that a symmetry relates gives congruent dimers, so a
+    # Bonding two faces that a symmetry relates gives congruent dimers, so a
     # space-filling solid assembles into one lattice rather than several.
     for (name, shp) in [("Cube", Cube()), ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3))]
         sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
@@ -116,12 +118,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
             @test isapprox((b.pose.x - a.pose.x)[3], 0; atol=1e-8)
             grown += 1
         end
-        # Exactly one candidate, where there used to be `length(sides)^2`. A monomer's sticky
-        # faces are a single orbit on both sides of the bond — one orbit of the host's own
-        # symmetry to attach *at*, and one of the incoming particle's to attach *through* — and
-        # every one of those pairings gives the same dimer. `collect_compatible_pairs` offers a
-        # representative of each; it used to offer all of them and let the canonical form throw
-        # the repeats away, at the cost of a graph copy and a nauty call each.
+        # Exactly one candidate, redundancies filtered by looking at orbits
         @test grown == 1
     end
 
@@ -134,9 +131,10 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test symmetrynumber(dartspecies(shp)) == 1
     end
 
-    ### Encoding validation
-    # A species is a correct encoding exactly when its graph's symmetry number equals the
-    # rotational symmetry of its site arrangement. The constructors enforce this, so every
+    # encoding
+
+    # The graph symmetry number must equal the rotational symmetry of its site arrangement.
+    # The constructors enforce this, so every
     # species built above already satisfies it; check it explicitly across the library.
     for (_, ps, shp, _, order) in solids
         # Distinct labels: both encodings describe the arrangement, and both give 1.
@@ -156,7 +154,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test symmetrynumber(sphere) == site_symmetry(sphere) == order
     end
 
-    ### Site stabilisers
+    # Site stabilisers
     # How much of a site's own symmetry the whole particle keeps. At most its gauge, and the
     # ratio is how many distinct ways a partner can attach there: turns in the stabiliser put
     # the same body in the same place with only its sites permuted.
@@ -177,16 +175,16 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test Roly.sitestabilisers(capped) == [c == 2 ? 4 : 2 for c in caps]
     @test registrations(capped) == [c == 2 ? 1 : 2 for c in caps]
 
-    # The case the registration story turns on. A triangular prism's side faces are squares
-    # when h == a — gauge 4 — but the prism is only 2-fold about them, so a partner can attach
+    # A triangular prism's side faces are squares
+    # when h == a (gauge 4) but the prism is only 2-fold about them, so a partner can attach
     # two ways: in the plane, or tipped out of it.
     tri = PolyhedronParticleSpecies(Prism(3); colors=geometriclabels(Prism(3)))
     @test gauges(tri) == [3, 4, 4, 4, 3]
     @test Roly.sitestabilisers(tri) == [3, 2, 2, 2, 3]
     @test registrations(tri) == [1, 2, 2, 2, 1]
 
-    # Make the prism taller and those faces are rectangles: gauge and stabiliser agree at 2,
-    # leaving a single registration. This is why the tall prisms stay planar.
+    # Make the prism taller, so that faces become rectangles: gauge and stabiliser agree at 2,
+    # leaving a single registration.
     tall = Prism(3, 1.0; h=2.0)
     tallps = PolyhedronParticleSpecies(tall; colors=geometriclabels(tall))
     @test gauges(tallps) == [3, 2, 2, 2, 3]
@@ -202,17 +200,16 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # Deriving the labelling from the coloring cannot claim a symmetry that is not there: one
     # color on all four faces of a triangular pyramid does not make its base equivalent to its
     # sides, and the derivation splits them, leaving the 3-fold axis rather than a tetrahedral
-    # 12. Saying it in labels instead is what used to be rejected here; it can no longer be
-    # said at all.
+    # 12.
     pyramid = PolyhedronParticleSpecies(Pyramid(3); colors=fill(1, 4))
     @test length(unique(Roly.labels(graphrep(pyramid)))) == 2
     @test symmetrynumber(pyramid) == site_symmetry(pyramid) == 3
     # The sparse encoding imposes a cyclic order, which is not the symmetry of a tetrahedral
     # or octahedral patch arrangement: it claims n where the truth is |G|. This is the failure
-    # that using `cycleencoding`/`dartencoding` does *not* rule out on its own.
+    # that using `cycleencoding`/`dartencoding` does not rule out on its own.
     @test_throws ArgumentError cyclesphere(Tetrahedron(), 1.0; colors=fill(1, 4))
     @test_throws ArgumentError cyclesphere(Cube(), 1.0; colors=fill(1, 6))
-    # The dart encoding is the one that describes them.
+    # The dart encoding is the one that describes them
     @test symmetrynumber(dartsphere(Tetrahedron(), 1.0; colors=fill(1, 4))) == 12
 
     # A cube with the two caps distinguished from the four sides keeps the 4-fold axis
@@ -244,9 +241,9 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test color(bindingsites(ps, 1)) == 3          # the copy is independent
     @test_throws ArgumentError setcolors!(cp, [1, 2])
 
-    # One that groups them differently does need a new graph. This cube's colors are nearly all
+    # A recoloring that groups sites differently does need a new graph. This cube's colors are nearly all
     # distinct, so it was built as a bare 6-cycle; making every face alike would ask that cycle
-    # to report the full 24, which it cannot. Refused, rather than left misreporting itself.
+    # to report the full 24, which it cannot, so it errors.
     @test symmetrynumber(cp) == symmetrynumber(ps) == 1
     @test_throws ArgumentError setcolors!(cp, fill(10, 6))
     @test symmetrynumber(cp) == 1                  # and the failed call leaves it untouched
@@ -290,7 +287,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test !overlap(UnitCube => id, UnitCube => shifted(1.3, rot45))
 
     # An edge-on-edge configuration, which no face normal separates: this is what the
-    # edge cross-product axes are for.
+    # edge cross-product axes are for
     edge = RotMatrix3{Float64}(RotZ(π / 4) * RotX(π / 4))
     @test !overlap(UnitCube => id, UnitCube => shifted(1.5, edge))
     @test overlap(UnitCube => id, UnitCube => shifted(0.95, edge))
@@ -300,18 +297,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test !overlap(ps => id, ps => shifted(10.0))
     end
 
-    # `overlap` answers with the bounding and inscribed spheres where it can and separating axes
-    # otherwise, and the two have to agree. Check against the full candidate set over random
-    # configurations, spread across the band between the two spheres where neither decides.
-    #
-    # This began as the guard on an exact fast path for translates of a centrally symmetric
-    # solid, and earned its keep immediately: the first version dropped the central-symmetry
-    # condition and this caught 1673 disagreements in 20000 tetrahedron configurations. A
-    # Minkowski difference body's faces come from three sources and only two are faces of the
-    # solid; the third is edge against edge, which is why separating axes need cross products at
-    # all, and a tetrahedron's difference body is a cuboctahedron. The fast path itself is gone —
-    # it measured as worth nothing once the on-lattice shortcut existed — but a randomized check
-    # that `overlap` agrees with the axes it is derived from is worth keeping either way.
+    # check SAT overlap against in and out radii
     function fullsat(s1, pose1, s2, pose2)
         axes = Iterators.flatten((
             (pose1.psi * n for n in s1.normals), (pose2.psi * n for n in s2.normals),
@@ -344,9 +330,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test 0.1 < overlapping / 4000 < 0.9
     end
 
-    # Number of proper rigid motions mapping an assembly onto itself, computed from the
-    # particle poses alone. Every symmetry maps particle 1 onto some particle, which fixes
-    # the rotation, so the candidates are just the particles.
+    # Number of proper rigid motions mapping a polyform onto itself, computed from the
+    # particle poses alone.
     function geometric_symmetry(poly)
         xs = [p.pose.x for p in poly.particles]
         Rs = [p.pose.psi for p in poly.particles]
@@ -406,7 +391,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         for v in eachindex(p.canon2orig)
             @test tocanon(p, toorig(p, v)) == v
         end
-        # Particle vertex blocks tile the graph exactly; a stale leading vertex after a
+        # Particle vertex blocks cover the graph exactly; a stale leading vertex after a
         # removal would leave a block hanging off the end.
         blocks = sort(reduce(vcat, [collect(Roly.graphvertices(pt, sys)) for pt in p.particles]))
         @test blocks == 1:nv(graphrep(p))
@@ -439,23 +424,18 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # Four dart pairs for a square-to-square bond, one reference pair for the mixed one.
     @test nbonds(polygen(same; maxsize=2)[end]) == 4
     @test nbonds(polygen(mixed; maxsize=2)[end]) == 1
-end
 
-@testset "twists set the bond registry" begin
-    using Roly: PolyhedronParticleSpecies, Prism, Tetrahedron, BindingRules, Polyform,
-                raise!, collect_compatible_pairs, symmetrynumber, graphrep, nfaces
-    using Rotations: RotMatrix3, rotation_angle
-    using LinearAlgebra: inv
+    # twists
 
     shp = Prism(3)
     sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
     colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
     counts(sys) = [polyenum(sys; maxsize=i)[1] for i in 1:5]
 
-    # Turning a whole orbit by the same amount turns the partner by *twice* it, since the offset
+    # Turning a whole orbit by the same amount turns the partner by twice that, since the offset
     # lands on both sides of the face-to-face flip. Here that is 2*90 = 180 degrees, which is a
     # symmetry of the prism about a side face (stab = 2), so the lattice is untouched however
-    # far the sides are turned -- and the symmetry number holds, the orbit being intact.
+    # far the sides are turned
     for t in (0, π/2, π, 3π/2)
         ps = PolyhedronParticleSpecies(shp; colors,
                                        twists=[i in sides ? t : 0.0 for i in 1:nfaces(shp)])
@@ -463,7 +443,7 @@ end
         @test counts(BindingRules([1 first(sides) 1 first(sides)], ps)) == [1, 2, 3, 6, 10]
     end
 
-    # Turning *one* face of an orbit differently is a deliberate break, and the labelling has to
+    # Turning one face of an orbit differently is a deliberate break, and the labeling has to
     # record it or the graph would keep claiming a symmetry the frames no longer have. The twist
     # is folded into the key `siteorbits` groups by, so the orbit splits.
     split = PolyhedronParticleSpecies(shp; colors,
@@ -492,14 +472,10 @@ end
     # A triangular face has three darts, so three steps is the identity.
     @test isapprox(dimer(2π).particles[2].pose.psi, a.particles[2].pose.psi; atol=1e-8)
 
-    # And the encoding notices, which is the whole reason the twist rotates the face's corner
-    # list rather than just its frame. `contact_pairing` anchors on the first vertex of each
-    # site's range because that is the dart local z points at; turning the frame alone would
-    # leave the graph recording a coincidence that is no longer there, and two genuinely
-    # different assemblies would share a canonical form and be merged.
+    # the encoding picks it up
     @test graphrep(a) != graphrep(b)
 
-    # Any angle, not just whole dart steps. A tetrahedron face has three darts, so 2π/3 lands
+    # Any angle is allowed, not just whole dart steps. A tetrahedron face has three darts, so 2π/3 lands
     # back on a dart and 0.4 does not; both are allowed and both turn the partner by exactly
     # the angle asked for.
     for θ in (0.4, 1.0, 2π/3 + 0.1)

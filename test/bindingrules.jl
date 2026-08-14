@@ -2,6 +2,16 @@ using Roly: nspecies, nbonds, nsites, dimension, species,
             interactionmatrix, bonded_colors, bonded_sites, bonded_species,
             siteloc2color, color2siteloc, color2species, isinert, compatible_sitelocs
 
+using Roly: PolygonParticleSpecies, PolyhedronParticleSpecies, PatchyDisk, Cube, Prism,
+            Tetrahedron, Polyhedron, facenormal, nfaces
+
+using Roly: compatible_sitelocs, attachment_reps, siteloc2color, collect_compatible_pairs,
+            raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
+            Cube, Prism, nfaces, color, bindingsites
+
+using NautyGraphs: NautyDiGraph
+using StaticArrays: SVector
+
 @testset "bindingrules" begin
     sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
@@ -58,21 +68,15 @@ using Roly: nspecies, nbonds, nsites, dimension, species,
 
     @test g1 ≃ g2
     @test !(g1 ≃ g3)
-end
 
-@testset "on-lattice detection" begin
-    using Roly: PolygonParticleSpecies, PolyhedronParticleSpecies, PatchyDisk, Cube, Prism,
-                Tetrahedron, Polyhedron, facenormal, nfaces
-    using StaticArrays: SVector
-
+    # on-lattice check
     poly(n, a=1.0) = PolygonParticleSpecies(n, a; colors=fill(1, n))
     sides(p) = [i for i in 1:nfaces(p) if abs(facenormal(p, i)[3]) < 1e-8]
     faced(p, sticky; kw...) =
         PolyhedronParticleSpecies(p; colors=[i in sticky ? 1 : 2 for i in 1:nfaces(p)], kw...)
 
     # A system is on-lattice when every species tiles space at one size and no bond can leave
-    # the tiling. Then two particles overlap only by occupying the same cell, and `overlap`
-    # answers with a subtraction. Anything unrecognised just takes the real geometry.
+    # the tiling.
     for (name, sys) in [
         ("squares",             BindingRules([1 1 1 1], poly(4))),
         ("triangles",           BindingRules([1 1 1 1], poly(3))),
@@ -82,17 +86,12 @@ end
         @test sys._onlattice
     end
 
+    # test for non-tiling
     for (name, sys) in [
-        # Pentagons do not tile the plane.
         ("pentagons",           BindingRules([1 1 1 1], poly(5))),
-        # Two tilings at different scales share no cells.
         ("squares, two sizes",  BindingRules([1 1 2 1], [poly(4), poly(4, 2.0)])),
-        # Same size, but a square and a triangle bond into no one tiling.
         ("squares + triangles", BindingRules([1 1 2 1], [poly(4), poly(3)])),
-        # 3D does not opt in at all. Cubes tile space and a cube version was written and
-        # measured: 1.9% on polycubes, where nauty dominates, against the subtlest part of the
-        # check to get right. Prisms tile too, and would additionally need the bond table, since
-        # a cap-to-side bond does not carry a cell to a cell.
+        # 3D does not opt in.
         ("polycubes",           BindingRules([1 1 1 1], faced(Cube(), 1:6))),
         ("square prisms",       BindingRules([1 1 1 1], faced(Prism(4, 1.0; h=2.0),
                                                              sides(Prism(4, 1.0; h=2.0))))),
@@ -104,12 +103,7 @@ end
         @test !sys._onlattice
     end
 
-    # The point of it: the shortcut has to agree with the real geometry everywhere it is taken.
-    # Enumerate each lattice both ways and require identical counts -- a single wrong overlap
-    # answer would change them -- and require the OEIS sequence on top, so that agreeing on a
-    # wrong answer is ruled out too. These are the *one-sided* counts: a 2D assembly cannot be
-    # turned over, so mirror images stay distinct, unlike the 3D prisms in `test/enumeration.jl`
-    # that tile the same lattices.
+    # compare with un-shortcutted versions
     for (n, want) in ((3, [1, 1, 1, 4, 6, 19, 43, 120]),    # https://oeis.org/A006534
                       (4, [1, 1, 2, 7, 18, 60, 196]),       # https://oeis.org/A000988
                       (6, [1, 1, 3, 10, 33, 147]))          # https://oeis.org/A006535
@@ -121,13 +115,8 @@ end
         @test !slow._onlattice
         @test [polyenum(slow; maxsize=i)[1] for i in eachindex(want)] == counts
     end
-end
-
-@testset "attachment orbit representatives" begin
-    using Roly: compatible_sitelocs, attachment_reps, siteloc2color, collect_compatible_pairs,
-                raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
-                Cube, Prism, nfaces, color, bindingsites
-    using NautyGraphs: NautyDiGraph
+    
+    # orbit testing
 
     # A cube with every face alike has one orbit of six sites, so six compatible mates collapse
     # to one representative. With every face distinct there is nothing to collapse.
@@ -141,15 +130,7 @@ end
         @test length(attachment_reps(distinct, c)) == length(compatible_sitelocs(distinct, c))
     end
 
-    # The claim itself, checked rather than argued, on both sides of the bond: the children
-    # reachable through *every* compatible mate site and from *every* open host site are exactly
-    # those reachable from the representatives. Anything dropped is a repeat, so the two sets of
-    # canonical forms must be equal.
-    #
-    # The host side is here because getting it wrong is silent and expensive. nauty's orbit array
-    # is indexed by the numbering it was handed, and `canonize=true` then permutes the graph, so
-    # reading the partition against the graph afterwards merges unrelated vertices — which merged
-    # open sites and quietly lost most of the polycubes. See `orbitreps!`.
+    # check that representatives are enough, and everything else is just duplicates
     function children(poly, sitelocs_of; allsites=true)
         sys = Roly.bindingrules(poly)
         out = Set{NautyDiGraph}()

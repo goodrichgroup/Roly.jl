@@ -1,8 +1,6 @@
 @testset "plotting" begin
-    # Smoke tests for the Makie extension: every species must have a `plot_particlespecies!`
-    # method reachable through `render`, and a polyform of them must draw as well. CairoMakie
-    # is only a stand-in here — it has no depth buffer, so 3D output is not to be trusted
-    # visually, but it exercises the same code path as GLMakie.
+    # every species must have a `plot_particlespecies!`
+    # method reachable through `render`, and a polyform of them must draw as well.
     ext = Base.get_extension(Roly, :MakieExt)
     @test !isnothing(ext)
 
@@ -40,7 +38,7 @@
     # With no rules in scope every site counts as bonding, so nothing is tinted away.
     @test all(bonding1)
 
-    # By default sites no bond can use are greyed out, which is what markers do.
+    # By default inert site are greyed out, which is what markers do.
     rules = BindingRules([1 1 1 6], cube)
     _, pal, colors, bonding = ext._resolve_colors(cube, 1, rules, nothing)
     @test count(!, bonding) == 4

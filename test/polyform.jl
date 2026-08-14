@@ -95,8 +95,7 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     using Roly: graphvertices, PolyhedronParticleSpecies, UnitCube, Cube
 
     # A monomer's canon2orig is the permutation `canonize!` applied to the species graph,
-    # not the identity. Checking it via the edges: every edge of the species graph must
-    # reappear between the corresponding canonical vertices.
+    # not the identity.
     for spcs in (PolygonParticleSpecies(6; colors=[1, 2, 1, 2, 1, 2]),
                  PolygonParticleSpecies(4; colors=[1, 1, 1, 1]))
         s = BindingRules([1 1 1 3], spcs)
@@ -115,8 +114,7 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     end
 
     # Removing a particle compacts the graph's vertex numbering, so the surviving
-    # particles' vertex blocks have to be compacted with it: they must still tile the
-    # graph exactly, with nothing left hanging off the end.
+    # particles' vertex blocks have to be adjusted
     sys_pm = BindingRules([1 1 1 3; 1 2 1 4], PolygonParticleSpecies(4, 1.0; colors=[1, 1, 1, 1]))
     for p in polygen(sys_pm; maxsize=6)
         nparticles(p) < 2 && continue

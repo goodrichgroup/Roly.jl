@@ -41,8 +41,7 @@
     # @test nstrs_137_gen == 137
     # @test nstrs_cyc_gen == 283
 
-    # All four edges the same sticky stuff, so any edge binds any edge. A square is 4-fold, so
-    # that is the same square lattice the old edge-1-to-edge-3 pairing described.
+
     I_polymino = BindingRules([1 1 1 1], PolygonParticleSpecies(4, 1.0; colors=fill(1, 4)))
 
     # Number of one-sided polyminoes (https://oeis.org/A000988) [starting from 1]
@@ -55,18 +54,7 @@
     n_polyiamonds = [1, 1, 1, 4, 6, 19, 43, 120, 307, 866]
     n_polyiamonds_cumulative = cumsum(n_polyiamonds)
 
-    # 3D lattice animals. Each of these needs ring closures to work — the first polycube with
-    # a ring is the 2x2 square tetracube, the first polyiamond the six-triangle hexagon — so
-    # they exercise bond registration and dart pairing end to end.
-    #
-    # Every one is stated in colors alone: the sticky faces get one color, the rest another,
-    # and the symmetry follows. Nothing is said about labels, and nothing needs to be — see
-    # `_check_labelling` for why saying it would be worse than redundant.
-    #
-    # The planar cases come out *free* rather than one-sided: a flat assembly can be turned
-    # over by a rotation about an axis in its plane, which is a rigid motion in 3D, so mirror
-    # images are the same structure. That is the 3D answer, and differs from the 2D species
-    # above, where reflections are not available.
+    # 3D lattice animals
     sidefaces(p) = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) < 1e-8]
     function rules(shp, sticky)
         colors = [i in sticky ? 1 : 2 for i in 1:nfaces(shp)]
@@ -74,24 +62,13 @@
                             PolyhedronParticleSpecies(shp; colors))
     end
 
-    # Whether a bond admits more than one registration is what separates these two groups, and
-    # it is `gauge ÷ stab` of the sticky face: the turns the face has that the whole particle
-    # does not. Every solid here has gauge == stab, so each bond lands in one registration and
-    # the assembly is confined to its lattice.
     lattice_animals = [
-        # Cubes bonded on all six faces fill space: polycubes up to rotation. A cube face is
-        # 4-fold and so is the cube about it, so a neighbour can only be attached one way.
         ("polycubes (https://oeis.org/A000162)", Cube(), 1:nfaces(Cube()),
          [1, 1, 2, 8, 29, 166, 1023]),
-        # Square prisms with h != a tile a plane on their four sides. The side faces are
-        # rectangles, 2-fold about their normals, and the prism is 2-fold about them too.
         ("polyominoes (https://oeis.org/A000105)", Prism(4, 1.0; h=2.0),
          sidefaces(Prism(4, 1.0; h=2.0)), [1, 1, 2, 5, 12, 35, 108]),
-        # Triangular prisms tile a plane, with neighbouring triangles related by a π rotation
-        # rather than a translation. That the ring of six closes is the test.
         ("polyiamonds (https://oeis.org/A000577)", Prism(3, 1.0; h=2.0),
          sidefaces(Prism(3, 1.0; h=2.0)), [1, 1, 1, 3, 4, 12, 24]),
-        # Hexagonal prisms tile a plane by translation: free polyhexes.
         ("polyhexes (https://oeis.org/A000228)", Prism(6, 1.0; h=2.0),
          sidefaces(Prism(6, 1.0; h=2.0)), [1, 1, 3, 7, 22, 82, 333]),
     ]
@@ -99,7 +76,7 @@
     for (name, shp, sticky, want) in lattice_animals
         sys = rules(shp, sticky)
         ps = species(sys, 1)
-        # The premise of the case: one registration per bond, so it cannot leave its lattice.
+        # one registration per bond, so it cannot leave the lattice.
         @test all(i -> Roly.nregistrations(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
                   sticky)
         @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
@@ -107,10 +84,7 @@
 
     # The same two tilings from prisms whose side faces are *squares* rather than rectangles.
     # The face is then 4-fold about its normal where the prism is only 2-fold about it, so the
-    # two solids differ in `gauge` but not in `stab` — and since registrations come from the
-    # particle's symmetry rather than the face's, they must enumerate identically. Two
-    # differently-shaped solids modelling the same tiling agreeing is the strongest check that
-    # the twist references are being pinned at the right strength.
+    # two solids differ in `gauge` but not in `stab`.
     for (shp, want) in [(Prism(3), [1, 2, 3, 6, 10, 22]), (Prism(6), [1, 2, 5, 12, 34])]
         sys = rules(shp, sidefaces(shp))
         b = Roly.bindingsites(species(sys, 1), first(sidefaces(shp)))
@@ -119,10 +93,7 @@
         @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
     end
 
-    # Freeing those side faces from their orientation is how the out-of-plane lattice is asked
-    # for. The square face then contributes its own 4-fold symmetry instead of the prism's
-    # 2-fold, so a bond admits two registrations — the in-plane one and one standing the
-    # neighbour on its side — and the assemblies leave the plane.
+    # setting locking=false, allows out of plane binding
     for (shp, want) in [(Prism(3), [1, 3, 6, 22, 73, 357]), (Prism(6), [1, 3, 12, 81, 812])]
         sides = sidefaces(shp)
         colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
@@ -134,11 +105,7 @@
         @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
     end
 
-    # 2D hexagons tiling the plane. The 3D prisms above give *free* polyhexes, since a flat
-    # assembly can be turned over by a rotation about an in-plane axis; in 2D that motion does
-    # not exist, so the same tiling counts chiral pairs separately and gives the one-sided
-    # sequence instead. The two differ from size 4 on, where 3 of the 7 free tetrahexes are
-    # chiral: 7 free against 10 one-sided.
+    # 2D hexagons (one-sided) vs 3D hexagons (free)
     hexagons = BindingRules([1 1 1 1], PolygonParticleSpecies(6, 1.0; colors=fill(1, 6)))
     n_polyhexes_onesided = [1, 1, 3, 10, 33, 147]     # https://oeis.org/A006535
     @test [polyenum(hexagons; maxsize=i)[1] for i in eachindex(n_polyhexes_onesided)] ==
@@ -184,9 +151,7 @@
         @test abs(c.n - n_polyminoes_cumulative[9]) / n_polyminoes_cumulative[9] < 0.5
     end
 
-    # Estimation. The tolerance is deliberately loose: sweeping 200 seeds of this configuration
-    # gives a median relative error of 1.7% and a worst case of 6.9%, so 25% is not a fit to the
-    # seed below but headroom against the estimator's heavy tail.
+    # Estimation. The tolerance is deliberately loose
     c = countpolyforms(I_polymino; maxsize=9, exact_budget=500, ntrials=5, rng=Xoshiro(1))
     @test !c.exact
     @test c.size_truncated
@@ -213,13 +178,13 @@
     # A budget too small to reach size 2 is raised to one that can, instead of failing.
     c = countpolyforms(I_polymino; maxsize=9, exact_budget=1, rng=Xoshiro(5))
     @test c.n >= 4
-end;
 
-@testset "multiple species" begin
+    # replacable species test
+
     # `k` copies of one species, every bonding site compatible across every pair of them, so
     # the shapes are exactly the single-species shapes and the only new freedom is which
-    # species sits at each position. That makes the count checkable in closed form.
-    #
+    # species sits at each position. 
+
     # Each species below has its two bonding sites facing opposite ways, so assemblies are
     # straight chains: one shape per size, and the only automorphism that moves particles is
     # reversal. Whether reversal is available is decided by `alike` — with the two sites the
@@ -275,22 +240,19 @@ end;
             end
         end
     end
-end;
 
-# Reference enumerations carried over from an earlier implementation.
-#
-# `data/enumeration_reference.txt` holds 2725 assembly systems together with the size counts
-# each produced under commit 1bfe470, the last revision of the old implementation.
-# One system per line, `geometry|bond rows|expected counts`, the bond rows comma-separated and
-# each row `species1 site1 species2 site2`.
-@testset "reference enumerations" begin
+
+    # Reference enumerations
+   
+    # `data/enumeration_reference.txt` holds 2725 assembly systems together with the size counts
+    # each produced under commit 1bfe470, the last revision of the old implementation.
+    # One system per line, `geometry|bond rows|expected counts`, the bond rows comma-separated and
+    # each row `species1 site1 species2 site2`.
     referencespecies(s) = s === :square   ? UnitSquare :
                           s === :triangle ? UnitTriangle :
                           s === :hexagon  ? UnitHexagon :
                           error("unknown geometry $s")
 
-    # Structures per size, which pins down far more than the total: two implementations can
-    # agree on how many structures exist while disagreeing about where they sit.
     function sizecounts(sys)
         counts = Int[]
         polyenum(sys) do _, n

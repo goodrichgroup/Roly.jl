@@ -50,19 +50,14 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
     @test overlap(UnitSquare => id, UnitSquare => id)
     @test !overlap(UnitSquare => id, UnitSquare => far)
 
-    # Two squares d > rmin+rmin=1.0 but overlapping due to π/4 rotation — requires SAT.
-    # The old rmin check would incorrectly return no-overlap here.
+    # Two squares d > rmin+rmin=1.0 but overlapping due to π/4 rotation -- requires SAT.
     @test overlap(UnitSquare => id, UnitSquare => Pose(SVector(1.05, 0.0), Angle2d(π/4)))
 
     pent = PolygonParticleSpecies(5)
     @test overlap(pent => id, pent => Pose(SVector(0.3, 0.3), Angle2d(π/5)))
     @test !overlap(pent => id, pent => Pose(SVector(10.0, 5.0), Angle2d(π/3)))
 
-    # Two *aligned* unit squares diagonally offset. This is the case a distance test cannot
-    # answer, and the one the old inradius shortcut got wrong: it reported no overlap for any
-    # offset past 1.0, which two squares at (0.9, 0.9) comfortably exceed while sharing most of
-    # their area. Enumeration never noticed because it only ever asks about lattice positions,
-    # which is exactly the kind of premise a fast path should not be quietly resting on.
+    # Two aligned unit squares diagonally offset
     at(x, y, θ=0.0) = Pose(SVector(x, y), Angle2d(θ))
     for (dx, dy) in ((0.9, 0.9), (0.99, 0.99), (0.6, 0.6), (0.9, 0.0), (0.0, 0.0))
         @test overlap(UnitSquare => id, UnitSquare => at(dx, dy))
@@ -70,6 +65,7 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
     for (dx, dy) in ((1.0, 1.0), (1.1, 1.1), (1.01, 0.0), (2.0, 0.5))
         @test !overlap(UnitSquare => id, UnitSquare => at(dx, dy))
     end
+    
     # The same for the other two regular tilings, at their own lattice-adjacent orientations.
     @test overlap(UnitHexagon => id, UnitHexagon => at(0.9, 0.9))
     @test overlap(UnitTriangle => id, UnitTriangle => at(0.1, 0.1, π))

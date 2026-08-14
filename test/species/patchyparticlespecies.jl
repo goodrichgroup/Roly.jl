@@ -11,7 +11,21 @@ using Roly:
     color,
     could_contact,
     overlap,
-    symmetrynumber
+    symmetrynumber,
+    site_symmetry
+
+
+using Roly: PatchySphere, Polyhedron, Tetrahedron, Cube, Dodecahedron, Prism,
+            nfaces, facecentroid, geometriclabels, rotationgroup, symmetrynumber,
+            graphrep, edgemidpoint
+
+using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_compatible_pairs,
+            nparticles
+
+using Rotations: RotMatrix3, rotation_angle
+using Graphs: cycle_digraph
+using NautyGraphs: NautyDiGraph
+using LinearAlgebra: normalize, dot, det, norm
 
 @testset "PatchyParticleSpecies" begin
     # basic construction for n > 2
@@ -44,7 +58,8 @@ using Roly:
     @test nv(graphrep(ps2)) == 2
     @test bindingsites(ps2, 1).vertices == 1:1
     @test bindingsites(ps2, 2).vertices == 2:2
-    # Two equivalent patches give a symmetry number of 2. The old 4-cycle padding reported 4.
+
+    # Two equivalent patches give a symmetry number of 2.
     @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
     @test bindingsites(ps2, 1).pose.x ≈ SVector(1.0, 0.0) atol = 1e-10
     @test bindingsites(ps2, 2).pose.x ≈ SVector(-1.0, 0.0) atol = 1e-10
@@ -64,7 +79,7 @@ using Roly:
     @test color(bindingsites(ps_col, 3)) == 1
     @test color(bindingsites(ps_col, 4)) == 2
 
-    # symmetrynumber: all distinct → 1, all equal → n
+    # symmetrynumber: all distinct -> 1, all equal -> n
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3])) == 1
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
     @test symmetrynumber(PatchyDisk([0.0, π / 2, π, 3π / 2]; colors=[1, 1, 1, 1])) == 4
@@ -94,13 +109,9 @@ using Roly:
     @test overlap(pd => id, pd => close)
     @test !overlap(pd => id, pd => bonded)
     @test !overlap(pd => id, pd => far)
-end
 
-@testset "PatchySphere" begin
-    using Roly: PatchySphere, Polyhedron, Tetrahedron, Cube, Dodecahedron, Prism,
-                nfaces, facecentroid, geometriclabels, rotationgroup, symmetrynumber,
-                graphrep, edgemidpoint
-    using LinearAlgebra: normalize, dot, det, norm
+
+    # spheres
 
     for (name, shp, np, order) in [("T", Tetrahedron(), 4, 12), ("O", Cube(), 6, 24),
                                    ("I", Dodecahedron(), 12, 60), ("D5", Prism(5), 7, 10)]
@@ -121,7 +132,7 @@ end
             @test isapprox(det(b.pose.psi), 1; atol=1e-10)
         end
 
-        # Same labelling rules and the same graph as the polyhedron species.
+        # Same labeling rules and the same graph as the polyhedron species.
         @test symmetrynumber(ps) == 1
         @test symmetrynumber(PatchySphere(shp, 2.0; colors=geometriclabels(shp))) == order
         @test order == length(rotationgroup(shp))
@@ -129,7 +140,7 @@ end
         @test nv(graphrep(dartsphere(shp, 2.0))) == 2 * Roly.nedges(shp)
     end
 
-    # Naming a rotation group resolves to the solid `Polyhedron` realizes it with.
+    # Naming a rotation group resolves to the `Polyhedron` realizes it with.
     @test nsites(PatchySphere(Tetrahedral())) == 4
     @test nsites(PatchySphere(Octahedral())) == 6
     @test nsites(PatchySphere(Icosahedral())) == 12
@@ -147,51 +158,39 @@ end
     # Patchy particles skip the bounding-sphere pre-check, since it would just repeat the
     # overlap test, so could_contact is unconditionally true.
     @test could_contact(ps => id, ps => apart(50.0))
-end
 
-@testset "encoding validation" begin
-    using Roly: PatchyDisk, PatchyParticleSpecies, site_symmetry, symmetrynumber
-    using Graphs: cycle_digraph
-    using NautyGraphs: NautyDiGraph
+    # encoding 
 
-    # Evenly spaced identical patches really do have that symmetry, so they build.
+    # Evenly spaced identical patches really do have that symmetry
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
     @test site_symmetry(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
     @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
     @test site_symmetry(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
 
-    # Unevenly spaced ones do not, and giving them one color cannot pretend otherwise: the
-    # labelling is derived from the coloring *and the geometry*, so it splits patches no
-    # rotation carries onto one another and the symmetry comes out 1 either way.
+    # Unevenly spaced ones do not, no matter what colors
     @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0]; colors=[1, 1, 1])) == 1
     @test length(unique(labels(graphrep(PatchyDisk([0.0, 0.5, 3.0]; colors=[1, 1, 1]))))) == 3
     @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0])) == 1
 
     # The general constructor takes the graph's structure but derives its labels, so a
-    # labelling that does not describe the arrangement cannot be supplied in the first place:
-    # three unevenly spaced patches come out distinct however the graph was labelled.
+    # labeling that does not describe the arrangement cannot be supplied in the first place.
+    # Three unevenly spaced patches come out distinct however the graph was labelled.
     uneven = [SVector(cos(t), sin(t)) for t in (0.0, 0.5, 3.0)]
     for labs in (Cint[1, 1, 1], Cint[1, 2, 3])
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3); vertex_labels=labs), 1.0, uneven)
         @test symmetrynumber(ps) == site_symmetry(ps) == 1
         @test labels(graphrep(ps)) == Cint[1, 2, 3]
     end
-    # Evenly spaced patches of one color are equivalent, and the derivation finds that too.
+    # Evenly spaced patches of one color are equivalent
     even = [SVector(cos(t), sin(t)) for t in (0.0, 2π / 3, 4π / 3)]
     ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3))
     @test symmetrynumber(ps) == site_symmetry(ps) == 3
-end
 
-@testset "patch twists set the bond registry" begin
-    using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_compatible_pairs,
-                nparticles
-    using Graphs: cycle_digraph
-    using NautyGraphs: NautyDiGraph
-    using Rotations: RotMatrix3, rotation_angle
 
-    # A patch is one graph vertex, so it pins no turn about its own normal and its frame names
-    # the bond outright: `patch_twists` is the keyed-connector knob, and turning one turns the
-    # partner it holds. Nothing else in the package exercises the 3D general constructor.
+    # twists
+
+    # A patch is one graph vertex, so it pins no turn about its own normal and its frame fully 
+    # determines the bond
     pos = [SVector(1.0, 0.0, 0.0), SVector(-1.0, 0.0, 0.0),
            SVector(0.0, 1.0, 0.0), SVector(0.0, -1.0, 0.0)]
     function dimer(twists)

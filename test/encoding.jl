@@ -17,8 +17,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
         ("Octahedron", Octahedron(), 6, 12, 8, 24),
         ("Dodecahedron", Dodecahedron(), 20, 30, 12, 60),
         ("Icosahedron", Icosahedron(), 12, 30, 20, 60),
-        # Pyramid(n) is C_n. Note Pyramid(3) is combinatorially a tetrahedron but its default
-        # height makes the lateral edges longer than the base edges, so its true group is C_3.
+        # Pyramid(n) is C_n. Pyramid(3) is combinatorially a tetrahedron but its default
+        # height makes the vertical edges longer than the base edges, so its true group is C_3.
         ("Pyramid(3)", Pyramid(3), 4, 6, 4, 3),
         ("Pyramid(5)", Pyramid(5), 6, 10, 6, 5),
         ("Pyramid(7)", Pyramid(7), 8, 14, 8, 7),
@@ -62,7 +62,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     p = Cube()
     cs, fs = corners(p), faces(p)
 
-    # The library solids all pass.
+    # The library polyhedra all pass.
     for (_, q, _, _, _, _) in solids
         @test Polyhedron(corners(q), faces(q)) isa Polyhedron
     end
@@ -131,7 +131,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     end
     # A pyramid's sides are isosceles triangles: no rotational symmetry at all, despite degree 3.
     @test facegauge(Pyramid(5)) == [5, 1, 1, 1, 1, 1]
-    # The case the whole registration story turns on: a prism's side faces are squares when
+    # A prism's side faces are squares when
     # h == a and mere rectangles otherwise, so their gauge halves while the degree stays 4.
     @test facegauge(Prism(3)) == [3, 4, 4, 4, 3]
     @test facegauge(Prism(3, 1.0; h=2.0)) == [3, 2, 2, 2, 3]
@@ -149,15 +149,15 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test symnum(g) == 1
     @test symnum(cycleencoding(6; labels=fill(1, 6))[1]) == 6
 
-    # Two sites give a plain 2-cycle, one vertex each: a pair of opposite arcs inside a
-    # particle is fine now that bonds are recognised by joining different particles.
+    # Two sites give a plain 2-cycle, one vertex each
     g2, ranges2 = cycleencoding(2)
     @test nv(g2) == 2
     @test ne(g2) == 2
     @test ranges2 == [1:1, 2:2]
     @test symnum(g2) == 1
     @test symnum(cycleencoding(2; labels=[1, 1])[1]) == 2
-    # And a single site is a single vertex.
+
+    # And a single site is a single vertex
     g1, ranges1 = cycleencoding(1)
     @test nv(g1) == 1
     @test ranges1 == [1:1]
@@ -172,8 +172,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
         @test symnum(cycleencoding(nfac)[1]) == symnum(dartencoding(p)[1]) == 1
     end
 
-    # Naming a rotation group gives a solid realizing it, and the group's order is what the
-    # solid's own rotations and its dart encoding both come out at.
+    # polyhedra from groups
     for group in [Tetrahedral(), Octahedral(), Icosahedral(),
                   Cyclic(3), Cyclic(6), Dihedral(3), Dihedral(5)]
         p = Polyhedron(group)
@@ -184,21 +183,18 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
           [4, 8, 12, 24, 60]
     @test sprint(show, Cyclic(5)) == "Cyclic(5)"
     @test sprint(show, Dihedral(5)) == "Dihedral(5)"
-    # A group whose smallest realization is a solid: a pyramid or prism needs at least 3 sides.
+    # invalid group choices
     @test_throws ArgumentError Polyhedron(Cyclic(2))
     @test_throws ArgumentError Polyhedron(Dihedral(2))
     @test nfaces(Polyhedron(Octahedral(); a=2.0)) == 6
 
-    # Faces derived from the corners alone match the closed-surface requirement, and a
-    # user-supplied solid needs nothing but its corners.
+    # Faces derived from the corners alone match the closed-surface requirement
     p = Polyhedron(corners(Cube()))
     @test nfaces(p) == 6
     @test all(facedegree(p, i) == 4 for i in 1:6)
     @test length(rotationgroup(p)) == 24
 
-    # A corner sitting mid-edge is not dropped: it lies on the planes of both faces meeting
-    # there, so both gain a degree and the solid gains an edge. The shape is unchanged and the
-    # dart count is not, which is what a combinatorial encoding of a subdivided face means.
+    # A corner sitting mid-edge is not dropped
     cs = collect(corners(Cube(2.0)))
     f = faces(Cube(2.0))[1]
     push!(cs, (cs[f[1]] + cs[f[2]]) / 2)
@@ -218,12 +214,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test eltype(first(corners(p))) === Float32
     @test eltype(facecentroid(p, 1)) === Float32
     @test length(rotationgroup(p)) == 24
-end
 
-@testset "corner normalisation" begin
-    # Corners are recentred on construction, and everything downstream may assume it:
-    # `bounding_radius` and `inradius` measure from the origin and feed the overlap fast path,
-    # so an off-centre solid would read both wrong with nothing to say so.
+    # Corners are recentred on construction; everything downstream can assume so
     cube = Cube()
     offset = SVector(3.0, -1.0, 7.0)
     shifted = Polyhedron([c + offset for c in corners(cube)], faces(cube))
@@ -241,12 +233,9 @@ end
         @test isapprox(Roly.bindingsites(a, i).pose.psi, Roly.bindingsites(b, i).pose.psi; atol=1e-12)
     end
 
-    # A corner used by no face contributes nothing to the shape while still counting towards
-    # the bounding radius and dragging the centroid, so it is refused rather than carried.
+    # A corner used by no face errors
     @test_throws ArgumentError Polyhedron([corners(cube); [SVector(0.0, 0.0, 0.0)]], faces(cube))
-    # And the derived-faces path cannot hide one either: an interior point lies on no
-    # supporting plane, so it lands in no face and the same check catches it.
     @test_throws ArgumentError Polyhedron([corners(cube); [SVector(0.1, 0.05, 0.0)]])
-    # A point outside is a different error: it breaks convexity rather than going unused.
+    # A point outside breaks convexity
     @test_throws ArgumentError Polyhedron([corners(cube); [SVector(9.0, 0.0, 0.0)]], faces(cube))
 end
