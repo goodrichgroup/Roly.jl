@@ -117,9 +117,19 @@ to the corresponding stable original vertex index.
 @inline toorig(p::Polyform, v::Integer) = p.canon2orig[v]
 
 function _apply_perm!(poly::Polyform, perm)
-    poly.canon2orig .= @view poly.canon2orig[perm]
+    # Permuting through `orig2canon` rather than in place is not a detour. Writing
+    # `canon2orig .= @view canon2orig[perm]` reads and writes one array, so broadcasting cannot
+    # tell the two apart and defensively copies the source — an allocation the size of the
+    # graph on every nauty call, which is the hottest path in the package. `orig2canon` is
+    # rebuilt from the result three lines later, so borrowing it as scratch costs nothing.
     resize!(poly.orig2canon, length(poly.canon2orig))
-    for i in eachindex(poly.canon2orig)
+    @inbounds for i in eachindex(poly.orig2canon, perm)
+        poly.orig2canon[i] = poly.canon2orig[perm[i]]
+    end
+    @inbounds for i in eachindex(poly.canon2orig, poly.orig2canon)
+        poly.canon2orig[i] = poly.orig2canon[i]
+    end
+    @inbounds for i in eachindex(poly.canon2orig)
         poly.orig2canon[poly.canon2orig[i]] = i
     end
     return nothing
