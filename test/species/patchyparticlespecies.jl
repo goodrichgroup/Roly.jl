@@ -141,15 +141,15 @@ using LinearAlgebra: normalize, dot, det, norm
     end
 
     # Naming a rotation group resolves to the `Polyhedron` realizes it with.
-    @test nsites(PatchySphere(Tetrahedral())) == 4
-    @test nsites(PatchySphere(Octahedral())) == 6
-    @test nsites(PatchySphere(Icosahedral())) == 12
-    @test nsites(PatchySphere(Dihedral(5))) == 7
-    @test nsites(PatchySphere(Cyclic(6))) == 7
+    @test nsites(PatchySphere(Tetrahedron())) == 4
+    @test nsites(PatchySphere(Cube())) == 6
+    @test nsites(PatchySphere(Dodecahedron())) == 12
+    @test nsites(PatchySphere(Prism(5))) == 7
+    @test nsites(PatchySphere(Pyramid(6))) == 7
     @test_throws ArgumentError PatchySphere(Cube(); colors=1:5)
 
     # Spheres overlap by radius alone.
-    ps = PatchySphere(Octahedral(), 1.0)
+    ps = PatchySphere(Cube(), 1.0)
     id = Pose{3,Float64,RotMatrix3{Float64}}(SVector(0.0, 0.0, 0.0), one(RotMatrix3{Float64}))
     apart(d) = Pose{3,Float64,RotMatrix3{Float64}}(SVector(d, 0.0, 0.0), one(RotMatrix3{Float64}))
     @test overlap(ps => id, ps => id)
@@ -202,7 +202,7 @@ using LinearAlgebra: normalize, dot, det, norm
         for (site, loc, r) in collect_compatible_pairs(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
-            @test r == 0                      # gauge 1 on both sides, so one registration
+            @test r == 0                      # gauge 1 on both sides, so one phase
             return trial.particles[2].pose
         end
         return nothing

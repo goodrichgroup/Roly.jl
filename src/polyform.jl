@@ -130,7 +130,6 @@ function _apply_perm!(poly::Polyform, perm)
     return
 end
 
-@inline canonical_vertices(p::Polyform) = p.canon2orig
 @inline is_leadingvertex(p::Polyform, v::Integer) = any(pt -> pt.leading_vertex == v, p.particles)
 
 @inline particles(p::Polyform, i::Integer) = p.particles[i]
@@ -233,7 +232,7 @@ graph labeling and is therefore deterministic across equivalent polyforms.
 function bindingsites(p::Polyform, i::Integer)
     sys = bindingrules(p)
     k = 0
-    for v in canonical_vertices(p)
+    for v in p.canon2orig
         prtcl = particle_from_leadingvertex(p, v)
         isnothing(prtcl) && continue
         for j in 1:nsites(prtcl, sys)
@@ -309,7 +308,7 @@ end
     raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r=0)
 
 Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`,
-in registration `r` of the bond (see [`standard_offset`](@ref)).
+in phase `r` of the bond (see [`standard_offset`](@ref)).
 
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
@@ -333,7 +332,7 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::I
         add_edge!(graphrep(poly), src + leading_vertex - 1, dst + leading_vertex - 1)
     end
 
-    # Every contact is paired in the registration it was *found* in, not the one this call
+    # Every contact is paired in the phase it was *found* in, not the one this call
     # placed the particle in: a ring closure brings sites together that raise! never chose.
     for (vs1, vs2, reg, L) in contacting_vertices
         for (v1, v2) in contact_pairing(vs1, vs2, reg, L)
@@ -376,18 +375,19 @@ function lower!(poly::Polyform)
     visited = zeros(Bool, nv_g)
     queue = zeros(Cint, nv_g)
 
-    # keep track of particles tested for safe removal, since we attempt removal for every site
-    tested = falses(nv_g)
+    # A particle owns one vertex per site, so the scan revisits it. The list stays short: the
+    # scan stops at the first removable particle.
+    tested = Int[]
     part = nothing
-    for v in Iterators.reverse(canonical_vertices(poly))
+    for v in Iterators.reverse(poly.canon2orig)
         # Walk backward from v to find the leading vertex of its particle.
         for k in v:-1:1
             is_leadingvertex(poly, k) || continue
             v = k
             break
         end
-        tested[v] && continue
-        tested[v] = true
+        v in tested && continue
+        push!(tested, v)
 
         part = particle_from_leadingvertex(poly, v)
         is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) || break
@@ -451,7 +451,7 @@ function _overlap_and_contacts(
             istouching(b1, b2) || continue
             interacting = intmat[color(b1), color(b2)]
             !allow_noninteracting && !interacting && return true, nothing
-            reg = registration(b1, b2)
+            reg = phase(b1, b2)
             !allow_misaligned && isnothing(reg) && return true, nothing
             push!(contacts, (b1.vertices, b2.vertices, something(reg, 0), bondperiod(b1, b2)))
         end
@@ -466,7 +466,7 @@ end
 function collect_open_bindingsites!(sites, poly::Polyform)
     sys = bindingrules(poly)
     empty!(sites)
-    for orig_v in canonical_vertices(poly)
+    for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
         for k in 1:nsites(part, sys)
@@ -486,36 +486,34 @@ function collect_open_bindingsites(poly::Polyform)
 end
 
 """
-    _deletable_above(poly, host)
+    _deletable_species(poly, target, visited, queue)
 
-The largest species index among the particles of `poly` that `lower!` could delete from any
-child built by attaching to `host` — or `0` if there is none.
+Return `(best, second, leading)`: the two largest species indices among the particles `lower!`
+could delete, and the leading vertex of the particle achieving `best`.
 
-This is what lets [`collect_compatible_pairs!`](@ref) discard a candidate without building it,
-and it rests on three facts lining up:
+`lower!` deletes from the highest label class holding a removable particle. Canonical position
+runs with vertex label (nauty orders classes by color, `vertexlabels2labptn` by label), and
+`_adjust_labels_and_colors` puts species `s`'s labels above species `s-1`'s, so species index
+order is label order. Removability is read off `poly` rather than the child: attaching a
+particle cannot disconnect what removing a different one leaves behind.
 
-  - nauty numbers canonical vertices in order of color, and `NautyGraphs.vertexlabels2labptn` orders the
-    color classes by increasing vertex label, so canonical position runs with label.
-  - `_adjust_labels_and_colors` gives species `s` a label block strictly above species `s-1`,
-    so species index order is label order and a bare index comparison decides which of two
-    particles sits higher in the canonical numbering.
-  - `lower!` scans canonical positions downward for the first removable particle.
-
-Together: `lower!` deletes out of the highest label class that still holds a removable
-particle.
+The runner-up lets a host exclude itself in O(1); see [`collect_compatible_pairs!`](@ref).
 """
-function _deletable_above(poly::Polyform, host::Particle, target, visited, queue)
+function _deletable_species(poly::Polyform, target, visited, queue)
     sys = bindingrules(poly)
-    best = 0
     n = nparticles(poly)
+    best, second, bestleading = 0, 0, 0
     for part in poly.particles
-        part === host && continue
-        species_index(part) > best || continue
-        n > 1 && is_cutset(graphrep(poly), sort!([tocanon(poly, w) for w in graphvertices(part, sys)]);
+        n > 1 && is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]);
                            target, visited, queue) && continue
-        best = species_index(part)
+        s = species_index(part)
+        if s > best
+            best, second, bestleading = s, best, leading_vertex(part)
+        elseif s > second
+            second = s
+        end
     end
-    return best
+    return best, second, bestleading
 end
 
 function collect_compatible_pairs!(pairs, poly::Polyform)
@@ -527,12 +525,13 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
     # Two open sites of the assembly lying in one orbit of its automorphism group are interchangeable
     # by a symmetry of everything already built, so attaching the same partner to either gives the same structure.
     used = falses(length(poly.orbits))
-    for orig_v in canonical_vertices(poly)
+    best, second, bestleading = _deletable_species(poly, target, visited, queue)
+    for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
 
-        # Which species the children formbed by attaching to part could lose
-        deletable = _deletable_above(poly, part, target, visited, queue)
+        # The host is excluded, so it takes the runner-up when it is itself the top scorer.
+        deletable = leading_vertex(part) == bestleading ? second : best
         for k in 1:nsites(part, sys)
             site = bindingsites(part, sys, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
@@ -545,13 +544,12 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
 
             # only keep one partner site per orbit
             for siteloc in attachment_reps(sys, color(site))
-                # The new particle is always removable, and it is its own label class from the
-                # attaching species. So `lower!` stops at that class unless something strictly
-                # above it survives, and if something does, the deletion is not the particle we
-                # are about to attach: the child would be rejected, so never build it.
+                # The new particle is always removable, so `lower!` stops at its label class
+                # unless a higher one survives. If one does, the child's deletion is some other
+                # particle and the parent test would reject it.
                 siteloc[1] < deletable && continue
                 mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
-                for r in 0:(nregistrations(site, mate) - 1)
+                for r in 0:(nphases(site, mate) - 1)
                     push!(pairs, (site, siteloc, r))
                 end
             end

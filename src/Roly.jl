@@ -11,7 +11,7 @@ export Rotation, Angle2d, RotXYZ, RotMatrix3, rotation_angle, rotation_axis, SVe
 
 # Binding sites
 export BindingSite, color, contact_pairing
-export standard_offset, twistfreedom, bondperiod, nregistrations, registration
+export standard_offset, twistfreedom, bondperiod, nphases, phase
 
 # Polyhedra and graph encodings
 export Polyhedron, corners, faces, facevertices, nfaces, nedges
@@ -81,14 +81,18 @@ function render end
 
 """
     polyformplot(p; kwargs...)
-    polyformplot!(ax, p; kwargs...)
 
-Makie recipe behind [`render`](@ref), for drawing a polyform or species onto an axis you
-already have. Provided by the Makie extension.
+Makie recipe behind [`render`](@ref), drawing a polyform or species into a new axis.
+Provided by the Makie extension.
 """
 function polyformplot end
 
-@doc (@doc polyformplot)
+"""
+    polyformplot!(ax, p; kwargs...)
+
+Draw a polyform or species onto an axis you already have, the mutating form of
+[`polyformplot`](@ref). Provided by the Makie extension.
+"""
 function polyformplot! end
 
 end

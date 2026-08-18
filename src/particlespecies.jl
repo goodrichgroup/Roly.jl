@@ -17,19 +17,18 @@ the geometric predicates take, since neither a species nor a pose alone is a thi
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
 """
-    _tiles(ps::ParticleSpecies)
+    _tilingcell(ps::ParticleSpecies)
 
-Whether `ps` is a shape that tiles space, placed so that **every bond it can make carries a
-tile of that tiling onto another tile**. Default `false`, a species may opt in.
+Identify the tiling `ps` sits on, or `nothing` if it does not tile. Default `nothing`; a species
+opts in when it tiles space and every bond it can make carries a cell onto another cell.
+
+The identifier must pin down shape as well as size, since equal cells are what
+[`_onlattice`](@ref) tests for. Matching size alone is not enough: unit squares and unit
+triangles tile the plane together, but five triangles and a square close a ring about a corner
+at 390° rather than 360°, so two cells overlap with their centers apart. A single regular
+polygon cannot, its corner angle dividing 360°.
 """
-_tiles(::ParticleSpecies) = false
-
-# Do all species agree on scale? Cells of two tilings at different sizes are unrelated, so
-# `_tiles` per species says nothing about a mixture of them.
-function _samesize(pss::AbstractVector{<:ParticleSpecies})
-    r = bounding_radius(first(pss))
-    return all(ps -> isapprox(bounding_radius(ps), r; rtol=sqrt(eps(float(typeof(r))))), pss)
-end
+_tilingcell(::ParticleSpecies) = nothing
 
 """
     numtype(::ParticleSpecies)

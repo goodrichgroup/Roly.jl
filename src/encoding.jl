@@ -4,9 +4,8 @@
 A proper (or *chiral*) point group: the rotations carrying a rigid body onto itself, without reflections.
 
 The five families are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref),
-[`Octahedral`](@ref) and [`Icosahedral`](@ref). Polyhedra can be instatiated directly from a`RotationGroup`,
-for example `Polyhedron(Octahedral())` is a cube. Use [`rotationgroup`](@ref) to get the rotational symmetries
-of a body.
+[`Octahedral`](@ref) and [`Icosahedral`](@ref). Use [`rotationgroup`](@ref) to get the rotational
+symmetries of a body.
 """
 abstract type RotationGroup end
 
@@ -103,7 +102,8 @@ function Polyhedron(corners::AbstractVector{<:AbstractVector}, faces)
 end
 function Polyhedron(corners::AbstractVector{<:AbstractVector})
     F = float(eltype(first(corners)))
-    cs = SVector{3,F}[SVector{3,F}(c) for c in corners]
+    # `_derive_faces` needs corners measured from the centroid to orient its normals.
+    cs = _recenter(SVector{3,F}[SVector{3,F}(c) for c in corners])
     return Polyhedron(cs, _derive_faces(cs))
 end
 
@@ -118,7 +118,7 @@ function _check_winding(ncorners::Integer, faces::AbstractVector{<:AbstractVecto
     length(faces) < 3 && throw(ArgumentError("a polyhedron needs at least 3 faces"))
     used = falses(ncorners)
     for f in faces, v in f
-        checkbounds(Bool, used, v) && (used[v] = true)
+        checkindex(Bool, eachindex(used), v) && (used[v] = true)
     end
     all(used) || throw(ArgumentError(
         "corner$(count(!, used) > 1 ? "s" : "") $(join(findall(!, used), ", ")) " *
@@ -276,33 +276,34 @@ end
 Find the faces of the convex hull of `corners` by testing every corner triple for a
 supporting plane, then winding each face counter-clockwise about its outward normal.
 
+`corners` must be centered on the centroid, so that the sign of a plane's offset orients its
+normal outward.
+
 Every corner on a face's plane joins that face, including one sitting mid-edge, which allows a
 face containing three collinear corners.
 """
 function _derive_faces(corners::Vector{SVector{3,F}}) where {F}
     n = length(corners)
-    center = sum(corners) / n
-    rel = [c - center for c in corners]
-    atol = sqrt(eps(F)) * maximum(norm, rel)
+    atol = sqrt(eps(F)) * maximum(norm, corners)
 
     faces = Vector{Int}[]
     planes = Tuple{SVector{3,F},F}[]
     for i in 1:(n - 2), j in (i + 1):(n - 1), k in (j + 1):n
-        nrm = cross(rel[j] - rel[i], rel[k] - rel[i])
+        nrm = cross(corners[j] - corners[i], corners[k] - corners[i])
         # collinear triple: no plane through it, and any plane it lies on is found by another.
         norm(nrm) < atol && continue
         nrm = normalize(nrm)
-        d = dot(nrm, rel[i])
-        # point the normal away from the centroid
+        d = dot(nrm, corners[i])
+        # point the normal away from the centroid, which is the origin
         d < 0 && ((nrm, d) = (-nrm, -d))
         # supporting plane of the hull?
-        all(r -> dot(nrm, r) <= d + atol, rel) || continue
+        all(c -> dot(nrm, c) <= d + atol, corners) || continue
         # already found this plane?
         any(pl -> isapprox(pl[1], nrm; atol) && isapprox(pl[2], d; atol), planes) && continue
 
         push!(planes, (nrm, d))
         push!(faces, _wind_counterclockwise!(
-            corners, findall(r -> abs(dot(nrm, r) - d) <= atol, rel), nrm
+            corners, findall(c -> abs(dot(nrm, c) - d) <= atol, corners), nrm
         ))
     end
     return faces
@@ -366,18 +367,22 @@ Base.eltype(p::Polyhedron) = eltype(typeof(p))
 
 """
     facecentroid(p::Polyhedron, i)
-    facecentroids(p::Polyhedron)
 
-Return the centroid of the `i`th face of `p`, or of all faces.
+Return the centroid of the `i`th face of `p`.
 """
 facecentroid(p::Polyhedron, i::Integer) = sum(p.corners[v] for v in p.faces[i]) / facedegree(p, i)
+
+"""
+    facecentroids(p::Polyhedron)
+
+Return the centroids of every face of `p`.
+"""
 facecentroids(p::Polyhedron) = [facecentroid(p, i) for i in 1:nfaces(p)]
 
 """
     facenormal(p::Polyhedron, i)
-    facenormals(p::Polyhedron)
 
-Return the outward unit normal of the `i`th face of `p`, or of all faces.
+Return the outward unit normal of the `i`th face of `p`.
 """
 function facenormal(p::Polyhedron{F}, i::Integer) where {F}
     f = p.faces[i]
@@ -388,6 +393,12 @@ function facenormal(p::Polyhedron{F}, i::Integer) where {F}
     end
     return normalize(nrm)
 end
+
+"""
+    facenormals(p::Polyhedron)
+
+Return the outward unit normals of every face of `p`.
+"""
 facenormals(p::Polyhedron) = [facenormal(p, i) for i in 1:nfaces(p)]
 
 """
@@ -545,7 +556,6 @@ end
 """
     dartencoding(p::Polyhedron; labels=1:nfaces(p))
     dartencoding(faces::Vector{Vector{Int}}; labels=1:length(faces))
-    dartencoding(group::RotationGroup; a=1.0, labels=...)
 
 Return `(g, ranges)`, the dart encoding of polyhedron `p` and the graph vertices belonging to each face.
 
@@ -565,7 +575,6 @@ merging some faces gives the subgroup preserving that labeling. The dart encodin
 related to the Cayley graph of the body's symmetry group.
 """
 dartencoding(p::Polyhedron; labels=1:nfaces(p)) = dartencoding(faces(p); labels)
-dartencoding(group::RotationGroup; a=1.0, kwargs...) = dartencoding(Polyhedron(group; a); kwargs...)
 
 function dartencoding(fs::Vector{Vector{Int}}; labels=1:length(fs))
     length(labels) == length(fs) ||
@@ -624,12 +633,17 @@ end
 
 """
     _twistfreedoms(gauges, stabs, locking)
-    _perface(x, n, what)
 
 Per-site [`twistfreedom`](@ref) from the two symmetry counts and the locking flags.
 """
 _twistfreedoms(gauges, stabs, locking) = [l ? s : g for (g, s, l) in zip(gauges, stabs, locking)]
 
+"""
+    _perface(x, n, what)
+
+Expand a per-face keyword to a length-`n` vector, a scalar meaning the same for every face.
+`what` names the argument in the length-mismatch error.
+"""
 function _perface(x, n::Integer, what::AbstractString)
     x isa Union{Bool,Real} && return fill(x, n)
     length(x) == n ||
@@ -673,7 +687,7 @@ function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists,
     # the face's corner list, which moves the frame and the vertex numbering together and keeps
     # `contact_pairing`'s anchor on a pair of coincident darts; the remainder is applied to the
     # frame alone. That remainder is fine: the anchor has to be consistent and to tell
-    # registrations apart, not to mark a physical coincidence, and both survive.
+    # phases apart, not to mark a physical coincidence, and both survive.
     steps = [round(Int, t * length(f) / (2F(π))) for (f, t) in zip(fs, twists)]
     fs = [circshift(f, -mod(m, length(f))) for (f, m) in zip(fs, steps)]
     poses = [pose * RotX(F(t) - 2F(π) * m / length(f))
@@ -702,36 +716,12 @@ freedom must be 1.
 _cycle_suffices(twistfreedoms, labels) = allunique(labels) && all(isone, twistfreedoms)
 
 
-"""
-    Polyhedron(group::RotationGroup; a=1.0)
-
-Return a polyhedron realizing the proper rotation `group`, with edge length `a`:
-
-| `group`         | body            | order |
-|:----------------|:-----------------|:------|
-| `Cyclic(n)`     | `Pyramid(n)`     | `n`   |
-| `Dihedral(n)`   | `Prism(n)`       | `2n`  |
-| `Tetrahedral()` | `Tetrahedron()`  | 12    |
-| `Octahedral()`  | `Cube()`         | 24    |
-| `Icosahedral()` | `Dodecahedron()` | 60    |
-
-One realization per group, since a group does not determine a shape. The alternatives
-`Octahedron()`, `Icosahedron()` and `Antiprism(n)` have the same groups and are constructed by
-name.
-"""
-Polyhedron(::Cyclic{N}; a=1.0) where {N} = Pyramid(N, a)
-Polyhedron(::Dihedral{N}; a=1.0) where {N} = Prism(N, a)
-Polyhedron(::Tetrahedral; a=1.0) = Tetrahedron(a)
-Polyhedron(::Octahedral; a=1.0) = Cube(a)
-Polyhedron(::Icosahedral; a=1.0) = Dodecahedron(a)
-
 ############### Polyhedra library
 _recenter(cs) = (c0 = sum(cs) / length(cs); [c - c0 for c in cs])
 
-function _rescale(cs, a)
-    s = a / minimum(norm(cs[i] - cs[j]) for i in 1:(length(cs) - 1) for j in (i + 1):length(cs))
-    return _recenter([s * c for c in cs])
-end
+# Scale a solid to edge length `a`, after construction so that the faces exist and the divisor
+# is the true minimum edge length.
+_scaleto(p::Polyhedron, a) = Polyhedron(corners(p) * (a / minedgelength(p)), faces(p))
 
 """
     Tetrahedron(a=1.0)
@@ -741,7 +731,7 @@ A regular tetrahedron with edge length `a`. Proper rotation group `T`, of order 
 function Tetrahedron(a::Real=1.0)
     F = float(typeof(a))
     cs = SVector{3,F}[(1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)]
-    return Polyhedron(_rescale(cs, a))
+    return _scaleto(Polyhedron(cs), a)
 end
 
 """
@@ -752,7 +742,7 @@ A cube with edge length `a`. Proper rotation group `O`, of order 24.
 function Cube(a::Real=1.0)
     F = float(typeof(a))
     cs = SVector{3,F}[(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
-    return Polyhedron(_rescale(cs, a))
+    return _scaleto(Polyhedron(cs), a)
 end
 
 """
@@ -763,7 +753,7 @@ A regular octahedron with edge length `a`. Proper rotation group `O`, of order 2
 function Octahedron(a::Real=1.0)
     F = float(typeof(a))
     cs = SVector{3,F}[(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
-    return Polyhedron(_rescale(cs, a))
+    return _scaleto(Polyhedron(cs), a)
 end
 
 """
@@ -778,7 +768,7 @@ function Icosahedron(a::Real=1.0)
     for s1 in (-1, 1), s2 in (-1, 1)
         push!(cs, SVector{3,F}(0, s1, s2 * φ), SVector{3,F}(s1, s2 * φ, 0), SVector{3,F}(s2 * φ, 0, s1))
     end
-    return Polyhedron(_rescale(cs, a))
+    return _scaleto(Polyhedron(cs), a)
 end
 
 """
@@ -798,7 +788,7 @@ function Dodecahedron(a::Real=1.0)
             SVector{3,F}(s2 * φ, 0, s1 / φ),
         )
     end
-    return Polyhedron(_rescale(cs, a))
+    return _scaleto(Polyhedron(cs), a)
 end
 
 """
@@ -813,7 +803,7 @@ function Pyramid(n::Integer, a::Real=1.0; h::Real=a)
     r = F(a) / (2 * sin(F(π) / n))
     cs = SVector{3,F}[SVector{3,F}(r * cos(2F(π) * k / n), r * sin(2F(π) * k / n), 0) for k in 0:(n - 1)]
     push!(cs, SVector{3,F}(0, 0, F(h)))
-    return Polyhedron(_recenter(cs))
+    return Polyhedron(cs)
 end
 
 """
@@ -966,7 +956,7 @@ turns about that site's normal that carry the whole particle onto itself. It is 
 site's `gauge`, and usually less: a triangular prism is 2-fold about a square side face, so
 that face has gauge 4 but a stabiliser of 2, while a cube's face has both equal to 4.
 The difference is what decides how many *distinct* ways a partner can attach there, see
-[`nregistrations`](@ref).
+[`nphases`](@ref).
 """
 sitestabilisers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
 
@@ -1041,7 +1031,7 @@ end
     _check_encoding(ps::ParticleSpecies)
 
 Throw if `ps`'s graph claims a different symmetry from its binding sites and geometry, or if
-its labeling is coarser than its coloring (see [`_check_labelling`](@ref)).
+its labeling is coarser than its coloring (see [`_check_labeling`](@ref)).
 """
 function _check_encoding(ps::ParticleSpecies)
     _check_labeling(ps)

@@ -44,24 +44,24 @@ Two further keywords control what a bond at a face *means*, rather than which bo
 - `locking` — whether a site holds its partner in the orientation its frame names. The default, `true`, gives one attachment unless the particle's own symmetry makes the frame ambiguous. `false` admits every orientation the face geometrically permits.
 - `twists` — an angle in radians turning a face's site about its own normal, which selects *which* relative orientation the bond means.
 
-Both take one value for the species or one per face. See [Orientation and registrations](orientation.md).
+Both take one value for the species or one per face. See [Orientation and phases](orientation.md).
 
-## Naming a symmetry instead of a solid
+## Symmetry groups
 
-The solid constructors — [`Cube`](@ref), [`Prism`](@ref), [`Antiprism`](@ref) and the rest — build a [`Polyhedron`](@ref) directly. When what matters is the symmetry rather than the shape, name the rotation group and let Roly pick a solid realizing it:
+A body is always built by naming it — [`Cube`](@ref), [`Prism`](@ref), [`Antiprism`](@ref) and the rest all return a [`Polyhedron`](@ref).
+A rotation group cannot stand in for one, since duality gives the cube and the octahedron the same group, as it does the dodecahedron and the icosahedron.
+
+The groups instead report symmetry: [`rotationgroup`](@ref) lists the rotations a body has, and [`grouporder`](@ref) counts those of a named group.
 
 ```jldoctest workflow
-julia> Polyhedron(Octahedral())
-Polyhedron{Float64}:
- - corners: 	8
- - edges: 	12
- - faces: 	6 (6×4-gon)
+julia> length(rotationgroup(Cube())) == length(rotationgroup(Octahedron()))
+true
+
+julia> grouporder(Octahedral())
+24
 
 julia> grouporder(Dihedral(5))
 10
-
-julia> nsites(PatchySphere(Dihedral(5)))
-7
 ```
 
 The groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref), [`Octahedral`](@ref) and [`Icosahedral`](@ref) — the proper (rotation-only) point groups, which are the only ones a rigid body can have.

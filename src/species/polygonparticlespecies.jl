@@ -65,8 +65,10 @@ nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolygonParticleSpecies) = true
 
-# The three regular polygons that tile the plane.
-_tiles(ps::PolygonParticleSpecies) = nsites(ps) in (3, 4, 6)
+# The three regular polygons that tile the plane. `rmin` is the inradius r, and a regular
+# n-gon has edge length 2r*tan(pi/n).
+_tilingcell(ps::PolygonParticleSpecies) =
+    nsites(ps) in (3, 4, 6) ? (nsites(ps), 2 * ps.rmin * tan(π / nsites(ps))) : nothing
 
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
     spcs1, pose1 = p1

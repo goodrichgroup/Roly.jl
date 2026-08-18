@@ -65,7 +65,7 @@ posetype(::Type{<:BindingSite{P}}) where P = P
     standard_offset(b::BindingSite, r=0, L=1)
     standard_offset(p::Pose, r=0, L=1)
 
-Calculate the offset between binding site `b` and a partner attached in registration `r` of `L`.
+Calculate the offset between binding site `b` and a partner attached in phase `r` of `L`.
 We employ the convention that attached binding sites are "facing each other": their poses are
 related via a 180 degree rotation around their (shared) z-axes.
 
@@ -75,7 +75,7 @@ except that a symmetric particle has no single frame to offer: when a rotation c
 particle onto itself while turning a site about its normal, the two frames it relates describe
 that particle equally well and neither can claim the bond. So the admissible twists are what
 survives regauging either site, and form the `L` multiples of `2π/L` that
-[`bondperiod`](@ref) counts. `r = 0` is the frames' own choice, and is the only registration
+[`bondperiod`](@ref) counts. `r = 0` is the frames' own choice, and is the only phase
 when neither site has anything to be ambiguous about.
 """
 @inline standard_offset(b::BindingSite{<:Pose{D,F}}, r::Integer=0, L::Integer=1) where {D,F} =
@@ -101,7 +101,7 @@ Equal to the least common multiple of the two sites' [`twistfreedom`](@ref)s. Se
 @inline bondperiod(b1::BindingSite, b2::BindingSite) = lcm(twistfreedom(b1), twistfreedom(b2))
 
 """
-    nregistrations(bbody::BindingSite, battach::BindingSite)
+    nphases(bbody::BindingSite, battach::BindingSite)
 
 Return how many of the [`bondperiod`](@ref) twists give *distinct* structures when binding site `battch`
 to a binding site on a polyform, `bbbody`.
@@ -112,13 +112,13 @@ Note the asymmetry: only the *attached* binding site's stabiliser is quotiented 
 polyform carrying `bbody` can merge structures too, but these are not knowable from one site,
 and need to be caught through canonization.
 """
-@inline nregistrations(bbody::BindingSite, battach::BindingSite) = bondperiod(bbody, battach) ÷ battach.stab
+@inline nphases(bbody::BindingSite, battach::BindingSite) = bondperiod(bbody, battach) ÷ battach.stab
 
 """
     contact_pairing(vs1::UnitRange, vs2::UnitRange, r=0, L=1)
 
 Return the pairs of graph vertices to join when two bonding binding sites occupying the vertex
-ranges `vs1` and `vs2` meet in registration `r` of `L` (see [`standard_offset`](@ref)).
+ranges `vs1` and `vs2` meet in phase `r` of `L` (see [`standard_offset`](@ref)).
 
 Number the vertices of each site from zero and denote `kᵢ = length(vsᵢ)`. Vertex `a` of site 1 sits at angle
 `2πa/k₁` in site 1's frame, and vertex `b` of site 2  (whose frame is turned by `2πr/L` and then flipped, so its
@@ -129,33 +129,35 @@ cyclic order runs the other way round) sits at `2πr/L - 2πb/k₂`. Writing `K 
 
 `t` is always an integer: a site's gauge divides its vertex count, so `L = lcm(g₁, g₂)`
 divides `K`. Since `gcd(s₁, s₂) = 1`, the congruence has exactly `gcd(k₁, k₂)` solutions for
-every `t`, and distinct registrations give disjoint solution sets, so the pairing count never
-depends on the registration, and the graph records which registration a bond is in.
+every `t`, and distinct phases give disjoint solution sets, so the pairing count never
+depends on the phase, and the graph records which phase a bond is in.
 
-Two consequences are worth naming. The bond keeps its residual symmetry: a site with `k`
-vertices is invariant under turns by `2π/k`, so the bond is invariant under the turns common
-to both, `C_k₁ ∩ C_k₂ = C_gcd(k₁,k₂)`, and the `gcd` links are what let nauty see it. And at
-`r = 0` this is the counter-rotating pairing with the two first vertices as the fixed point,
-so 2D species and patchy particles, which have one registration, are unaffected.
+The joined pair keeps a residual symmetry. A site's `k` vertices form a directed `k`-cycle, all
+carrying that face's label, so turning the cycle by `2π/k` preserves edges and labels alike; the
+two cycles together are invariant under `C_k₁ ∩ C_k₂ = C_gcd(k₁,k₂)`, and the `gcd` links are
+what let nauty see it. This concerns the two-cycle subgraph alone, not the polyform around it.
+
+At `r = 0` the pairing is counter-rotating about the two first vertices, leaving 2D species and
+patchy particles, which admit one phase, unaffected.
 
 This is the single place where the bond convention is defined; a species needing a different
-registry would change it here.
+pairing would change it here.
 """
 @inline function contact_pairing(vs1::UnitRange{Int}, vs2::UnitRange{Int}, r::Integer=0, L::Integer=1)
     k1, k2 = length(vs1), length(vs2)
     G = gcd(k1, k2)
     K = k1 * k2 ÷ G
-    a0, b0 = _registration_shift(k1, k2, K, r, L)
+    a0, b0 = _phase_shift(k1, k2, K, r, L)
     return (vs1[1 + mod(a0 + j * (k1 ÷ G), k1)] => vs2[1 + mod(b0 - j * (k2 ÷ G), k2)]
             for j in 0:(G - 1))
 end
 
 # One solution of a*s1 + b*s2 = r*K/L (mod K); the rest follow by stepping the two ranges in
-# opposite directions. Zero-based, and `(0, 0)` for the base registration.
-@inline function _registration_shift(k1::Int, k2::Int, K::Int, r::Integer, L::Integer)
+# opposite directions. Zero-based, and `(0, 0)` for the base phase.
+@inline function _phase_shift(k1::Int, k2::Int, K::Int, r::Integer, L::Integer)
     r == 0 && return 0, 0
     K % L == 0 || throw(ArgumentError(
-        "a bond in $L registrations cannot be encoded by sites of $k1 and $k2 graph vertices: " *
+        "a bond in $L phases cannot be encoded by sites of $k1 and $k2 graph vertices: " *
         "$L must divide lcm($k1, $k2) = $K. Give the sites more vertices, i.e. a graph built " *
         "by `dartencoding` rather than `cycleencoding`, or declare a smaller gauge."
     ))
@@ -189,15 +191,15 @@ function istouching(b1::BindingSite, b2::BindingSite)
 end
 
 """
-    registration(b1::BindingSite, b2::BindingSite)
+    phase(b1::BindingSite, b2::BindingSite)
 
-Return which of the bond's registrations the two sites are in, or `nothing` if their
+Return which of the bond's phases the two sites are in, or `nothing` if their
 orientations are not related by any of them.
 
 Symmetric in its arguments: `psi₂ = psi₁·Rx(2πr/L)·Δ` gives back the same `r` as the other
 way round, since `Δ` is a π rotation that inverts the twist and squares to the identity.
 """
-function registration(b1::BindingSite, b2::BindingSite)
+function phase(b1::BindingSite, b2::BindingSite)
     atol = b1.alignment_tolerance + b2.alignment_tolerance
     L = bondperiod(b1, b2)
     for r in 0:(L - 1)
@@ -210,9 +212,9 @@ end
     isaligned(b1::BindingSite, b2::BindingSite)
 
 Check whether the orientation components of the binding sites' poses
-differ by a standard offset, in any registration the bond admits.
+differ by a standard offset, in any phase the bond admits.
 """
-isaligned(b1::BindingSite, b2::BindingSite) = !isnothing(registration(b1, b2))
+isaligned(b1::BindingSite, b2::BindingSite) = !isnothing(phase(b1, b2))
 
 """
     isincontact(b1::BindingSite, b2::BindingSite)

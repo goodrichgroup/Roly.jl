@@ -159,21 +159,21 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # ratio is how many distinct ways a partner can attach there: turns in the stabiliser put
     # the same body in the same place with only its sites permuted.
     gauges(ps) = [bindingsites(ps, i).gauge for i in 1:nsites(ps)]
-    registrations(ps) = gauges(ps) .÷ Roly.sitestabilisers(ps)
+    phases(ps) = gauges(ps) .÷ Roly.sitestabilisers(ps)
 
     # A cube keeps all four turns about a face normal, so a face-to-face bond has one
-    # registration and nothing changes for polycubes.
+    # phase and nothing changes for polycubes.
     cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
     @test gauges(cube) == fill(4, 6)
     @test Roly.sitestabilisers(cube) == fill(4, 6)
-    @test registrations(cube) == fill(1, 6)
+    @test phases(cube) == fill(1, 6)
 
     # Distinguishing the caps costs the side faces two of those turns, since a quarter turn
     # about a side normal carries the other sides onto caps.
     caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in Roly.facenormals(Cube())]
     capped = PolyhedronParticleSpecies(Cube(); colors=caps)
     @test Roly.sitestabilisers(capped) == [c == 2 ? 4 : 2 for c in caps]
-    @test registrations(capped) == [c == 2 ? 1 : 2 for c in caps]
+    @test phases(capped) == [c == 2 ? 1 : 2 for c in caps]
 
     # A triangular prism's side faces are squares
     # when h == a (gauge 4) but the prism is only 2-fold about them, so a partner can attach
@@ -181,14 +181,14 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     tri = PolyhedronParticleSpecies(Prism(3); colors=geometriclabels(Prism(3)))
     @test gauges(tri) == [3, 4, 4, 4, 3]
     @test Roly.sitestabilisers(tri) == [3, 2, 2, 2, 3]
-    @test registrations(tri) == [1, 2, 2, 2, 1]
+    @test phases(tri) == [1, 2, 2, 2, 1]
 
     # Make the prism taller, so that faces become rectangles: gauge and stabiliser agree at 2,
-    # leaving a single registration.
+    # leaving a single phase.
     tall = Prism(3, 1.0; h=2.0)
     tallps = PolyhedronParticleSpecies(tall; colors=geometriclabels(tall))
     @test gauges(tallps) == [3, 2, 2, 2, 3]
-    @test registrations(tallps) == fill(1, 5)
+    @test phases(tallps) == fill(1, 5)
 
     # A stabiliser always divides the gauge, and always divides the symmetry number.
     for ps in (cube, capped, tri, tallps, UnitDodecahedron, UnitAntiprism(4))
@@ -452,7 +452,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test length(unique(Roly.labels(graphrep(split)))) == 3
     @test symmetrynumber(PolyhedronParticleSpecies(shp; colors)) == 6
 
-    # On a particle with no symmetry to hide behind, the twist is the bond registry outright.
+    # On a particle with no symmetry to hide behind, the twist is the bond phase outright.
     # Turning only the mate's face turns the partner by exactly one dart step, not two.
     function dimer(t)
         ps = dartspecies(Tetrahedron(); twists=[0.0, t, 0.0, 0.0])

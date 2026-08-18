@@ -1,6 +1,6 @@
 using Roly: BindingSite, shift_vertices, shift_color, isaligned, istouching, isincontact, color,
             standard_offset, contact_pairing
-using Roly: BindingSite, twistfreedom, bondperiod, nregistrations, registration,
+using Roly: BindingSite, twistfreedom, bondperiod, nphases, phase,
             standard_offset, isaligned
 using Graphs, NautyGraphs
 
@@ -92,10 +92,10 @@ using Graphs, NautyGraphs
         @test dimer_symmetrynumber(k1, k2) == gcd(k1, k2)
     end
 
-    ### contact_pairing under a registration
+    ### contact_pairing under a phase
     # Vertex a of site 1 sits at angle 2πa/k1 about the bond axis; vertex b of site 2 sits at
     # 2πr/L - 2πb/k2, its cyclic order reversed by the gluing and its frame turned by the
-    # registration. The pairing is exactly the coincidences, so check it against them directly.
+    # phase. The pairing is exactly the coincidences, so check it against them directly.
     function coincidences(k1, k2, L, r)
         M = lcm(lcm(k1, k2), L)
         return sort([(a, b) for a in 0:(k1 - 1), b in 0:(k2 - 1)
@@ -108,31 +108,31 @@ using Graphs, NautyGraphs
     for k1 in 1:8, k2 in 1:8, q1 in divisors(k1), q2 in divisors(k2)
         L = lcm(q1, q2)
         # A twist freedom divides its site's vertex count, so L always divides lcm(k1, k2) and
-        # the registration is expressible. This is what makes the offset an integer.
+        # the phase is expressible. This is what makes the offset an integer.
         @test lcm(k1, k2) % L == 0
         seen = Set()
         for r in 0:(L - 1)
             p = pairs0(k1, k2, r, L)
             @test p == coincidences(k1, k2, L, r)
-            # The count never depends on the registration, so a bond keeps its residual
+            # The count never depends on the phase, so a bond keeps its residual
             # symmetry however it is turned
             @test length(p) == gcd(k1, k2)
-            # Distinct registrations give distinct pairings, so the graph records which
+            # Distinct phases give distinct pairings, so the graph records which
             # one a bond is in. Without that, geometrically different assemblies would share a
             # canonical form and be silently merged.
             @test p ∉ seen
             push!(seen, p)
         end
     end
-    # r = 0 is the base registration and must reproduce the plain call exactly.
+    # r = 0 is the base phase and must reproduce the plain call exactly.
     for (k1, k2) in [(1, 1), (3, 3), (4, 4), (6, 3), (4, 6), (12, 8), (4, 5)]
         @test collect(contact_pairing(1:k1, 11:(10 + k2), 0, 4)) ==
               collect(contact_pairing(1:k1, 11:(10 + k2)))
     end
-    # A registration a site's vertex count cannot express is refused rather than truncated.
+    # A phase a site's vertex count cannot express is refused rather than truncated.
     @test_throws ArgumentError collect(contact_pairing(1:1, 2:2, 1, 4))
 
-    # registrations
+    # phases
     site(gauge, stab, locking) =
         BindingSite(Pose{3,Float64,RotMatrix3{Float64}}(SVector(1.0, 0.0, 0.0),
                                                         one(RotMatrix3{Float64})),
@@ -144,40 +144,40 @@ using Graphs, NautyGraphs
     @test twistfreedom(site(4, 2, false)) == 4
     @test twistfreedom(site(4, 4, true)) == twistfreedom(site(4, 4, false)) == 4
 
-    # Registrations come from symmetry: an unsymmetric particle has exactly one per bond,
+    # Phases come from symmetry: an unsymmetric particle has exactly one per bond,
     # however symmetric the face it bonds through.
-    @test nregistrations(site(4, 1, true), site(4, 1, true)) == 1
-    @test nregistrations(site(1, 1, true), site(1, 1, true)) == 1
+    @test nphases(site(4, 1, true), site(4, 1, true)) == 1
+    @test nphases(site(1, 1, true), site(1, 1, true)) == 1
     # A cube face onto a cube face, both 4-fold: still one, the four turns being symmetries.
-    @test nregistrations(site(4, 4, true), site(4, 4, true)) == 1
+    @test nphases(site(4, 4, true), site(4, 4, true)) == 1
     # A cube (4-fold) meeting a prism's square side face (2-fold): in-plane and out-of-plane.
-    @test nregistrations(site(4, 4, true), site(4, 2, true)) == 2
+    @test nphases(site(4, 4, true), site(4, 2, true)) == 2
     # ...and only one the other way round, since a lone cube turned about the bond axis maps
     # onto itself, so there is only one distinct dimer to find.
-    @test nregistrations(site(4, 2, true), site(4, 4, true)) == 1
+    @test nphases(site(4, 2, true), site(4, 4, true)) == 1
     # Freeing one side opens the bond up whatever the other says.
-    @test nregistrations(site(4, 2, false), site(4, 2, true)) == 2
-    @test nregistrations(site(4, 2, true), site(4, 2, true)) == 1
+    @test nphases(site(4, 2, false), site(4, 2, true)) == 2
+    @test nphases(site(4, 2, true), site(4, 2, true)) == 1
 
     # bondperiod is the lcm because the admissible set must be closed under both sites' turns.
     @test bondperiod(site(6, 6, true), site(4, 4, true)) == 12
     @test bondperiod(site(4, 2, true), site(6, 3, true)) == 6
 
-    # A partner placed in registration r is recognised as being in registration r, and reading
+    # A partner placed in phase r is recognised as being in phase r, and reading
     # the pair the other way round gives the same answer
     for L in (1, 2, 3, 4, 6)
         b1 = site(L, L, true)
         for r in 0:(L - 1)
             b2 = BindingSite(standard_offset(b1, r, L), 1, 1:L, 1e-8, 1e-8, L, L, true)
-            @test registration(b1, b2) == r
-            @test registration(b2, b1) == r
+            @test phase(b1, b2) == r
+            @test phase(b2, b1) == r
             @test isaligned(b1, b2)
         end
     end
     
-    # An orientation in no registration at all is not a bond.
+    # An orientation in no phase at all is not a bond.
     b = site(2, 2, true)
     off = BindingSite(standard_offset(b, 1, 4), 1, 1:2, 1e-8, 1e-8, 2, 2, true)
-    @test isnothing(registration(b, off))
+    @test isnothing(phase(b, off))
     @test !isaligned(b, off)
 end

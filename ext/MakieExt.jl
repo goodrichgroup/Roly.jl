@@ -3,7 +3,7 @@ module MakieExt
 using Roly
 using Makie
 using LinearAlgebra: dot, normalize
-import Roly: species, bindingrules, canonical_vertices, polyformplot, polyformplot!, render
+import Roly: species, bindingrules, polyformplot, polyformplot!, render
 
 @recipe PolyformPlot (poly, ) begin
     bindingrules = nothing

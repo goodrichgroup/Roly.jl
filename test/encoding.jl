@@ -172,21 +172,24 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
         @test symnum(cycleencoding(nfac)[1]) == symnum(dartencoding(p)[1]) == 1
     end
 
-    # polyhedra from groups
-    for group in [Tetrahedral(), Octahedral(), Icosahedral(),
-                  Cyclic(3), Cyclic(6), Dihedral(3), Dihedral(5)]
-        p = Polyhedron(group)
-        @test length(rotationgroup(p)) == grouporder(group)
-        @test symnum(dartencoding(group; labels=geometriclabels(p))[1]) == grouporder(group)
+    # A body realizes the group `grouporder` names. Duality means a group does not pick out a
+    # body: the cube and the octahedron share `O`.
+    for (body, group) in [(Tetrahedron(), Tetrahedral()), (Cube(), Octahedral()),
+                          (Octahedron(), Octahedral()), (Dodecahedron(), Icosahedral()),
+                          (Icosahedron(), Icosahedral()), (Pyramid(3), Cyclic(3)),
+                          (Pyramid(6), Cyclic(6)), (Prism(3), Dihedral(3)),
+                          (Antiprism(5), Dihedral(5))]
+        @test length(rotationgroup(body)) == grouporder(group)
+        @test symnum(dartencoding(body; labels=geometriclabels(body))[1]) == grouporder(group)
     end
     @test grouporder.([Cyclic(4), Dihedral(4), Tetrahedral(), Octahedral(), Icosahedral()]) ==
           [4, 8, 12, 24, 60]
     @test sprint(show, Cyclic(5)) == "Cyclic(5)"
     @test sprint(show, Dihedral(5)) == "Dihedral(5)"
-    # invalid group choices
-    @test_throws ArgumentError Polyhedron(Cyclic(2))
-    @test_throws ArgumentError Polyhedron(Dihedral(2))
-    @test nfaces(Polyhedron(Octahedral(); a=2.0)) == 6
+    # degenerate bodies
+    @test_throws ArgumentError Pyramid(2)
+    @test_throws ArgumentError Prism(2)
+    @test nfaces(Cube(2.0)) == 6
 
     # Faces derived from the corners alone match the closed-surface requirement
     p = Polyhedron(corners(Cube()))

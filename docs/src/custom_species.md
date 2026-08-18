@@ -51,9 +51,9 @@ Beyond its pose and color, a [`BindingSite`](@ref) carries three numbers that de
 | `stab` | order of the site's stabiliser in the *particle's* rotation group, from [`sitestabilisers`](@ref). |
 | `locking` | whether the site holds its partner in the orientation its frame names (the default) or admits every orientation its shape permits. |
 
-They are what [`nregistrations`](@ref) reads to decide how many distinct bonds a pair of sites has, and no graph check catches getting them wrong.
+They are what [`nphases`](@ref) reads to decide how many distinct bonds a pair of sites has, and no graph check catches getting them wrong.
 
-In **2D** both are always 1: a site has no turn about its in-plane normal, and no rotation about the particle's origin fixes a site away from it. The five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` therefore says exactly the right thing, which is why the example below uses it. In **3D** `gauge` is still 1 for a site occupying a single graph vertex — one vertex has no room to record a turn — but `stab` need not be, since a rotation about a patch's own axis can carry the whole particle onto itself. Compute it with [`sitestabilisers`](@ref) and pass it: `BindingSite(pose, color, vertices, tol, tol, gauge, stab)`. See [Orientation and registrations](orientation.md) for what follows from these.
+In **2D** both are always 1: a site has no turn about its in-plane normal, and no rotation about the particle's origin fixes a site away from it. The five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` therefore says exactly the right thing, which is why the example below uses it. In **3D** `gauge` is still 1 for a site occupying a single graph vertex — one vertex has no room to record a turn — but `stab` need not be, since a rotation about a patch's own axis can carry the whole particle onto itself. Compute it with [`sitestabilisers`](@ref) and pass it: `BindingSite(pose, color, vertices, tol, tol, gauge, stab)`. See [Orientation and phases](orientation.md) for what follows from these.
 
 ## A worked example: rectangle
 

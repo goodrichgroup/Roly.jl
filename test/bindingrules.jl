@@ -88,9 +88,14 @@ using StaticArrays: SVector
 
     # test for non-tiling
     for (name, sys) in [
-        ("pentagons",           BindingRules([1 1 1 1], poly(5))),
+        ("pentagons",           BindingRules([1 1 2 1], [poly(5), poly(5)])),
         ("squares, two sizes",  BindingRules([1 1 2 1], [poly(4), poly(4, 2.0)])),
+        # Tile together, but five triangles and a square close a ring at 390 degrees, so two
+        # cells overlap with their centers apart.
         ("squares + triangles", BindingRules([1 1 2 1], [poly(4), poly(3)])),
+        # Equal bounding radius, different edge: comparing radii would call this one lattice.
+        ("square + big triangle", BindingRules([1 1 2 1],
+                                      [poly(4), poly(3, sqrt(2) / sqrt(3) * 2)])),
         # 3D does not opt in.
         ("polycubes",           BindingRules([1 1 1 1], faced(Cube(), 1:6))),
         ("square prisms",       BindingRules([1 1 1 1], faced(Prism(4, 1.0; h=2.0),
@@ -135,7 +140,7 @@ using StaticArrays: SVector
         sys = Roly.bindingrules(poly)
         out = Set{NautyDiGraph}()
         usedorbits = Set{Int}()
-        for orig_v in Roly.canonical_vertices(poly)
+        for orig_v in poly.canon2orig
             part = Roly.particle_from_leadingvertex(poly, orig_v)
             isnothing(part) && continue
             for k in 1:Roly.nsites(part, sys)
@@ -149,7 +154,7 @@ using StaticArrays: SVector
                 end
                 for siteloc in sitelocs_of(sys, color(site))
                     mate = bindingsites(Roly.species(sys, siteloc[1]), siteloc[2])
-                    for r in 0:(Roly.nregistrations(site, mate) - 1)
+                    for r in 0:(Roly.nphases(site, mate) - 1)
                         trial = copy(poly)
                         ismissing(raise!(trial, site, siteloc, r)) && continue
                         push!(out, copy(graphrep(trial)))

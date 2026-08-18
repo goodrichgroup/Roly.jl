@@ -1,4 +1,4 @@
-# Orientation and registrations
+# Orientation and phases
 
 A bond in Roly fixes more than which two sites touch. It fixes how the two particles are turned
 relative to one another, and on a symmetric particle it may fix it in more than one way. This
@@ -32,7 +32,7 @@ which is why cubes hide every distinction below: a cube's face has all three equ
 [`facegauge`](@ref) computes the middle one from a face's geometry, [`sitestabilisers`](@ref)
 the last one from the particle's.
 
-## Registrations
+## Phases
 
 A bond fixes the partner's position and normal. What remains is a turn about the bond axis, and
 the question is how many values of it give genuinely different structures.
@@ -50,8 +50,8 @@ L = lcm(q₁, q₂)        q = stab  (locking)  or  gauge  (rotation-free)
 R = L / stab₂
 ```
 
-`L` is [`bondperiod`](@ref) and `R` is [`nregistrations`](@ref), the number of distinct
-attachments, with `stab₂` belonging to the particle being attached. Registrations come from
+`L` is [`bondperiod`](@ref) and `R` is [`nphases`](@ref), the number of distinct
+attachments, with `stab₂` belonging to the particle being attached. Phases come from
 **symmetry**, and an unsymmetric particle has exactly one per bond — which is the ordinary
 reading of an oriented binding site. The quotient by `stab₂` is an optimisation rather than a
 correctness requirement; those duplicates would be merged by canonical form anyway.
@@ -65,16 +65,16 @@ leaving them locking gives the coplanar one only.
 
 Two conditions this has to satisfy:
 
-- `L ∣ lcm(degree₁, degree₂)`, so the registration can be recorded in the graph. This holds
+- `L ∣ lcm(degree₁, degree₂)`, so the phase can be recorded in the graph. This holds
   because `q ∣ gauge ∣ degree`.
 - [`cycleencoding`](@ref), one vertex per site, can only express `L = 1`, so it is valid exactly
   when every twist freedom is 1. Distinct labels already force every `stab` to 1, so for locking
   sites this comes free — which is why most species get the cheap encoding.
 
-### Choosing a registration rather than counting them
+### Choosing a phase rather than counting them
 
 `twists` turns a face's site about its own normal, by an angle in radians. This is the bond
-*registry*: which relative orientation the bond means, as opposed to how many it admits. Whole
+*phase*: which relative orientation the bond means, as opposed to how many it admits. Whole
 dart steps rotate the face's corner list, so the frame and the graph vertices move together;
 whatever is left over turns the frame alone.
 
@@ -87,7 +87,7 @@ the symmetry number. That is what it is for, and the graph records the break: th
 folded into the key [`siteorbits`](@ref) groups by. A twist shared across an orbit leaves the
 symmetry intact, since turns about a site's own normal commute with its stabiliser.
 
-Selecting a single registration on a *symmetric* particle is not possible, and that is correct
+Selecting a single phase on a *symmetric* particle is not possible, and that is correct
 rather than missing: the two attachments are related by a symmetry of the particle, so a model
 that keeps the symmetry cannot prefer one. Take both with `locking=false`, or break the symmetry
 with colors.

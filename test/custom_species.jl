@@ -77,7 +77,8 @@ end
     @test length(unique(Roly.labels(graphrep(r)))) == 2
     @test sitestabilisers(r) == fill(1, 4)
 
-    # Check enumeration
+    # Check enumeration. `BindingRules` recolors its species itself; this only replaces the
+    # all-alike coloring left above.
     setcolors!(r, [1, 2, 1, 2])
     sys = BindingRules([1 1 1 1; 1 2 1 2], r)
     @test [polyenum(sys; maxsize=i)[1] for i in 1:5] == cumsum([1, 2, 4, 13, 35])

@@ -76,13 +76,26 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
                                 color2siteloc, siteloc2color,
                                 bondlist, bondedsites, bondedspecies,
                                 compatible_sitelocs_cache, attachment_reps, isinert_cache,
-                                all(_tiles(ps) for ps in particlespecies) &&
-                                    _samesize(particlespecies))
+                                _onlattice(particlespecies))
 end
 function BindingRules(bonds, particlespecies::ParticleSpecies)
     nspcs = _extract_nspecies(bonds)
     particlespecies = [particlespecies for _ in 1:nspcs]
     return BindingRules(bonds, particlespecies)
+end
+
+"""
+    _onlattice(pss)
+
+Whether every species in `pss` tiles, all with the same cell. Licenses the coincident-centers
+shortcut in `overlap(::Particle, ::Particle, ::BindingRules)`. See [`_tilingcell`](@ref).
+"""
+function _onlattice(pss::AbstractVector{<:ParticleSpecies})
+    cells = map(_tilingcell, pss)
+    any(isnothing, cells) && return false
+    sides, edge = first(cells)
+    return all(c -> c[1] == sides && isapprox(c[2], edge; rtol=sqrt(eps(float(typeof(edge))))),
+               cells)
 end
 
 

@@ -76,8 +76,8 @@
     for (name, shp, sticky, want) in lattice_animals
         sys = rules(shp, sticky)
         ps = species(sys, 1)
-        # one registration per bond, so it cannot leave the lattice.
-        @test all(i -> Roly.nregistrations(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
+        # one phase per bond, so it cannot leave the lattice.
+        @test all(i -> Roly.nphases(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
                   sticky)
         @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
     end
@@ -89,7 +89,7 @@
         sys = rules(shp, sidefaces(shp))
         b = Roly.bindingsites(species(sys, 1), first(sidefaces(shp)))
         @test (b.gauge, b.stab) == (4, 2)
-        @test Roly.nregistrations(b, b) == 1
+        @test Roly.nphases(b, b) == 1
         @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
     end
 
@@ -100,7 +100,7 @@
         ps = PolyhedronParticleSpecies(shp; colors, locking=[!(i in sides) for i in 1:nfaces(shp)])
         b = Roly.bindingsites(ps, first(sides))
         @test Roly.twistfreedom(b) == b.gauge == 4
-        @test Roly.nregistrations(b, b) == 2
+        @test Roly.nphases(b, b) == 2
         sys = BindingRules([1 first(sides) 1 first(sides)], ps)
         @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
     end

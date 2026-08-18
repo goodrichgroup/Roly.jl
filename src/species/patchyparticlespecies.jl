@@ -72,7 +72,6 @@ end
 
 """
     PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, twists=0)
-    PatchySphere(group::RotationGroup, r=1; a=1.0, kwargs...)
 
 A 3D sphere of radius `r` carrying one patch per face of polyhedron `p`, so that the patches inherit the
 polyhedron's rotation group.
@@ -82,8 +81,20 @@ See [`PolyhedronParticleSpecies`](@ref) for documentation of the keyword argumen
 PatchySphere(p::Polyhedron, r::Real=1; colors=1:nfaces(p), locking=true, twists=0) =
     _patchysphere(p, r, colors, locking, twists, nothing)
 
-PatchySphere(group::RotationGroup, r::Real=1; a=1.0, kwargs...) =
-    PatchySphere(Polyhedron(group; a), r; kwargs...)
+"""
+    _reseat_radially(pose, r)
+
+Move a face's binding site frame onto the sphere of radius `r`: the site sits at `r` along the
+centroid direction with a radial normal, keeping its twist reference by re-orthogonalising the
+face's local z. The two frames coincide whenever the centroid direction is the face normal, as
+on any Platonic solid.
+"""
+function _reseat_radially(pose::Pose{3,F}, r::Real) where {F}
+    ex = normalize(pose.x)
+    ez = pose.psi[:, 3]
+    ez = normalize(ez - dot(ez, ex) * ex)
+    return Pose{3,F,RotMatrix3{F}}(F(r) * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
+end
 
 function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists, usecycle::Union{Nothing,Bool}) where {F}
     n = nfaces(p)
@@ -92,17 +103,7 @@ function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists, usecy
 
     r = F(r)
     tol = sqrt(eps(F)) * r
-    # On a sphere the patch normal has to be radial, so the frame is built from the centroid
-    # direction and the tangential part of the direction to the face's first edge. Everything
-    # else about the construction is shared with the polyhedron species; see `_facesites`.
-    P = Pose{3,F,RotMatrix3{F}}
-    patchposes(fs) = map(eachindex(fs)) do i
-        c = facecentroid(p, i)
-        ex = normalize(c)
-        v = (corners(p)[fs[i][1]] + corners(p)[fs[i][2]]) / 2 - c
-        ez = normalize(v - dot(v, ex) * ex)
-        P(r * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
-    end
+    patchposes(fs) = [_reseat_radially(q, r) for q in _faceposes(p, fs)]
 
     g, sites = _facesites(p, patchposes, colors, _perface(locking, n, "locking flags"),
                           _perface(twists, n, "twists"), usecycle, tol, tol / r)

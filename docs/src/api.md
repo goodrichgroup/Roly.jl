@@ -16,16 +16,16 @@ BindingSite
 color
 ```
 
-### Bonds and registrations
+### Bonds and phases
 
 How many distinct ways a partner may attach at a site, and which one a given attachment is.
-See [Orientation and registrations](orientation.md) for what the numbers mean.
+See [Orientation and phases](orientation.md) for what the numbers mean.
 
 ```@docs
 twistfreedom
 bondperiod
-nregistrations
-registration
+nphases
+phase
 standard_offset
 contact_pairing
 ```
@@ -184,7 +184,7 @@ Roly._cycle_suffices
 Roly._siteturns
 Roly._site_symmetries
 Roly._check_encoding
-Roly._check_labelling
+Roly._check_labeling
 Roly._recolor!
 Roly.raise!
 ```
