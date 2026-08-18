@@ -146,7 +146,7 @@ function _check_winding(ncorners::Integer, faces::AbstractVector{<:AbstractVecto
     return nothing
 end
 
-"""``
+"""
     _check_convex(corners, faces)
 
 Verify that every corner lies on the inner side of every face's plane, so that the body is
