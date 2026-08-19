@@ -1,56 +1,85 @@
 # Custom particle species
 
-A particle species describes a shape together with a set of binding sites on it. All species are subtypes of `ParticleSpecies{D,B}`, where `D` is the spatial dimension and `B` is the concrete `BindingSite` type used by the species.
+A particle species is a shape together with a set of binding sites on it.
+Every species is a subtype of `ParticleSpecies{D,B}`, where `D` is the spatial dimension and `B` is the concrete `BindingSite` type.
 
-Roly ships with two general-purpose implementations, [`PolygonParticleSpecies`](@ref) (regular polygons) and [`PatchyParticleSpecies`](@ref) (disks or spheres with binding sites on their surface). To model a shape neither of these covers, you define a new subtype of `ParticleSpecies` and implement the interface described below.
+Roly ships three general implementations: [`PolygonParticleSpecies`](@ref) for regular polygons, [`PolyhedronParticleSpecies`](@ref) for any convex [`Polyhedron`](@ref) with one site per face, and [`PatchyParticleSpecies`](@ref) for disks and spheres with sites on the surface.
+An arbitrary convex solid needs only its corners:
+
+```julia
+PolyhedronParticleSpecies(Polyhedron([SVector(x, y, z) for x in (-1.0, 1.0)
+                                                       for y in (-2.0, 2.0)
+                                                       for z in (-3.0, 3.0)]))
+```
+
+Define a new subtype for a shape none of these covers.
 
 ## The interface
 
-A concrete `ParticleSpecies` must define the following methods:
+A species must define these methods:
 
 | Method | Purpose |
 |---|---|
-| `graphrep(ps)` | Return the graph representation of the particle species (a `NautyDiGraph`). See the note below. |
+| `graphrep(ps)` | The species' `NautyDiGraph`. See below. |
 | `nsites(ps)` | Number of binding sites. |
-| `bindingsites(ps, i)` | Return the `i`th `BindingSite`. |
-| `setcolors!(ps, colors)` | Assign new colors to the binding sites. Called by `BindingRules` during construction. |
-| `bounding_radius(ps)` | Radius of a sphere centered at the pose origin that fully encloses the particle. |
-| `overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)` | Return `true` if two particles at given poses overlap. |
-| `Base.copy(ps)` | Deep copy. `BindingRules` copies each species during construction to reassign its colors. |
+| `bindingsites(ps, i)` | The `i`th `BindingSite`. |
+| `bounding_radius(ps)` | Radius of a sphere at the pose origin enclosing the particle. |
+| `overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)` | Whether two particles at given poses overlap. |
+| `Base.copy(ps)` | Deep copy. `BindingRules` copies each species to reassign its colors. |
 
-The following methods have generic fallbacks that you can override:
+These have defaults you may override:
 
-| Method | Default behavior |
+| Method | Default |
 |---|---|
-| `isconvex(ps)` | Returns `false`. Set to `true` for convex shapes as a hint to overlap checks. |
-| `could_contact(p1, p2)` | Cheap bounding-sphere pre-check. Override if the shape allows a tighter test. |
-| `symmetrynumber(ps)` | Size of the graph automorphism group, computed via nauty. |
+| `isconvex(ps)` | `false`. Set `true` for convex shapes to speed up overlap checks. |
+| `could_contact(p1, p2)` | Bounding-sphere pre-check. Override if the shape allows a tighter one. |
+| `symmetrynumber(ps)` | Size of the graph's automorphism group, from nauty. |
 
 ## The graph representation
 
-Each particle species carries a directed graph (`graphrep(ps)`) that captures the *combinatorial* structure of its binding sites, independent of geometry. Roly uses it to detect polyform isomorphism via [nauty](https://pallini.di.uniroma1.it/) and to canonically order the vertices of an assembled polyform.
+Each species carries a directed graph recording how its sites relate, ignoring geometry.
+Roly uses it to detect isomorphic polyforms with [nauty](https://pallini.di.uniroma1.it/).
+Every automorphism of the graph must be a symmetry of the particle.
+The usual choice is a directed cycle with one vertex per site, site `i` on vertex `i`.
+[`cycleencoding`](@ref) builds this for any number of sites.
+Each `BindingSite` records its vertices in the `vertices` field, so `BindingSite(pose, color, i:i, ...)` puts one site on vertex `i`.
 
-**Requirements.** The graph must have at least 3 vertices and contain a directed cycle. The most common choice is a directed cycle of `n` vertices, one vertex per binding site, with site `i` occupying vertex `i`. Each `BindingSite` records which vertex range it covers via its `vertices` field, so `BindingSite(pose, color, i:i, ...)` places one site on vertex `i`.
+A site may instead span a contiguous range of vertices, which is how 3D species record the twist of a face: [`dartencoding`](@ref) gives each face its own directed cycle.
+A graph built that way must keep each site's vertices together, so that no automorphism can carry part of one site onto part of another.
 
-**Species with fewer than 3 sites.** If your particle has only 1 or 2 binding sites, use a 4-vertex directed cycle and group the vertices into pairs, each pair representing one binding site. The 2-patch branch of the built-in `PatchyDisk` in `src/species/patchyparticlespecies.jl` is an example of this pattern.
+## What a binding site records
+
+Besides its pose and color, a [`BindingSite`](@ref) carries three numbers that decide how a partner attaches:
+
+| field | meaning |
+|---|---|
+| `gauge` | order of the site's own rotational symmetry about its normal. Always 1 in 2D. [`facegauge`](@ref) computes it for a polyhedron face. |
+| `stab` | order of the site's stabilizer in the particle's rotation group, from [`sitestabilizers`](@ref). |
+| `locking` | whether the site holds its partner in the orientation its frame names (the default) or admits every orientation the shape permits. |
+
+[`nphases`](@ref) reads these to decide how many distinct bonds a pair of sites has.
+
+In 2D both `gauge` and `stab` are 1, so the five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` is right.
+In 3D `gauge` is still 1 for a site on a single vertex, but `stab` need not be, since a rotation about a patch's axis can carry the particle onto itself.
+Compute it with [`sitestabilizers`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, gauge, stab)`.
+See [Orientation and phases](orientation.md).
 
 ## A worked example: rectangle
 
-Let's define a species for a non-square rectangle with binding sites at the midpoints of its four edges. This is a good template because it exercises every part of the interface without requiring specialized geometry.
+A non-square rectangle with a site at each edge midpoint, exercising the whole interface without special geometry.
 
 ```julia
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose
-import Roly: graphrep, nsites, bindingsites, setcolors!,
+import Roly: graphrep, nsites, bindingsites,
              bounding_radius, isconvex, overlap
 using NautyGraphs
-using Graphs: cycle_digraph
 using StaticArrays, LinearAlgebra, Rotations
 ```
 
 ### The struct
 
-The struct stores everything Roly needs and any geometric parameters specific to the shape. Here we store the two side lengths and the four corners in the particle's local frame.
+The struct holds what Roly needs plus your own geometry, here the two side lengths and the four corners in the particle's frame.
 
 ```julia
 struct Rectangle{F,B<:BindingSite} <: ParticleSpecies{2,B}
@@ -63,29 +92,33 @@ struct Rectangle{F,B<:BindingSite} <: ParticleSpecies{2,B}
 end
 ```
 
-The type parameters `{2,B}` fix the spatial dimension to 2D and let Roly infer the pose type from the binding sites.
+The parameters `{2,B}` fix the dimension to 2D and let Roly infer the pose type from the binding sites.
 
 ### The constructor
 
-The constructor builds the graph, places one binding site at the midpoint of each edge (facing outward), and computes the corners. We use `Angle2d` for 2D rotations and `Pose` to describe each site's position and orientation.
+It builds the graph, puts one site at each edge midpoint facing outward, and computes the corners.
 
 ```julia
-function Rectangle(width::Real, height::Real)
+function Rectangle(width::Real, height::Real; colors=1:4)
     F = float(promote_type(typeof(width), typeof(height)))
     w, h = F(width), F(height)
     tol = sqrt(eps(F)) * max(w, h)
 
-    # Four binding sites at edge midpoints, each facing outward along the edge normal.
-    # Sites are ordered clockwise: right, bottom, left, top.
-    sites = [
-        BindingSite(Pose(SVector{2,F}( w/2, 0),   Angle2d{F}(0)),        1, 1:1, tol, tol),
-        BindingSite(Pose(SVector{2,F}(0,  -h/2),  Angle2d{F}(-F(π)/2)),  2, 2:2, tol, tol),
-        BindingSite(Pose(SVector{2,F}(-w/2, 0),   Angle2d{F}(F(π))),     3, 3:3, tol, tol),
-        BindingSite(Pose(SVector{2,F}(0,   h/2),  Angle2d{F}(F(π)/2)),   4, 4:4, tol, tol),
+    # Site poses first, so the labeling can be derived from them.
+    poses = [
+        Pose(SVector{2,F}( w/2, 0),  Angle2d{F}(0)),
+        Pose(SVector{2,F}(0,  -h/2), Angle2d{F}(-F(π)/2)),
+        Pose(SVector{2,F}(-w/2, 0),  Angle2d{F}(F(π))),
+        Pose(SVector{2,F}(0,   h/2), Angle2d{F}(F(π)/2)),
     ]
+    # A 2D site has no turn about its in-plane normal, so every gauge is 1.
+    labels = siteorbits(poses, ones(Int, 4), collect(colors))
 
-    # Directed 4-cycle: one vertex per binding site, all with the same label.
-    g = NautyDiGraph(cycle_digraph(4); vertex_labels=fill(Cint(1), 4))
+    # Directed 4-cycle, one vertex per binding site; `ranges[i]` is `i:i` here.
+    g, ranges = cycleencoding(4; labels)
+
+    # Sites at the edge midpoints, ordered clockwise: right, bottom, left, top.
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol) for i in 1:4]
 
     corners = [
         SVector{2,F}( w/2,  h/2),
@@ -98,11 +131,18 @@ function Rectangle(width::Real, height::Real)
 end
 ```
 
-The `skin` field is a small numerical tolerance used when comparing distances, so sites that should touch are recognized as touching despite floating-point noise.
+`skin` is a small tolerance for distance comparisons, so sites that should touch count as touching despite floating-point noise.
+
+Derive the graph labels with [`siteorbits`](@ref) rather than writing them out, as every built-in species does.
+It puts two sites in one orbit exactly when a rotation carries one onto the other **and** they have the same color, so it reads the symmetry off the geometry you already gave.
+For this rectangle it returns `[1, 2, 1, 2]` even when all four colors are equal, because opposite edges are interchangeable and adjacent ones are not.
+The same call on a square with one color returns `[1, 1, 1, 1]`.
+
+If you do write labels by hand, call [`check_encoding`](@ref) in your constructor to confirm they match the shape.
 
 ### Interface methods
 
-The four "structural" methods just read from the struct:
+Four of them just read the struct:
 
 ```julia
 graphrep(ps::Rectangle) = ps.g
@@ -115,47 +155,30 @@ Base.copy(ps::Rectangle) =
     typeof(ps)(copy(ps.g), copy(ps.sites), copy(ps.corners), ps.width, ps.height, ps.skin)
 ```
 
-`setcolors!` rebuilds each `BindingSite` with a new color while preserving pose, vertex range, and tolerances:
-
-```julia
-function setcolors!(ps::Rectangle, colors::AbstractVector{<:Integer})
-    length(colors) == nsites(ps) || throw(ArgumentError("wrong number of colors"))
-    for k in eachindex(ps.sites)
-        s = ps.sites[k]
-        ps.sites[k] = BindingSite(s.pose, colors[k], s.vertices,
-                                  s.touching_tolerance, s.alignment_tolerance)
-    end
-    return nothing
-end
-```
+`setcolors!` needs no definition.
+Recoloring re-derives the labeling and the stabilizers along with the colors, and the generic method does all of it, finding the sites in the `sites` field.
+A species that stores them elsewhere defines its own method.
 
 ### Overlap
 
-The overlap check decides whether two particles at given poses intersect. For convex polygons the standard approach is the *Separating Axis Theorem* (SAT): two convex shapes are disjoint if and only if their projections onto some axis do not overlap; it suffices to test the axes perpendicular to their edges.
+For convex shapes use the Separating Axis Theorem: two convex bodies are disjoint exactly when their projections onto some axis do not overlap, so a finite set of candidate axes suffices.
+Only that set differs between dimensions, so [`sat_overlap`](@ref) takes it from you and does the rest.
+In 2D it is the edge normals of both polygons; in 3D both solids' face normals plus the cross products of their edge directions.
 
 ```julia
 function overlap(p1::SpeciesAndPose{<:Rectangle}, p2::SpeciesAndPose{<:Rectangle}; kwargs...)
-    spcs1, pose1 = p1
-    spcs2, pose2 = p2
-
-    skin_sum = spcs1.skin + spcs2.skin
-    for (corners, pose) in ((spcs1.corners, pose1), (spcs2.corners, pose2))
-        n = length(corners)
-        for i in 1:n
-            edge = pose.psi * (corners[mod1(i + 1, n)] - corners[i])
-            normal = SVector(-edge[2], edge[1])
-            lo1, hi1 = extrema(dot(normal, pose1 * c) for c in spcs1.corners)
-            lo2, hi2 = extrema(dot(normal, pose2 * c) for c in spcs2.corners)
-            (hi2 < lo1 + skin_sum || hi1 < lo2 + skin_sum) && return false
-        end
-    end
-    return true
+    s1, pose1 = p1
+    s2, pose2 = p2
+    axes = Iterators.flatten((edgenormals(s1.corners, pose1), edgenormals(s2.corners, pose2)))
+    return sat_overlap(axes, s1.corners, pose1, s2.corners, pose2, s1.skin + s2.skin)
 end
 ```
 
+Axes need not be normalized or even nonzero, since `sat_overlap` scales each one and skips degenerate ones.
+
 ## Using the new species
 
-Once the interface is implemented, the new species can be used just like any built-in one:
+It now works like any built-in one:
 
 ```julia
 rect = Rectangle(2.0, 1.0)

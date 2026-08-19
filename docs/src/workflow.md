@@ -2,7 +2,8 @@
 
 ## Defining binding rules
 
-A `BindingRules` object holds a list of particle species and a set of allowed bonds between their binding sites. A bond is specified in the form `[species_i site_i species_j site_j]`, meaning that site `site_i` of species `species_i` may bind to site `site_j` of species `species_j`.
+A `BindingRules` object holds a list of particle species and the bonds allowed between their binding sites.
+A bond is written `[species_i site_i species_j site_j]`, meaning site `site_i` of species `species_i` may bind site `site_j` of species `species_j`.
 
 ```jldoctest workflow
 julia> using Roly
@@ -16,19 +17,64 @@ julia> sys = BindingRules(bonds, UnitTriangle)
 2d BindingRules[n=4, k=4]
 ```
 
-If all building blocks share the same shape, pass a single species. Otherwise, pass a vector of species — one per row-index used in `bonds`.
+Pass a single species if all blocks have the same shape, otherwise a vector with one species per index used in `bonds`.
 
-Roly ships with a few built-in species: [`UnitTriangle`](@ref), [`UnitSquare`](@ref), [`UnitHexagon`](@ref) (regular polygons), [`PolygonParticleSpecies`](@ref) (arbitrary regular polygons), and [`PatchyParticleSpecies`](@ref)/[`PatchyDisk`](@ref) (disks or spheres with binding sites on their surface). See the [custom species page](custom_species.md) to define your own.
+In 2D Roly ships [`UnitTriangle`](@ref), [`UnitSquare`](@ref), [`UnitHexagon`](@ref) and [`PolygonParticleSpecies`](@ref) for regular polygons, and [`PatchyDisk`](@ref) for a disk with sites on its rim.
+In 3D it ships [`UnitTetrahedron`](@ref), [`UnitCube`](@ref), [`UnitOctahedron`](@ref), [`UnitDodecahedron`](@ref), [`UnitIcosahedron`](@ref), [`UnitPyramid`](@ref), [`UnitPrism`](@ref), [`UnitAntiprism`](@ref) and [`PolyhedronParticleSpecies`](@ref) for any convex polyhedron with one site per face, and [`PatchySphere`](@ref) for a sphere whose patches inherit a polyhedron's rotation group.
+See [Custom particle species](custom_species.md) to define your own.
+
+## Colors and symmetry
+
+You describe a species by *coloring* its binding sites, and the bond table refers to those colors.
+Which sites the particle cannot tell apart follows from the coloring and the geometry, and Roly derives it.
+
+```jldoctest workflow
+julia> symmetrynumber(PolyhedronParticleSpecies(Cube()))                  # every face distinct
+1
+
+julia> symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))  # all faces alike
+24
+
+julia> caps = [abs(facenormal(Cube(), i)[3]) > 0.5 ? 2 : 1 for i in 1:6];
+
+julia> symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=caps))     # caps apart from sides
+8
+```
+
+Faces come in no particular order, so the third example picks the caps by their normals.
+The answer 8 is `D_4`: telling two opposite faces apart leaves the 4-fold axis through them and the 2-fold axes across it.
+
+Two more keywords say what a bond at a face *means*, rather than which bonds exist.
+`locking` decides whether a site holds its partner in the orientation its frame names, and `twists` turns a site about its normal to pick which orientation that is.
+See [Orientation and phases](orientation.md).
+
+## Symmetry groups
+
+Bodies are built by name: [`Cube`](@ref), [`Prism`](@ref), [`Antiprism`](@ref) and the rest all return a [`Polyhedron`](@ref).
+[`rotationgroup`](@ref) lists the rotations a body has, and [`grouporder`](@ref) counts those of a named group.
+
+```jldoctest workflow
+julia> length(rotationgroup(Cube()))
+24
+
+julia> grouporder(Octahedral())
+24
+
+julia> grouporder(Dihedral(5))
+10
+```
+
+The named groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref), [`Octahedral`](@ref) and [`Icosahedral`](@ref), the rotation-only point groups a rigid body can have.
 
 ## Sketching rules interactively
 
-Instead of writing the bonds matrix by hand, you can construct one geometrically with [`ruleeditor`](@ref) — a small terminal editor that lets you place building blocks on a lattice and infers the binding rules from every pair of touching sites:
+[`ruleeditor`](@ref) builds a bond table geometrically: place blocks on a lattice and it reads the rules off every pair of touching sites.
 
 ```julia
 sys = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
 ```
 
-Arrow keys move the cursor, `Enter` places a particle, `Space` erases, `r`/`R` rotate, digits `1`–`9` add and switch between species, `q` accepts. A typical session looks like this:
+Arrow keys move the cursor, `Enter` places, `Space` erases, `r` and `R` rotate, digits `1` to `9` switch species, `q` accepts.
 
 ```
 ┌ Editor ──────────┐┌ Particles ──────────────────────────┐
@@ -47,7 +93,7 @@ Arrow keys move the cursor, `Enter` places a particle, `Space` erases, `r`/`R` r
 └──────────────────┘└─────────────────────────────────────┘
 ```
 
-Pass `output=:bonds` or `output=:matrix` to get a copy-pasteable representation instead of a `BindingRules`, useful for pinning a specific design in code:
+Pass `output=:bonds` or `output=:matrix` for a copy-pasteable result instead of a `BindingRules`:
 
 ```julia
 bonds = ruleeditor(UnitSquare; output=:bonds)  # n×4 integer matrix
@@ -56,7 +102,7 @@ sys   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
 
 ## Enumerating polyforms
 
-`polyenum` walks through every polyform allowed by a set of binding rules:
+`polyenum` walks every polyform the rules allow.
 
 ```jldoctest workflow
 julia> result = polyenum(sys; maxsize=20, maxstrs=100_000);
@@ -71,11 +117,12 @@ julia> result.status
 Finished::RSStatus = 0
 ```
 
-For unbounded systems, always cap either `maxsize` (particles per polyform) or `maxstrs` (total number of polyforms). `status` reports whether the enumeration ran to completion (`Finished`, `MaxDepthReached`, `MaxVerticesReached`, or `BreakTriggered`).
+Cap `maxsize` (particles per polyform) or `maxstrs` (total polyforms) when the rules allow unbounded growth.
+`status` says why the run stopped: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
 
 ## Storing polyforms
 
-`polygen` returns all enumerated polyforms in a `Vector`, sorted by size:
+`polygen` returns the polyforms in a `Vector`, sorted by size.
 
 ```jldoctest workflow
 julia> polys = polygen(sys; maxsize=20);
@@ -86,7 +133,7 @@ julia> length(polys)
 
 ## Counting polyforms
 
-`countpolyforms` returns a count without storing individual polyforms. When exact enumeration is expensive, it switches to an unbiased importance-sampling estimate:
+`countpolyforms` counts without storing anything, switching to an unbiased sampled estimate when exact enumeration gets too expensive.
 
 ```jldoctest workflow
 julia> c = countpolyforms(sys);
@@ -101,15 +148,15 @@ julia> c.uncertainty
 0.0
 ```
 
-`countpolyforms` requires an explicit `maxsize` when the binding rules allow polyforms of unbounded size.
+It requires an explicit `maxsize` when the rules allow polyforms of unbounded size.
 
 ## Applying constraints
 
-`polyenum` accepts a callback that decides what to do at each visited polyform. The callback receives the current polyform and its size, and returns `ACCEPT`, `REJECT`, or `BREAK`:
+`polyenum` takes a callback that runs at each polyform, receiving it and its size and returning one of three signals:
 
-- `ACCEPT` — count this polyform and keep exploring its extensions,
-- `REJECT` — skip this polyform *and everything that grows from it*,
-- `BREAK` — stop the enumeration entirely.
+- `ACCEPT` counts the polyform and keeps exploring it,
+- `REJECT` skips the polyform and everything grown from it,
+- `BREAK` stops the enumeration.
 
 ```jldoctest workflow
 julia> constraint(s, _) = composition(s)[4] <= 1 ? ACCEPT : REJECT;
@@ -118,15 +165,27 @@ julia> polyenum(constraint, sys).nstructures
 14
 ```
 
-Because `REJECT` prunes the entire subtree, the constraint must be monotone: if a polyform violates it, every larger polyform grown from it must also violate it.
+`REJECT` prunes a whole subtree, so the constraint must be monotone.
+If a polyform violates it, everything grown from it must violate it too.
 
 ## Visualizing polyforms
 
-Roly ships a [Makie](https://docs.makie.org) extension for 2D visualization. Load any Makie backend to activate it:
+Load any [Makie](https://docs.makie.org) backend to activate the plotting extension.
 
 ```julia
 using GLMakie      # or CairoMakie, WGLMakie, ...
 render(polys[end]) # display a single polyform
 ```
 
-`polyformplot!(ax, poly)` draws a polyform onto an existing Makie axis.
+[`render`](@ref) picks a 2D or 3D axis to match the polyform.
+**Use GLMakie or WGLMakie for 3D**, since CairoMakie sorts primitives instead of depth-testing them and shows seams where faces meet.
+2D output is fine in any backend.
+
+A species renders too, which is the quickest way to see how its faces are colored and which way its sites face.
+
+```julia
+render(PolyhedronParticleSpecies(Prism(3); colors=[1, 2, 2, 2, 1]))
+render(UnitCube; bindingrules=sys)   # sites no bond can use are drawn inert
+```
+
+[`polyformplot!`](@ref)`(ax, poly)` draws onto an existing Makie axis.

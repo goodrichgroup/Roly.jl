@@ -1,7 +1,7 @@
 """
     PatchyParticleSpecies{D,F,B}
 
-A `D`-dimensional sphere of radius `r` with binding sites on its surface (a disk in 2D).
+A `D`-dimensional sphere of radius `r` with binding sites on its surface.
 """
 struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,B}
     g::NautyDiGraph
@@ -11,11 +11,11 @@ struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,B}
 end
 
 """
-    PatchyParticleSpecies(g, r, poses; colors=eachindex(poses))
+    PatchyParticleSpecies(g::NautyDiGraph, r, poses; colors=eachindex(poses))
 
-General constructor. `g` must have ≥ 3 vertices and contain a directed cycle; vertex labels
-must be pre-set on `g`. Site `i` occupies graph vertex `i` (`vertices = i:i`). For truncated
-sites (multiple graph vertices per site) build the graph and `BindingSite`s manually.
+Construct a `D`-dimensional sphere of radius `r` with binding sites on its surface.
+
+General constructor, requiring manual encoding of the particle's symmetry into a `NautyDiGraph`.
 """
 function PatchyParticleSpecies(
     g::NautyDiGraph,
@@ -27,38 +27,87 @@ function PatchyParticleSpecies(
     D = length(first(patch_positions))
     F = float(eltype(first(patch_positions)))
     r = F(r)
+    n = length(patch_positions)
 
     tol = sqrt(eps(F)) * r
-    sites = [
-        BindingSite(normal_pose(patch_positions[i], patch_twists[i]), colors[i], i:i, tol, tol / r) for
-        i in eachindex(patch_positions, patch_twists, colors)
-    ]
-    return PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol)
+    poses = [normal_pose(patch_positions[i], patch_twists[i]) for i in eachindex(patch_positions)]
+    # One vertex per patch leaves no room for a turn about the patch normal, so the gauge is 1
+    # whatever the arrangement; a patch that needs its own symmetry needs `dartencoding`.
+    gauges = ones(Int, n)
+    labs = siteorbits(poses, gauges, collect(colors))
+    stabs = sitestabilizers(poses, gauges, labs)
+    setlabels!(g, collect(Cint, labs))
+
+    sites = [BindingSite(poses[i], colors[i], i:i, tol, tol / r, 1, stabs[i]) for i in 1:n]
+    return check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
 end
 
 """
-    PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
+    PatchyDisk(angles, r=1; colors=1:length(angles))
 
 A 2D disk of radius `r` with one binding site placed at each angle in `angles` (radians,
-measured counterclockwise from the +x axis). `colors` and `labels` optionally override the
-default per-site color and vertex label assignments.
+measured counterclockwise from the +x axis).
+
+`colors` assigns interaction colors to the patches, and the symmetry follows from it: two
+patches are interchangeable exactly when a rotation carries one onto the other and they are the
+same color (see [`siteorbits`](@ref)).
 """
-function PatchyDisk(angles, r=1; colors=1:length(angles), labels=colors)
+function PatchyDisk(angles, r=1; colors=1:length(angles))
     F = float(eltype(angles))
     r = F(r)
     n = length(angles)
     tol = sqrt(eps(F)) * r
     positions = [SVector(r * cos(F(phi)), r * sin(F(phi))) for phi in angles]
+    poses = [normal_pose(positions[i], F(0)) for i in 1:n]
 
-    if n == 2
-        g = NautyDiGraph(cycle_digraph(4); vertex_labels=[labels[1], labels[1], labels[2], labels[2]])
-        sites = [BindingSite(normal_pose(positions[1], F(0)), colors[1], 1:2, tol, tol / r),
-                 BindingSite(normal_pose(positions[2], F(0)), colors[2], 3:4, tol, tol / r)]
-    else
-        g = NautyDiGraph(cycle_digraph(n); vertex_labels=labels)
-        sites = [BindingSite(normal_pose(positions[i], F(0)), colors[i], i:i, tol, tol / r) for i in 1:n]
-    end
-    return PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol)
+    # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
+    gauges = ones(Int, n)
+    labels = siteorbits(poses, gauges, collect(colors))
+    stabs = sitestabilizers(poses, gauges, labels)
+
+    g, ranges = cycleencoding(n; labels)
+    sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1, stabs[i]) for i in 1:n]
+    return check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
+end
+
+"""
+    PatchySphere(p::Polyhedron, r=1; colors=1:nfaces(p), locking=true, twists=0)
+
+A 3D sphere of radius `r` carrying one patch per face of polyhedron `p`, so that the patches inherit the
+polyhedron's rotation group.
+
+See [`PolyhedronParticleSpecies`](@ref) for documentation of the keyword arguments.
+"""
+PatchySphere(p::Polyhedron, r::Real=1; colors=1:nfaces(p), locking=true, twists=0) =
+    _patchysphere(p, r, colors, locking, twists, nothing)
+
+"""
+    _reseat_radially(pose, r)
+
+Move a face's binding site frame onto the sphere of radius `r`: the site sits at `r` along the
+centroid direction with a radial normal, keeping its twist reference by re-orthogonalising the
+face's local z. The two frames coincide whenever the centroid direction is the face normal, as
+on any Platonic solid.
+"""
+function _reseat_radially(pose::Pose{3,F}, r::Real) where {F}
+    ex = normalize(pose.x)
+    ez = pose.psi[:, 3]
+    ez = normalize(ez - dot(ez, ex) * ex)
+    return Pose{3,F,RotMatrix3{F}}(F(r) * ex, RotMatrix3{F}(hcat(ex, cross(ez, ex), ez)))
+end
+
+function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists, usecycle::Union{Nothing,Bool}) where {F}
+    n = nfaces(p)
+    length(colors) == n ||
+        throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
+
+    r = F(r)
+    tol = sqrt(eps(F)) * r
+    patchposes(fs) = [_reseat_radially(q, r) for q in _faceposes(p, fs)]
+
+    g, sites = _facesites(p, patchposes, colors, _perface(locking, n, "locking flags"),
+                          _perface(twists, n, "twists"), usecycle, tol, tol / r)
+    return check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
 
 function Base.show(io::Core.IO, ps::PatchyParticleSpecies{D}) where {D}
@@ -74,17 +123,8 @@ nsites(ps::PatchyParticleSpecies) = length(ps.sites)
 bindingsites(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
 isconvex(::PatchyParticleSpecies) = true
 
-function setcolors!(ps::PatchyParticleSpecies, colors::AbstractVector{<:Integer})
-    length(colors) != nsites(ps) && throw(ArgumentError("incorrect number of colors"))
-    for k in eachindex(ps.sites)
-        s = ps.sites[k]
-        ps.sites[k] = BindingSite(s.pose, colors[k], s.vertices, s.touching_tolerance, s.alignment_tolerance)
-    end
-    return nothing
-end
-
 function could_contact(
-    p1::SpeciesAndPose{<:PatchyParticleSpecies}, p2::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...
+    ::SpeciesAndPose{<:PatchyParticleSpecies}, ::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...
 )
     return true # this check would be identical with overlap, so no need to do it twice
 end

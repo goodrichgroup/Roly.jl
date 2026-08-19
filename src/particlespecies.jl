@@ -6,7 +6,27 @@ concrete `BindingSite` type.
 """
 abstract type ParticleSpecies{D,B<:BindingSite} end
 
+"""
+    SpeciesAndPose{SPC}
+
+A species paired with a placement, `species => pose`: one particle, positioned. This is what
+the geometric predicates take, since neither a species nor a pose alone is a thing in space.
+[`overlap`](@ref) and [`could_contact`](@ref) are both written
+`overlap(spcs1 => pose1, spcs2 => pose2)`.
+"""
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
+
+"""
+    _tilingcell(ps::ParticleSpecies)
+
+Identify the tiling `ps` sits on, or `nothing` if it does not tile. Default `nothing`; a species
+opts in when it tiles space and every bond it can make carries a cell onto another cell.
+
+The identifier must pin down shape as well as size, since equal cells are what
+[`_onlattice`](@ref) tests for. Matching size alone is not enough: unit squares and unit
+triangles can tile the plane together.
+"""
+_tilingcell(::ParticleSpecies) = nothing
 
 """
     numtype(::ParticleSpecies)
@@ -66,7 +86,10 @@ function nsites end
 
 Assign colors to the binding sites of particle species `p`.
 """
-function setcolors! end
+function setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
+    _recolor!(p, p.sites, colors)
+    return nothing
+end
 
 """
     isconvex(::ParticleSpecies)
@@ -81,7 +104,7 @@ end
 """
     bounding_radius(p::ParticleSpecies)
 
-Return the radius of a bounding sphere centred at the particle's pose origin.
+Return the radius of a bounding sphere centerd at the particle's pose origin.
 """
 function bounding_radius end
 
@@ -115,6 +138,10 @@ The symmetry number is equal to the size of the automorphism group
 of `graphrep(p)`.
 """
 function symmetrynumber(p::ParticleSpecies)
+    # DO NOT `canonize` here: a species' graph must stay in construction order, since
+    # `BindingSite.vertices` indexes it directly and `bindingsites(::Particle, ...)` reaches those
+    # vertices by shifting the range by a leading vertex. Reordering here would silently
+    # decouple the two.
     _, autg = nauty(graphrep(p))
     return convert(Int, autg.n)
 end

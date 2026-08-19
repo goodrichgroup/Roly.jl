@@ -257,7 +257,7 @@ function _collectballpairs!(aux::EnvironmentEnumAux, poly::Polyform)
         0 <= dist[p] <= aux.depth - 1 || continue
         for k in 1:nsites(part, sys)
             site = bindingsites(part, sys, k)
-            isbound_vertex(poly, tocanon(poly, first(site.vertices))) && continue
+            _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
             for siteloc in compatible_sitelocs(sys, color(site))
                 push!(aux.pairs, (site, siteloc))
