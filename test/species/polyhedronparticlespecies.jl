@@ -93,7 +93,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
             bi, bj = Roly.bindingsites(ps, i), Roly.bindingsites(ps, j)
             @test bj.stab == bi.stab
             # Q carries site i's frame onto site j's, up to a turn about j's normal lying in
-            # j's stabiliser -- not merely in its gauge.
+            # j's stabilizer -- not merely in its gauge.
             @test any(0:(bj.stab - 1)) do m
                 isapprox(Q * bi.pose.psi, bj.pose.psi * RotX(2π * m / bj.stab); atol=1e-8)
             end
@@ -155,25 +155,25 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test symmetrynumber(sphere) == site_symmetry(sphere) == order
     end
 
-    # Site stabilisers
+    # Site stabilizers
     # How much of a site's own symmetry the whole particle keeps. At most its gauge, and the
-    # ratio is how many distinct ways a partner can attach there: turns in the stabiliser put
+    # ratio is how many distinct ways a partner can attach there: turns in the stabilizer put
     # the same body in the same place with only its sites permuted.
     gauges(ps) = [bindingsites(ps, i).gauge for i in 1:nsites(ps)]
-    phases(ps) = gauges(ps) .÷ Roly.sitestabilisers(ps)
+    phases(ps) = gauges(ps) .÷ Roly.sitestabilizers(ps)
 
     # A cube keeps all four turns about a face normal, so a face-to-face bond has one
     # phase and nothing changes for polycubes.
     cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
     @test gauges(cube) == fill(4, 6)
-    @test Roly.sitestabilisers(cube) == fill(4, 6)
+    @test Roly.sitestabilizers(cube) == fill(4, 6)
     @test phases(cube) == fill(1, 6)
 
     # Distinguishing the caps costs the side faces two of those turns, since a quarter turn
     # about a side normal carries the other sides onto caps.
     caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in Roly.facenormals(Cube())]
     capped = PolyhedronParticleSpecies(Cube(); colors=caps)
-    @test Roly.sitestabilisers(capped) == [c == 2 ? 4 : 2 for c in caps]
+    @test Roly.sitestabilizers(capped) == [c == 2 ? 4 : 2 for c in caps]
     @test phases(capped) == [c == 2 ? 1 : 2 for c in caps]
 
     # A triangular prism's side faces are squares
@@ -181,24 +181,24 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # two ways: in the plane, or tipped out of it.
     tri = PolyhedronParticleSpecies(Prism(3); colors=geometriclabels(Prism(3)))
     @test gauges(tri) == [3, 4, 4, 4, 3]
-    @test Roly.sitestabilisers(tri) == [3, 2, 2, 2, 3]
+    @test Roly.sitestabilizers(tri) == [3, 2, 2, 2, 3]
     @test phases(tri) == [1, 2, 2, 2, 1]
 
-    # Make the prism taller, so that faces become rectangles: gauge and stabiliser agree at 2,
+    # Make the prism taller, so that faces become rectangles: gauge and stabilizer agree at 2,
     # leaving a single phase.
     tall = Prism(3, 1.0; h=2.0)
     tallps = PolyhedronParticleSpecies(tall; colors=geometriclabels(tall))
     @test gauges(tallps) == [3, 2, 2, 2, 3]
     @test phases(tallps) == fill(1, 5)
 
-    # A stabiliser always divides the gauge, and always divides the symmetry number.
+    # A stabilizer always divides the gauge, and always divides the symmetry number.
     for ps in (cube, capped, tri, tallps, UnitDodecahedron, UnitAntiprism(4))
-        stabs = Roly.sitestabilisers(ps)
+        stabs = Roly.sitestabilizers(ps)
         @test all(gauges(ps) .% stabs .== 0)
         @test all(symmetrynumber(ps) .% stabs .== 0)
     end
 
-    # Deriving the labelling from the coloring cannot claim a symmetry that is not there: one
+    # Deriving the labeling from the coloring cannot claim a symmetry that is not there: one
     # color on all four faces of a triangular pyramid does not make its base equivalent to its
     # sides, and the derivation splits them, leaving the 3-fold axis rather than a tetrahedral
     # 12.
@@ -252,13 +252,13 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # Built with those colors from the start, it is the dart encoding and the symmetry is there.
     @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(10, 6))) == 24
 
-    # A coloring is the whole statement, so recoloring has to carry the labelling and the
-    # stabilisers with it. Given a graph roomy enough to hold the result -- here the dart
+    # A coloring is the whole statement, so recoloring has to carry the labeling and the
+    # stabilizers with it. Given a graph roomy enough to hold the result -- here the dart
     # encoding, asked for explicitly -- a prism whose faces all start out distinct can be
     # recolored into its full D_3 and the derived quantities follow.
     prism = dartspecies(Prism(3, 1.0; h=2.0); colors=1:5)
     @test symmetrynumber(prism) == site_symmetry(prism) == 1
-    @test Roly.sitestabilisers(prism) == fill(1, 5)
+    @test Roly.sitestabilizers(prism) == fill(1, 5)
 
     caps = [i for i in 1:5 if abs(Roly.facenormal(Prism(3, 1.0; h=2.0), i)[3]) > 1e-8]
     setcolors!(prism, [i in caps ? 7 : 8 for i in 1:5])
@@ -485,7 +485,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
                                                  inv(b.particles[2].pose.psi))), θ; atol=1e-8)
     end
     # A twist shared across an orbit leaves the symmetry alone, since turns about a site's own
-    # normal commute with its stabiliser; turning one face differently splits the orbit.
+    # normal commute with its stabilizer; turning one face differently splits the orbit.
     uniform = PolyhedronParticleSpecies(shp; colors, twists=[i in sides ? 0.37 : 0.0 for i in 1:nfaces(shp)])
     @test symmetrynumber(uniform) == site_symmetry(uniform) == 6
     partial = PolyhedronParticleSpecies(shp; colors, twists=[i == first(sides) ? 0.37 : 0.0 for i in 1:nfaces(shp)])

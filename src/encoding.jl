@@ -185,8 +185,8 @@ and a short edge on another hides the symmetry that relates them.
 
 The choice of twist reference is made from the geometry of the face: rotate to the lexicographically
 least cyclic word of `(edge length, interior angle)`. That word determines a planar polygon
-and its cyclic symmetries are exactly the face's own rotations, so the minimising positions are all within one gauge 
-orbit. Congruent faces have identical words, so their minimising positions correspond up to a gauge turn.
+and its cyclic symmetries are exactly the face's own rotations, so the minimizing positions are all within one gauge 
+orbit. Congruent faces have identical words, so their minimizing positions correspond up to a gauge turn.
 """
 function _canonical_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     atol = sqrt(eps(F)) * maximum(norm, corners)
@@ -691,7 +691,7 @@ function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists,
     fs = [circshift(f, -mod(m, length(f))) for (f, m) in zip(fs, steps)]
     poses = [pose * RotX(F(t) - 2F(π) * m / length(f))
              for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
-    stabs = sitestabilisers(poses, gauges, labels)
+    stabs = sitestabilizers(poses, gauges, labels)
 
     cyclic = something(usecycle, _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
     g, ranges = cyclic ? cycleencoding(n; labels) : dartencoding(fs; labels)
@@ -945,21 +945,21 @@ function siteorbits(poses, gauges, colors)
 end
 
 """
-    sitestabilisers(ps::ParticleSpecies)
-    sitestabilisers(poses, gauges, keys)
+    sitestabilizers(ps::ParticleSpecies)
+    sitestabilizers(poses, gauges, keys)
 
 Return, per site, how many of the particle's own symmetries leave that site where it is.
 
 Where [`site_symmetry`](@ref) counts all of them, this counts the ones fixing each site: the
 turns about that site's normal that carry the whole particle onto itself. It is at most the
 site's `gauge`, and usually less: a triangular prism is 2-fold about a square side face, so
-that face has gauge 4 but a stabiliser of 2, while a cube's face has both equal to 4.
+that face has gauge 4 but a stabilizer of 2, while a cube's face has both equal to 4.
 The difference is what decides how many *distinct* ways a partner can attach there, see
 [`nphases`](@ref).
 """
-sitestabilisers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
+sitestabilizers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
 
-function sitestabilisers(poses, gauges, keys)
+function sitestabilizers(poses, gauges, keys)
     perms = _site_symmetries(poses, gauges, keys)
     return [count(perm -> perm[i] == i, perms) for i in eachindex(poses)]
 end
@@ -967,7 +967,7 @@ end
 """
     _recolor!(sites, g, colors)
 
-Give `sites` the interaction colors `colors`, and update the labeling and the stabilisers.
+Give `sites` the interaction colors `colors`, and update the labeling and the stabilizers.
 """
 function _recolor!(ps::ParticleSpecies, sites::AbstractVector{<:BindingSite}, colors)
     # store old labeling and restore on error
@@ -992,7 +992,7 @@ function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors
     poses = [s.pose for s in sites]
     gauges = [s.gauge for s in sites]
     orbits = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilisers(poses, gauges, orbits)
+    stabs = sitestabilizers(poses, gauges, orbits)
 
     labs = labels(g)
     for i in eachindex(sites)

@@ -104,7 +104,7 @@ end
 """
     bounding_radius(p::ParticleSpecies)
 
-Return the radius of a bounding sphere centred at the particle's pose origin.
+Return the radius of a bounding sphere centerd at the particle's pose origin.
 """
 function bounding_radius end
 

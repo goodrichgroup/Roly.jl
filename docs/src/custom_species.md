@@ -12,7 +12,7 @@ PolyhedronParticleSpecies(Polyhedron([SVector(x, y, z) for x in (-1.0, 1.0)
                                                        for z in (-3.0, 3.0)]))
 ```
 
-Define a new subtype only for a shape none of these covers.
+Define a new subtype for a shape none of these covers.
 
 ## The interface
 
@@ -45,7 +45,7 @@ The usual choice is a directed cycle with one vertex per site, site `i` on verte
 Each `BindingSite` records its vertices in the `vertices` field, so `BindingSite(pose, color, i:i, ...)` puts one site on vertex `i`.
 
 A site may instead span a contiguous range of vertices, which is how 3D species record the twist of a face: [`dartencoding`](@ref) gives each face its own directed cycle.
-The graph must then keep the site boundaries fixed, or an automorphism can slide a site across two of them and the symmetry number comes out too large.
+A graph built that way must keep each site's vertices together, so that no automorphism can carry part of one site onto part of another.
 
 ## What a binding site records
 
@@ -54,14 +54,14 @@ Besides its pose and color, a [`BindingSite`](@ref) carries three numbers that d
 | field | meaning |
 |---|---|
 | `gauge` | order of the site's own rotational symmetry about its normal. Always 1 in 2D. [`facegauge`](@ref) computes it for a polyhedron face. |
-| `stab` | order of the site's stabiliser in the particle's rotation group, from [`sitestabilisers`](@ref). |
+| `stab` | order of the site's stabilizer in the particle's rotation group, from [`sitestabilizers`](@ref). |
 | `locking` | whether the site holds its partner in the orientation its frame names (the default) or admits every orientation the shape permits. |
 
-[`nphases`](@ref) reads these to decide how many distinct bonds a pair of sites has, and no graph check catches getting them wrong.
+[`nphases`](@ref) reads these to decide how many distinct bonds a pair of sites has.
 
 In 2D both `gauge` and `stab` are 1, so the five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` is right.
 In 3D `gauge` is still 1 for a site on a single vertex, but `stab` need not be, since a rotation about a patch's axis can carry the particle onto itself.
-Compute it with [`sitestabilisers`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, gauge, stab)`.
+Compute it with [`sitestabilizers`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, gauge, stab)`.
 See [Orientation and phases](orientation.md).
 
 ## A worked example: rectangle
@@ -104,7 +104,7 @@ function Rectangle(width::Real, height::Real; colors=1:4)
     w, h = F(width), F(height)
     tol = sqrt(eps(F)) * max(w, h)
 
-    # Site poses first, so the labelling can be derived from them.
+    # Site poses first, so the labeling can be derived from them.
     poses = [
         Pose(SVector{2,F}( w/2, 0),  Angle2d{F}(0)),
         Pose(SVector{2,F}(0,  -h/2), Angle2d{F}(-F(π)/2)),
@@ -133,14 +133,12 @@ end
 
 `skin` is a small tolerance for distance comparisons, so sites that should touch count as touching despite floating-point noise.
 
-The labels are derived, not written down.
-[`siteorbits`](@ref) puts two sites in one orbit exactly when a rotation carries one onto the other **and** they have the same color.
+Derive the graph labels with [`siteorbits`](@ref) rather than writing them out, as every built-in species does.
+It puts two sites in one orbit exactly when a rotation carries one onto the other **and** they have the same color, so it reads the symmetry off the geometry you already gave.
 For this rectangle it returns `[1, 2, 1, 2]` even when all four colors are equal, because opposite edges are interchangeable and adjacent ones are not.
 The same call on a square with one color returns `[1, 1, 1, 1]`.
 
-Every built-in species derives its labels this way.
-Labels claiming more symmetry than the shape has make the graph merge structures that differ, and nothing downstream notices.
-If you write them by hand, call [`check_encoding`](@ref) in your constructor.
+If you do write labels by hand, call [`check_encoding`](@ref) in your constructor to confirm they match the shape.
 
 ### Interface methods
 
@@ -158,9 +156,8 @@ Base.copy(ps::Rectangle) =
 ```
 
 `setcolors!` needs no definition.
-Recoloring must re-derive the labelling and the stabilisers too, since the coloring decides both which sites are interchangeable and how many ways a partner attaches.
-The generic method does that, and finds the sites in the `sites` field.
-A species storing them elsewhere defines its own method.
+Recoloring re-derives the labeling and the stabilizers along with the colors, and the generic method does all of it, finding the sites in the `sites` field.
+A species that stores them elsewhere defines its own method.
 
 ### Overlap
 

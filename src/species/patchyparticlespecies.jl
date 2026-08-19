@@ -35,7 +35,7 @@ function PatchyParticleSpecies(
     # whatever the arrangement; a patch that needs its own symmetry needs `dartencoding`.
     gauges = ones(Int, n)
     labs = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilisers(poses, gauges, labs)
+    stabs = sitestabilizers(poses, gauges, labs)
     setlabels!(g, collect(Cint, labs))
 
     sites = [BindingSite(poses[i], colors[i], i:i, tol, tol / r, 1, stabs[i]) for i in 1:n]
@@ -63,7 +63,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles))
     # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
     gauges = ones(Int, n)
     labels = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilisers(poses, gauges, labels)
+    stabs = sitestabilizers(poses, gauges, labels)
 
     g, ranges = cycleencoding(n; labels)
     sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1, stabs[i]) for i in 1:n]

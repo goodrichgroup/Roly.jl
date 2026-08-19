@@ -9,7 +9,7 @@ overlap, and it is enough to test a finite candidate set. In 2D the edge normals
 In 3D it takes both solids' face normals and the cross products of their edge directions,
 which catch the edge-on-edge configurations no face normal separates.
 
-Axes need not be normalised or even nonzero: each is scaled here, and a degenerate one (from
+Axes need not be normalized or even nonzero: each is scaled here, and a degenerate one (from
 parallel edges, say) carries no information and is skipped.
 """
 function sat_overlap(axes, corners1, pose1, corners2, pose2, skin::Real)

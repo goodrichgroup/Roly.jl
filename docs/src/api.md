@@ -50,7 +50,7 @@ facegauge
 siteorbits
 site_symmetry
 check_encoding
-sitestabilisers
+sitestabilizers
 dartencoding
 cycleencoding
 ```

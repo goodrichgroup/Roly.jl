@@ -41,11 +41,8 @@ julia> symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=caps))     # caps
 8
 ```
 
-Faces come in no particular order, so the third example picks the caps by their normals rather than by index.
+Faces come in no particular order, so the third example picks the caps by their normals.
 The answer 8 is `D_4`: telling two opposite faces apart leaves the 4-fold axis through them and the 2-fold axes across it.
-
-There is no `labels` keyword, since a labelling claiming more symmetry than the shape has would silently merge structures that differ.
-[`siteorbits`](@ref) derives it instead.
 
 Two more keywords say what a bond at a face *means*, rather than which bonds exist.
 `locking` decides whether a site holds its partner in the orientation its frame names, and `twists` turns a site about its normal to pick which orientation that is.
@@ -53,13 +50,12 @@ See [Orientation and phases](orientation.md).
 
 ## Symmetry groups
 
-Build a body by naming it: [`Cube`](@ref), [`Prism`](@ref), [`Antiprism`](@ref) and the rest all return a [`Polyhedron`](@ref).
-A rotation group cannot stand in for a body, since duality gives the cube and the octahedron the same group.
-The groups report symmetry instead: [`rotationgroup`](@ref) lists a body's rotations, [`grouporder`](@ref) counts a named group's.
+Bodies are built by name: [`Cube`](@ref), [`Prism`](@ref), [`Antiprism`](@ref) and the rest all return a [`Polyhedron`](@ref).
+[`rotationgroup`](@ref) lists the rotations a body has, and [`grouporder`](@ref) counts those of a named group.
 
 ```jldoctest workflow
-julia> length(rotationgroup(Cube())) == length(rotationgroup(Octahedron()))
-true
+julia> length(rotationgroup(Cube()))
+24
 
 julia> grouporder(Octahedral())
 24
@@ -68,8 +64,7 @@ julia> grouporder(Dihedral(5))
 10
 ```
 
-The groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref), [`Octahedral`](@ref) and [`Icosahedral`](@ref).
-These are the rotation-only point groups, the only ones a rigid body can have.
+The named groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref), [`Octahedral`](@ref) and [`Icosahedral`](@ref), the rotation-only point groups a rigid body can have.
 
 ## Sketching rules interactively
 

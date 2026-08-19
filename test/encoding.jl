@@ -112,7 +112,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test symnum(dartencoding(Pyramid(3); labels=fill(1, 4))[1]) == 12
     @test length(rotationgroup(Pyramid(3))) == 3
 
-    # Partial labelling selects the subgroup preserving it: distinguishing the two caps of a
+    # Partial labeling selects the subgroup preserving it: distinguishing the two caps of a
     # cube from its four sides leaves the 4-fold axis and the 2-fold axes through it, D_4.
     # The faces come out of the hull search in no particular order, so pick them by normal.
     caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in facenormals(Cube())]
@@ -218,7 +218,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test eltype(facecentroid(p, 1)) === Float32
     @test length(rotationgroup(p)) == 24
 
-    # Corners are recentred on construction; everything downstream can assume so
+    # Corners are recenterd on construction; everything downstream can assume so
     cube = Cube()
     offset = SVector(3.0, -1.0, 7.0)
     shifted = Polyhedron([c + offset for c in corners(cube)], faces(cube))
