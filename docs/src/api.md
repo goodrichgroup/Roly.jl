@@ -16,10 +16,74 @@ BindingSite
 color
 ```
 
+### Bonds and phases
+
+How many distinct ways a partner may attach at a site, and which one a given attachment is.
+See [Orientation and phases](orientation.md) for what the numbers mean.
+
+```@docs
+twistfreedom
+bondperiod
+nphases
+phase
+standard_offset
+contact_pairing
+```
+
+## Polyhedra and graph encodings
+
+```@docs
+Polyhedron
+corners
+faces
+facevertices
+nfaces
+nedges
+facecentroid
+facenormal
+edgemidpoint
+minedgelength
+inradius
+rotationgroup
+geometriclabels
+facegauge
+siteorbits
+site_symmetry
+sitestabilisers
+dartencoding
+cycleencoding
+```
+
+### Rotation groups
+
+```@docs
+RotationGroup
+Cyclic
+Dihedral
+Tetrahedral
+Octahedral
+Icosahedral
+grouporder
+```
+
+### Solids
+
+```@docs
+Tetrahedron
+Cube
+Octahedron
+Dodecahedron
+Icosahedron
+Pyramid
+Prism
+Antiprism
+```
+
 ## Particle species
 
 ```@docs
 ParticleSpecies
+SpeciesAndPose
 bindingsites
 nsites
 graphrep
@@ -28,6 +92,8 @@ symmetrynumber
 bounding_radius
 could_contact
 overlap
+sat_overlap
+edgenormals
 ```
 
 ### Built-in species
@@ -37,8 +103,19 @@ PolygonParticleSpecies
 UnitTriangle
 UnitSquare
 UnitHexagon
+PolyhedronParticleSpecies
+shape
+UnitTetrahedron
+UnitCube
+UnitOctahedron
+UnitDodecahedron
+UnitIcosahedron
+UnitPyramid
+UnitPrism
+UnitAntiprism
 PatchyParticleSpecies
 PatchyDisk
+PatchySphere
 ```
 
 ## Binding rules
@@ -78,8 +155,42 @@ countpolyforms
 PolyformCount
 ```
 
+An enumeration reports why it stopped as an `RSStatus`: `Finished` if it ran to completion, and
+otherwise `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`. A callback returns
+`ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
+
+## Visualization
+
+Provided by the Makie extension, so a backend has to be loaded.
+
+```@docs
+render
+polyformplot
+polyformplot!
+```
+
 ## Interactive rule editor
 
 ```@docs
 ruleeditor
+```
+
+## Internals
+
+Not public API — names, signatures and behaviour may change without notice. They are listed
+because the reasoning behind Roly's orientation model lives in their docstrings, and the public
+ones refer to them.
+
+```@docs
+Roly._canonical_faces
+Roly._propagate_faces
+Roly._facesites
+Roly._derive_faces
+Roly._cycle_suffices
+Roly._siteturns
+Roly._site_symmetries
+Roly._check_encoding
+Roly._check_labeling
+Roly._recolor!
+Roly.raise!
 ```

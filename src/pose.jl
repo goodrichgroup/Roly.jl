@@ -18,6 +18,13 @@ Create a pose from a position vector `x` and orientation `psi`.
 Pose(x::AbstractVector, psi::R) where {R<:Rotation} = Pose{length(x),eltype(x),R}(SVector{length(x),eltype(x)}(x), psi)
 Pose{D,F}(x::AbstractVector, psi::R) where {D,F,R<:Rotation{D,F}} = Pose{D,F,R}(SVector{D,F}(x), psi)
 
+# Rotation types are not closed under multiplication -- `RotXYZ * RotXYZ` is a `RotMatrix3` --
+# so a pose can easily arrive in a different parameterisation than the one a field is declared
+# with. Rotations.jl converts between them; `Pose` just needs to pass the request along, which
+# is what lets a `BindingSite` pinned to one type be transformed by a pose of another.
+Base.convert(::Type{Pose{D,F,R}}, p::Pose{D,F}) where {D,F,R<:Rotation{D,F}} =
+    Pose{D,F,R}(p.x, convert(R, p.psi))
+
 """
     one(::Type{Pose{D,F,R}})
     one(p::Pose)
@@ -29,14 +36,15 @@ Base.one(p::Pose) = one(typeof(p))
 
 """
     Pose{2,F}(; orientationtype=Angle2d)
-    Pose{3,F}(; orientationtype=RotXYZ)
+    Pose{3,F}(; orientationtype=RotMatrix3)
     Pose{D}(; ...)
 
 Return the identity pose of eltype `F` in `D` dimensions, using the default rotation type
-(`Angle2d` in 2D, `RotXYZ` in 3D). The rotation type can be overridden with `orientationtype`.
+(`Angle2d` in 2D, `RotMatrix3` in 3D). The rotation type can be overridden with
+`orientationtype`, but see the note on `normal_pose` before picking an Euler one.
 """
 Pose{2,F}(; orientationtype=Angle2d) where {F} = one(Pose{2,F,orientationtype{F}})
-Pose{3,F}(; orientationtype=RotXYZ) where {F} = one(Pose{3,F,orientationtype{F}})
+Pose{3,F}(; orientationtype=RotMatrix3) where {F} = one(Pose{3,F,orientationtype{F}})
 Pose{D,F}(; kwargs...) where {D,F} = throw(ArgumentError("no default pose for D=$D, use D=2 or D=3"))
 Pose{D}(; kwargs...) where {D} = Pose{D,Float64}(; kwargs...)
 
@@ -104,11 +112,20 @@ function pol2cart(r::F, psi::Real) where {F}
 end
 
 """
-    normal_pose(x, twist=0; orientationtype=RotXYZ)
+    normal_pose(x, twist=0; orientationtype=RotMatrix3)
 
-Create a pose at point `x`, whose local x axis also points outward along `x`. `twist` rotates the y,z axes about x.
+Create a pose at point `x`, whose local x axis also points outward along `x`. `twist` rotates
+the y,z axes about x, which is how a patch's bond phase is chosen: the twist is the site's
+reference direction, and turning it turns the partner it holds.
 """
-function normal_pose(x, twist=0; orientationtype=length(x) == 2 ? Angle2d : RotXYZ)
+# The 3D default is `RotMatrix3`, not an Euler parameterisation, because rotation types are not
+# closed under multiplication: `RotXYZ * RotXYZ` is a `RotMatrix3`. The pose type is threaded
+# through `BindingSite`, `Particle`, `Polyform` and `BindingRules`, so a species whose sites are
+# pinned to `RotXYZ` would need every one of those wrappers to convert on the way past. Using
+# the type that composes to itself -- which `PatchySphere` and `PolyhedronParticleSpecies`
+# already build directly -- means nothing has to, and all 3D species agree on one pose type and
+# can share a `BindingRules`.
+function normal_pose(x, twist=0; orientationtype=length(x) == 2 ? Angle2d : RotMatrix3)
     n = normalize(x)
     φ = atan(n[2], n[1])
     length(x) == 2 && return Pose(x, orientationtype(φ))

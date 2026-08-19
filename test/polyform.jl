@@ -1,7 +1,8 @@
 using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimension,
             bonds, bondindex, composition, interior_edges, exterior_edges, tocanon, toorig,
             BindingRules, UnitSquare, nbonds, raise!, lower!, bindingsites, graphrep,
-            collect_open_bindingsites, collect_compatible_pairs, isbound_vertex, particle_from_leadingvertex
+            collect_open_bindingsites, collect_compatible_pairs, particle_from_leadingvertex,
+            PolygonParticleSpecies, species, polygen
 
 @testset "polyform" begin
     sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
@@ -89,4 +90,37 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     @test poly == poly_raise
     @test poly_raise.canon2orig == poly.canon2orig
     @test poly_raise.orig2canon == poly.orig2canon
+
+    using Graphs: has_edge, nv
+    using Roly: graphvertices, PolyhedronParticleSpecies, UnitCube, Cube
+
+    # A monomer's canon2orig is the permutation `canonize!` applied to the species graph,
+    # not the identity.
+    for spcs in (PolygonParticleSpecies(6; colors=[1, 2, 1, 2, 1, 2]),
+                 PolygonParticleSpecies(4; colors=[1, 1, 1, 1]))
+        s = BindingRules([1 1 1 3], spcs)
+        mono = Polyform(s, 1)
+        for e in edges(graphrep(species(s, 1)))
+            @test has_edge(graphrep(mono), tocanon(mono, e.src), tocanon(mono, e.dst))
+        end
+        @test nv(graphrep(mono)) == nv(graphrep(species(s, 1)))
+    end
+
+    # Same for a 3D species, whose 24-vertex graph really does get permuted.
+    s3 = BindingRules([1 1 1 2], dartspecies(Cube()))
+    mono3 = Polyform(s3, 1)
+    for e in edges(graphrep(species(s3, 1)))
+        @test has_edge(graphrep(mono3), tocanon(mono3, e.src), tocanon(mono3, e.dst))
+    end
+
+    # Removing a particle compacts the graph's vertex numbering, so the surviving
+    # particles' vertex blocks have to be adjusted
+    sys_pm = BindingRules([1 1 1 3; 1 2 1 4], PolygonParticleSpecies(4, 1.0; colors=[1, 1, 1, 1]))
+    for p in polygen(sys_pm; maxsize=6)
+        nparticles(p) < 2 && continue
+        q = copy(p)
+        lower!(q)
+        blocks = sort(reduce(vcat, [collect(graphvertices(pt, sys_pm)) for pt in q.particles]))
+        @test blocks == 1:nv(graphrep(q))
+    end
 end
