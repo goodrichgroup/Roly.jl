@@ -68,7 +68,7 @@ A convex polyhedron, stored as a list of `corners` (vertices) and a list of `fac
 
 Each face is a list of indices into `corners`, wound counter-clockwise as seen from
 *outside* the body. This winding is what fixes the orientation of the graph encoding.
-On construction, each face is rotated to start at a canonical corner, see [`_canonical_faces`](@ref).
+On construction, each face is rotated to start at a canonical corner.
 """
 struct Polyhedron{F<:AbstractFloat}
     corners::Vector{SVector{3,F}}
@@ -619,8 +619,8 @@ end
 Return `(g, ranges)`, the cycle encoding of a particle with `nsites` binding sites: a single
 directed cycle carrying one vertex per site.
 
-This is the 2D polygon encoding, and it is also valid in 3D under the conditions
-[`_cycle_suffices`](@ref) states. It is *not* valid in general.
+This is the 2D polygon encoding. It is also valid in 3D when every site's twist freedom is 1
+and all labels are distinct, and not otherwise.
 """
 function cycleencoding(nsites::Integer; labels=1:nsites)
     length(labels) == nsites ||
@@ -658,14 +658,13 @@ Build the graph and binding sites of a species carrying one site per face of pol
 
 `poseof` maps face corner lists to the poses of the corresponding sites.
 
-`usecycle` picks th graph encoding: `nothing` takes the cheap one whenever [`_cycle_suffices`](@ref)
-says it is equivalent.
+`usecycle` picks the graph encoding: `nothing` takes the cheap one whenever it is equivalent.
 
 The order is forced. A face's first corner is its site's twist reference, and settling it takes
 three steps:
 
 1. The body arrives with each face already started at an intrinsically chosen corner
-   ([`_canonical_faces`](@ref)), which pins the references up to each face's `gauge`.
+   which pins the references up to each face's `gauge`.
 2. That is enough to derive the labeling, since [`siteorbits`](@ref) compares frames only up
    to `gauge`. Knowing the labeling gives the symmetry group.
 3. [`_propagate_faces`](@ref) then re-winds along that group, pinning the references up to
@@ -863,7 +862,7 @@ _siteturns(psi::Rotation{2}, ::Integer) = (psi,)
 Return the number of rotations about the particle origin that map every binding site of `ps`
 onto a binding site with the same symmetry label, matching orientation as well as position.
 
-Frames need only agree up to the receiving site's own stabilizer, see [`_siteturns`](@ref).
+Frames need only agree up to the receiving site's own stabilizer.
 
 The turn count comes from each site's `gauge`, never from its graph vertex count. Those
 coincide for the dart encoding, where a face gets one vertex per dart *because* it is that
@@ -975,7 +974,7 @@ function _recolor!(ps::ParticleSpecies, sites::AbstractVector{<:BindingSite}, co
     oldsites, oldlabels = copy(sites), copy(labels(graphrep(ps)))
     _recolor!(sites, graphrep(ps), colors)
     try
-        _check_encoding(ps)
+        check_encoding(ps)
     catch err
         err isa ArgumentError || rethrow()
         copy!(sites, oldsites)
@@ -1028,12 +1027,15 @@ function _check_labeling(ps::ParticleSpecies)
 end
 
 """
-    _check_encoding(ps::ParticleSpecies)
+    check_encoding(ps::ParticleSpecies)
 
-Throw if `ps`'s graph claims a different symmetry from its binding sites and geometry, or if
-its labeling is coarser than its coloring (see [`_check_labeling`](@ref)).
+Throw if `ps`'s graph claims a different symmetry from its geometry and colors, or if its
+labeling is coarser than its coloring. Return `ps`.
+
+Every built-in species runs this in its constructor. Call it in your own if you write graph
+labels by hand instead of deriving them with [`siteorbits`](@ref).
 """
-function _check_encoding(ps::ParticleSpecies)
+function check_encoding(ps::ParticleSpecies)
     _check_labeling(ps)
     geometric = site_symmetry(ps)
     graph = symmetrynumber(ps)

@@ -44,7 +44,7 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real
     corners = [
         SVector{2,F}(r_out * cos(-π / 2 - (2k - 1) * π / n), r_out * sin(-π / 2 - (2k - 1) * π / n)) for k in 1:n
     ]
-    return _check_encoding(
+    return check_encoding(
         PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, tol)
     )
 end

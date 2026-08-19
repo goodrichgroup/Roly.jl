@@ -49,6 +49,7 @@ geometriclabels
 facegauge
 siteorbits
 site_symmetry
+check_encoding
 sitestabilisers
 dartencoding
 cycleencoding
@@ -155,9 +156,8 @@ countpolyforms
 PolyformCount
 ```
 
-An enumeration reports why it stopped as an `RSStatus`: `Finished` if it ran to completion, and
-otherwise `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`. A callback returns
-`ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
+An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
+A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
 
 ## Visualization
 
@@ -173,24 +173,4 @@ polyformplot!
 
 ```@docs
 ruleeditor
-```
-
-## Internals
-
-Not public API — names, signatures and behaviour may change without notice. They are listed
-because the reasoning behind Roly's orientation model lives in their docstrings, and the public
-ones refer to them.
-
-```@docs
-Roly._canonical_faces
-Roly._propagate_faces
-Roly._facesites
-Roly._derive_faces
-Roly._cycle_suffices
-Roly._siteturns
-Roly._site_symmetries
-Roly._check_encoding
-Roly._check_labeling
-Roly._recolor!
-Roly.raise!
 ```

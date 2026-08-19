@@ -56,7 +56,7 @@ end
 
     # check automatic symmetry encoding
     @test symmetrynumber(r) == site_symmetry(r) == 2
-    @test Roly._check_encoding(r) === r
+    @test Roly.check_encoding(r) === r
     for cols in ([1, 1, 1, 1], [1, 2, 1, 2], [9, 9, 9, 9])
         @test symmetrynumber(Rectangle(2.0, 1.0; colors=cols)) == 2
     end

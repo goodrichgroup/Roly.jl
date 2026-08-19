@@ -18,7 +18,7 @@ export Polyhedron, corners, faces, facevertices, nfaces, nedges
 export facecentroid, facecentroids, facenormal, facenormals, edgemidpoint
 export inradius, minedgelength
 export dartencoding, cycleencoding
-export rotationgroup, geometriclabels, facegauge, siteorbits, site_symmetry
+export rotationgroup, geometriclabels, facegauge, siteorbits, site_symmetry, check_encoding
 export sitestabilisers
 export Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron, Pyramid, Prism, Antiprism
 export RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral, Icosahedral, grouporder
@@ -74,9 +74,8 @@ export render, polyformplot, polyformplot!
 Draw a [`Polyform`](@ref) or [`ParticleSpecies`](@ref) into a fresh figure, picking a 2D or 3D
 axis to match its dimension. Provided by the Makie extension, so it needs a backend loaded.
 
-3D output wants a backend with a depth buffer — GLMakie or WGLMakie. CairoMakie sorts
-primitives instead of depth-testing them, so it renders 3D polyforms with visible artifacts
-where faces meet.
+3D output needs a backend with a depth buffer, GLMakie or WGLMakie. CairoMakie sorts
+primitives instead of depth-testing them, so 3D polyforms show artifacts where faces meet.
 
 `bindingrules=sys` draws sites no bond can use as inert, which works for a bare species too.
 """

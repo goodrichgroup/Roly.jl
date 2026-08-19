@@ -234,7 +234,7 @@ the same graph label, only the first survives.
 This is what makes attaching a particle cost one candidate per distinguishable way of doing
 it rather than one per site. Two sites of a free particle with the same label are, by
 construction, in one orbit of the rotations preserving its coloring. That is what
-[`siteorbits`](@ref) computes and what `_check_encoding` confirms the graph agrees with.
+[`siteorbits`](@ref) computes and what `check_encoding` confirms the graph agrees with.
 Attaching through either therefore produces the same structure.
 """
 function _orbit_representatives(particlespecies::AbstractVector{<:ParticleSpecies},

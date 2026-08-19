@@ -39,7 +39,7 @@ function PatchyParticleSpecies(
     setlabels!(g, collect(Cint, labs))
 
     sites = [BindingSite(poses[i], colors[i], i:i, tol, tol / r, 1, stabs[i]) for i in 1:n]
-    return _check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
+    return check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
 end
 
 """
@@ -67,7 +67,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles))
 
     g, ranges = cycleencoding(n; labels)
     sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1, stabs[i]) for i in 1:n]
-    return _check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
+    return check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
 end
 
 """
@@ -107,7 +107,7 @@ function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists, usecy
 
     g, sites = _facesites(p, patchposes, colors, _perface(locking, n, "locking flags"),
                           _perface(twists, n, "twists"), usecycle, tol, tol / r)
-    return _check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
+    return check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
 
 function Base.show(io::Core.IO, ps::PatchyParticleSpecies{D}) where {D}
