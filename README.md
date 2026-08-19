@@ -19,7 +19,7 @@ Enumeration in Roly.jl starts from a `BindingRules` object, which is a list of b
 The allowed polyforms can then be enumerated with `polyenum`, generated and stored with `polygen`, or counted (exactly or approximately) with `countpolyforms`.
 
 ### Defining Binding Rules
-To illustrate the basic process, let's construct a system consisting of four species of triangular building blocks. Binding rules are defined as a list of bonds, where every bond is specified in the form `[species_i site_i species_j site_j]`. For example, `[1 3 2 3]` indicates that site 3 of species 1 is allowed to bind to site 3 of species 2. Roly already comes with definitions for simple polygonal building block geometries, including `UnitTriangle`, `UnitSquare`, and `UnitHexagon`. The `BindingRules` constructor takes either a list of geometries or a single geometry if all building blocks are identically shaped.
+To illustrate the basic process, let's construct a system consisting of four species of triangular building blocks. Binding rules are defined as a list of bonds, where every bond is specified in the form `[species_i site_i species_j site_j]`. For example, `[1 3 2 3]` indicates that site 3 of species 1 is allowed to bind to site 3 of species 2. Roly already comes with definitions for simple polygonal particle geometries (e.g. `UnitTriangle`, `UnitSquare`, `UnitHexagon`), convex polyhedra (`UnitCube`, `UnitPrism(n)`), as well as patchy particles (`PatchyDisk`, `PatchySphere`). The `BindingRules` constructor takes either a list of geometries or a single geometry if all building blocks are identically shaped.
 ```julia
 using Roly
 
@@ -30,19 +30,10 @@ bonds = [1 3 2 3;
 sys = BindingRules(bonds, UnitTriangle)
 ```
 
-### Building blocks in 3D
-In 3D, `PolyhedronParticleSpecies` puts one binding site on each face of a convex solid, and `PatchySphere` puts patches on a sphere in the same arrangement. Roly ships the Platonic solids along with pyramids, prisms and antiprisms, and an arbitrary convex solid needs only its corners.
-```julia
-PolyhedronParticleSpecies(Cube())                       # every face distinct
-PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))    # all faces alike: polycubes
-PolyhedronParticleSpecies(Prism(3); colors=[1, 2, 2, 2, 1])
-PolyhedronParticleSpecies(Polyhedron(mycorners))        # your own convex solid
-
-```
-A species is described by *coloring* its binding sites; the symmetry follows from the coloring and the geometry, and Roly derives it. The `locking` and `twists` keywords control what a bond at a face means — how many relative orientations it admits, and which one — which the [documentation](https://goodrichgroup.github.io/Roly.jl/dev/orientation/) explains.
+The [documentation](https://goodrichgroup.github.io/Roly.jl/dev/workflow/) lists every built-in geometry and shows how coloring a species' binding sites sets its symmetry. In 3D a bond also fixes how the two blocks are turned relative to one another, which the [orientation page](https://goodrichgroup.github.io/Roly.jl/dev/orientation/) explains. To implement your own particle species, see [custom particle species](https://goodrichgroup.github.io/Roly.jl/dev/custom_species/).
 
 ### Sketching Binding Rules interactively
-Instead of writing the bonds matrix out by hand, you can build one geometrically with `ruleeditor` — a terminal editor that lets you place building blocks on a lattice and infers the binding rules from every pair of touching sites:
+Instead of writing the bonds matrix out by hand, you can build one geometrically with `ruleeditor`, a terminal editor that lets you place building blocks on a lattice and reads the binding rules off every pair of touching sites:
 ```julia
 sys = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
 ```
@@ -86,7 +77,7 @@ strs = polygen(sys; maxsize=20, maxstrs=100_000)
 ```
 
 ### Counting
-To count polyforms without storing them — or to get an estimate when full enumeration is too expensive — use `countpolyforms`:
+To count polyforms without storing them, or to estimate when full enumeration is too expensive, use `countpolyforms`:
 ```julia
 c = countpolyforms(sys)
 c.n            # count (exact or estimated mean)
@@ -109,7 +100,7 @@ Roly.jl provides a [Makie](https://docs.makie.org) extension. Load any Makie bac
 using GLMakie  # or CairoMakie, WGLMakie, ...
 render(s)      # display a single polyform, or a species
 ```
-`render` picks a 2D or 3D axis to match. For 3D, use a backend with a depth buffer — GLMakie or WGLMakie — since CairoMakie sorts primitives rather than depth-testing them. `polyformplot!` can be used to draw onto an existing Makie axis.
+`render` picks a 2D or 3D axis to match. For 3D use GLMakie or WGLMakie, since CairoMakie sorts primitives rather than depth-testing them. `polyformplot!` can be used to draw onto an existing Makie axis.
 
 ## Citation
 If you use Roly.jl in your work, please cite [our paper](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.134.058204) below:

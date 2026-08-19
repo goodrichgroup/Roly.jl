@@ -97,10 +97,10 @@ end
 
 Return `true` if the particles are overlapping.
 
-When every species of `sys` tiles space and every bond carries a tile onto a tile — see
-[`_tiles`](@ref) — the particles of any assembly sit on cells of one tiling, distinct cells have
-disjoint interiors, and overlapping therefore means occupying the same cell. Coincident centres
-answer it, and no geometry runs. Every other system takes the species' own `overlap`.
+When every species of `sys` tiles space and every bond carries a cell onto a cell (see
+[`_tilingcell`](@ref)), the particles of an assembly sit on cells of one tiling and distinct
+cells have disjoint interiors, so overlapping means occupying the same cell. Coincident centers
+answer that, and no geometry runs. Every other system uses the species' own `overlap`.
 """
 function overlap(p1::Particle, p2::Particle, sys::BindingRules)
     spcs1, spcs2 = species(sys, p1.species_index), species(sys, p2.species_index)

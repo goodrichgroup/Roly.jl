@@ -47,7 +47,7 @@ function _polyhedronspecies(p::Polyhedron{F}, colors, locking, twists,
                           _perface(locking, n, "locking flags"),
                           _perface(twists, n, "twists"), usecycle, tol, tol / rmin)
 
-    return _check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
+    return check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
         g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol
     ))
 end
