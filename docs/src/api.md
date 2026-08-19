@@ -169,6 +169,12 @@ polyformplot
 polyformplot!
 ```
 
+## Interactive rule editor
+
+```@docs
+ruleeditor
+```
+
 ## Internals
 
 Not public API — names, signatures and behaviour may change without notice. They are listed

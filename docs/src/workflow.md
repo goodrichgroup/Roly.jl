@@ -66,6 +66,40 @@ julia> grouporder(Dihedral(5))
 
 The groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref), [`Octahedral`](@ref) and [`Icosahedral`](@ref) — the proper (rotation-only) point groups, which are the only ones a rigid body can have.
 
+## Sketching rules interactively
+
+Instead of writing the bonds matrix by hand, you can construct one geometrically with [`ruleeditor`](@ref) — a small terminal editor that lets you place building blocks on a lattice and infers the binding rules from every pair of touching sites:
+
+```julia
+sys = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
+```
+
+Arrow keys move the cursor, `Enter` places a particle, `Space` erases, `r`/`R` rotate, digits `1`–`9` add and switch between species, `q` accepts. A typical session looks like this:
+
+```
+┌ Editor ──────────┐┌ Particles ──────────────────────────┐
+│── Species ──     ││ ┌─────┐ ┌─────┐                     │
+│▶ ■  species 1    ││ │     │ │     │                     │
+│  ■  species 2    ││ │  →  │ │  ←  │                     │
+│                  ││ │     │ │     │                     │
+│── Keys ──────    ││ └─────┘ └─────┘                     │
+│arrows  move      ││ ┌─────┐ ┌─────┐                     │
+│enter   place     ││ │     │ │     │                     │
+│space   erase     ││ │  ↑  │ │  ↑  │                     │
+│r / R   rotate    ││ │     │ │     │                     │
+│1-9     species   ││ └─────┘ └─────┘                     │
+│c       clear     ││                                     │
+│q       accept    ││                                     │
+└──────────────────┘└─────────────────────────────────────┘
+```
+
+Pass `output=:bonds` or `output=:matrix` to get a copy-pasteable representation instead of a `BindingRules`, useful for pinning a specific design in code:
+
+```julia
+bonds = ruleeditor(UnitSquare; output=:bonds)  # n×4 integer matrix
+sys   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
+```
+
 ## Enumerating polyforms
 
 `polyenum` walks through every polyform allowed by a set of binding rules:

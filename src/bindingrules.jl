@@ -378,6 +378,15 @@ function _parse_intmat(bonds::AbstractMatrix{<:Integer}, siteloc2color, ncolors)
     _checkshape(bonds)
     return _intmat_from_bonds(eachrow(bonds), siteloc2color, ncolors)
 end
+# Already an interaction matrix, as `ruleeditor(...; output=:matrix)` returns.
+function _parse_intmat(intmat::AbstractMatrix{Bool}, siteloc2color, ncolors)
+    n = size(intmat, 1)
+    n == size(intmat, 2) || throw(ArgumentError("interaction matrix must be square"))
+    n == ncolors ||
+        throw(ArgumentError("interaction matrix size ($n) does not match the number of colors ($ncolors)"))
+    intmat == intmat' || throw(ArgumentError("interaction matrix must be symmetric"))
+    return Symmetric(Matrix{Bool}(intmat))
+end
 function _intmat_from_bonds(bonds, siteloc2color, ncolors)
     intmat = falses(ncolors, ncolors)
     for bond in bonds

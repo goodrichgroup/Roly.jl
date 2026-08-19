@@ -190,4 +190,28 @@ using StaticArrays: SVector
             poly = nxt
         end
     end
+
+    # Constructor from an interaction matrix (round-trip via intmat).
+    ref = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
+    im  = Matrix{Bool}(interactionmatrix(ref))
+    reconstructed = BindingRules(im, UnitSquare)
+    @test interactionmatrix(reconstructed) == interactionmatrix(ref)
+    @test nbonds(reconstructed) == nbonds(ref)
+    @test bonded_colors(reconstructed) == bonded_colors(ref)
+
+    # Multi-species intmat round-trip.
+    ref2 = BindingRules([1 1 2 1], UnitTriangle)  # 2 species x 3 sites = 6 colors
+    im2  = Matrix{Bool}(interactionmatrix(ref2))
+    reconstructed2 = BindingRules(im2, [copy(UnitTriangle) for _ in 1:nspecies(ref2)])
+    @test interactionmatrix(reconstructed2) == interactionmatrix(ref2)
+    @test bonded_colors(reconstructed2) == bonded_colors(ref2)
+
+    # Error cases.
+    @test_throws ArgumentError BindingRules(falses(3, 4), UnitSquare)          # not square
+    @test_throws ArgumentError BindingRules(falses(3, 3), UnitSquare)          # wrong ncolors
+    bad_asymmetric = Bool[false true false false;
+                          false false false false;
+                          false false false false;
+                          false false false false]
+    @test_throws ArgumentError BindingRules(bad_asymmetric, UnitSquare)        # not symmetric
 end

@@ -6,7 +6,8 @@ Given a set of building blocks and a list of allowed bonds between their binding
 
 - exhaustively enumerate every geometrically valid polyform, up to a chosen size,
 - generate and store polyforms for further processing,
-- estimate the number of polyforms when exact enumeration is too expensive.
+- estimate the number of polyforms when exact enumeration is too expensive,
+- build binding rules interactively by placing particles on a lattice ([`ruleeditor`](workflow.md#Sketching-rules-interactively)).
 
 ## Installation
 
