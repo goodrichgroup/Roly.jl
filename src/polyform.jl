@@ -7,7 +7,6 @@ sites, represented by a directed graph.
 mutable struct Polyform{D,P<:Particle,S<:BindingRules,G<:AbstractNautyGraph}
     graphrep::G
     sigma::Int
-    orbits::Vector{Int}
     canon2orig::Vector{Int}
     orig2canon::Vector{Int}
     particles::Vector{P}
@@ -22,7 +21,7 @@ Create an empty polyform containing no particles.
 function Polyform(sys::BindingRules{D}) where {D}
     P = posetype(sys)
     g = NautyDiGraph(0)
-    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, 1, Int[], Int[], Int[], Particle{P}[], sys)
+    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, 1, Int[], Int[], Particle{P}[], sys)
 end
 
 """
@@ -35,23 +34,22 @@ function Polyform(sys::BindingRules{D}, i::Integer) where {D}
     ps = species(sys, i)
     g = copy(graphrep(ps))
     part = Particle(sys, i; leading_vertex=1)
-    perm, autg = nauty(g; canonize=true)
+    perm = first(nauty(g; canonize=true))
     cvs = convert(Vector{Int}, perm)
     return Polyform{D,Particle{P},typeof(sys),typeof(g)}(
-        g, symmetrynumber(ps), orbitreps!(Int[], autg, perm), cvs, invperm(cvs), [part], sys
+        g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys
     )
 end
 
 function Base.copy(p::Polyform)
     return typeof(p)(
-        copy(p.graphrep), p.sigma, copy(p.orbits), copy(p.canon2orig), copy(p.orig2canon),
+        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon),
         copy(p.particles), p.bindingrules
     )
 end
 function Base.copy!(dst::Polyform, src::Polyform)
     copy!(dst.graphrep, src.graphrep)
     dst.sigma = src.sigma
-    copy!(resize!(dst.orbits, length(src.orbits)), src.orbits)
     copy!(dst.canon2orig, src.canon2orig)
     copy!(dst.orig2canon, src.orig2canon)
     copy!(dst.particles, src.particles)
@@ -345,7 +343,6 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::I
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
-    orbitreps!(poly.orbits, autg, perm)
 
     return poly
 end
@@ -428,7 +425,6 @@ function _remove_particle!(poly::Polyform, part::Particle)
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
-    orbitreps!(poly.orbits, autg, perm)
     return poly
 end
 
@@ -522,9 +518,6 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
     nv_g = nv(graphrep(poly))
     target, visited, queue = zeros(Bool, nv_g), zeros(Bool, nv_g), zeros(Cint, nv_g)
 
-    # Two open sites of the assembly lying in one orbit of its automorphism group are interchangeable
-    # by a symmetry of everything already built, so attaching the same partner to either gives the same structure.
-    used = falses(length(poly.orbits))
     best, second, bestleading = _deletable_species(poly, target, visited, queue)
     for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
@@ -537,10 +530,6 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
 
-            # Orbits index the graph, which is in canonical order
-            rep = poly.orbits[tocanon(poly, first(site.vertices))]
-            used[rep] && continue
-            used[rep] = true
 
             # only keep one partner site per orbit
             for siteloc in attachment_reps(sys, color(site))

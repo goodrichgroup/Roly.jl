@@ -136,10 +136,9 @@ using StaticArrays: SVector
     end
 
     # check that representatives are enough, and everything else is just duplicates
-    function children(poly, sitelocs_of; allsites=true)
+    function children(poly, sitelocs_of)
         sys = Roly.bindingrules(poly)
         out = Set{NautyDiGraph}()
-        usedorbits = Set{Int}()
         for orig_v in poly.canon2orig
             part = Roly.particle_from_leadingvertex(poly, orig_v)
             isnothing(part) && continue
@@ -147,11 +146,6 @@ using StaticArrays: SVector
                 site = bindingsites(part, sys, k)
                 Roly._isbound_vertex(poly, part, first(site.vertices)) && continue
                 Roly.isinert(sys, color(site)) && continue
-                if !allsites
-                    rep = poly.orbits[Roly.tocanon(poly, first(site.vertices))]
-                    rep in usedorbits && continue
-                    push!(usedorbits, rep)
-                end
                 for siteloc in sitelocs_of(sys, color(site))
                     mate = bindingsites(Roly.species(sys, siteloc[1]), siteloc[2])
                     for r in 0:(Roly.nphases(site, mate) - 1)
@@ -178,9 +172,7 @@ using StaticArrays: SVector
     for (name, sys) in systems
         poly = Polyform(sys, 1)
         for _ in 1:3     # monomer, then grow, so the host is asymmetric in later rounds too
-            every = children(poly, compatible_sitelocs)
-            @test every == children(poly, attachment_reps)
-            @test every == children(poly, attachment_reps; allsites=false)
+            @test children(poly, compatible_sitelocs) == children(poly, attachment_reps)
             nxt = nothing
             for (site, loc, r) in collect_compatible_pairs(poly)
                 trial = copy(poly)

@@ -118,8 +118,9 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
             @test isapprox((b.pose.x - a.pose.x)[3], 0; atol=1e-8)
             grown += 1
         end
-        # Exactly one candidate, redundancies filtered by looking at orbits
-        @test grown == 1
+        # One candidate per sticky face: the mate sites collapse to one representative, while
+        # the host sites do not, so canonization is what removes the duplicates.
+        @test grown == length(sides)
     end
 
     for (name, _, shp, nf, order) in solids
