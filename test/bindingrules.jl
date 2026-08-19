@@ -166,7 +166,6 @@ using StaticArrays: SVector
         return out
     end
 
-    sides(p) = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) < 1e-8]
     p3 = Prism(3, 1.0; h=2.0)
     systems = [
         ("cubes",     alike),
