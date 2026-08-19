@@ -24,9 +24,7 @@ opts in when it tiles space and every bond it can make carries a cell onto anoth
 
 The identifier must pin down shape as well as size, since equal cells are what
 [`_onlattice`](@ref) tests for. Matching size alone is not enough: unit squares and unit
-triangles tile the plane together, but five triangles and a square close a ring about a corner
-at 390° rather than 360°, so two cells overlap with their centers apart. A single regular
-polygon cannot, its corner angle dividing 360°.
+triangles can tile the plane together.
 """
 _tilingcell(::ParticleSpecies) = nothing
 

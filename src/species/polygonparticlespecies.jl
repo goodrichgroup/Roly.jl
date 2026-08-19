@@ -65,10 +65,26 @@ nsites(p::PolygonParticleSpecies) = length(p.sites)
 bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolygonParticleSpecies) = true
 
-# The three regular polygons that tile the plane. `rmin` is the inradius r, and a regular
-# n-gon has edge length 2r*tan(pi/n).
+"""
+    _isregular(corners)
+
+Whether `corners` is a regular polygon, i.e. whether its own `2π/n` turn carries it onto itself
+corner for corner. Accepts either winding.
+"""
+function _isregular(corners::AbstractVector{SVector{2,F}}) where {F}
+    n = length(corners)
+    atol = sqrt(eps(F)) * maximum(norm, corners)
+    return any((1, -1)) do sgn
+        R = Angle2d{F}(sgn * 2F(π) / n)
+        all(i -> isapprox(R * corners[i], corners[mod1(i + 1, n)]; atol), 1:n)
+    end
+end
+
+# The three regular polygons that tile the plane. `rmin` is the inradius r, and a regular n-gon
+# has edge length 2r*tan(pi/n).
 _tilingcell(ps::PolygonParticleSpecies) =
-    nsites(ps) in (3, 4, 6) ? (nsites(ps), 2 * ps.rmin * tan(π / nsites(ps))) : nothing
+    nsites(ps) in (3, 4, 6) && _isregular(ps.corners) ?
+    (nsites(ps), 2 * ps.rmin * tan(π / nsites(ps))) : nothing
 
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
     spcs1, pose1 = p1

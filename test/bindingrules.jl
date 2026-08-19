@@ -71,6 +71,10 @@ using StaticArrays: SVector
 
     # on-lattice check
     poly(n, a=1.0) = PolygonParticleSpecies(n, a; colors=fill(1, n))
+    # Reach past the constructor to a polygon that is not regular.
+    stretch(ps, f) = typeof(ps)(copy(ps.g), copy(ps.sites),
+                                [SVector(f * c[1], c[2]) for c in ps.corners],
+                                ps.rmin, ps.rmax, ps.skin)
     sides(p) = [i for i in 1:nfaces(p) if abs(facenormal(p, i)[3]) < 1e-8]
     faced(p, sticky; kw...) =
         PolyhedronParticleSpecies(p; colors=[i in sticky ? 1 : 2 for i in 1:nfaces(p)], kw...)
@@ -96,6 +100,9 @@ using StaticArrays: SVector
         # Equal bounding radius, different edge: comparing radii would call this one lattice.
         ("square + big triangle", BindingRules([1 1 2 1],
                                       [poly(4), poly(3, sqrt(2) / sqrt(3) * 2)])),
+        # `corners` is a field, so a caller can build a species the constructor never would.
+        # Four sites and the right inradius are not enough; the shape has to be regular.
+        ("stretched square",    BindingRules([1 1 1 1], stretch(poly(4), 1.4))),
         # 3D does not opt in.
         ("polycubes",           BindingRules([1 1 1 1], faced(Cube(), 1:6))),
         ("square prisms",       BindingRules([1 1 1 1], faced(Prism(4, 1.0; h=2.0),
