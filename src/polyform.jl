@@ -177,7 +177,7 @@ end
     _isbound_vertex(p::Polyform, part::Particle, v::Integer)
 
 Return `true` if the original graph vertex `v` of particle `part` is bonded to another
-particle, i.e. if it has a neighbour outside `part`'s own block of vertices.
+particle, i.e. if it has a neighbor outside `part`'s own block of vertices.
 
 Internal: `part` has to be passed in because the caller already has it, and looking it up
 again from `v` would be the expensive half of the check.

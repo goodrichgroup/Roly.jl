@@ -108,7 +108,7 @@ to a binding site on a polyform, `bbbody`.
 
 This count excludess twists that are differing by a symmetry of the particle being attached, of which
 there are exactly `b2.stab`.
-Note the asymmetry: only the *attached* binding site's stabiliser is quotiented out. The symmetries of the
+Note the asymmetry: only the *attached* binding site's stabilizer is quotiented out. The symmetries of the
 polyform carrying `bbody` can merge structures too, but these are not knowable from one site,
 and need to be caught through canonization.
 """

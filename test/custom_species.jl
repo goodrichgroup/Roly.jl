@@ -1,7 +1,7 @@
 # The species interface as `docs/src/custom_species.md` documents it.
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color,
-            cycleencoding, sitestabilisers, sat_overlap, edgenormals
+            cycleencoding, sitestabilizers, sat_overlap, edgenormals
 import Roly: graphrep, nsites, bindingsites, bounding_radius, isconvex
 using NautyGraphs, StaticArrays, LinearAlgebra, Rotations
 
@@ -67,15 +67,15 @@ end
     @test symmetrynumber(Rectangle(2.0, 1.0; colors=1:4)) == 1
 
     # `setcolors!` needs no definition: the generic method finds the sites in the `sites` field
-    # and re-derives the labelling and the stabilisers
+    # and re-derives the labeling and the stabilizers
     setcolors!(r, [5, 6, 5, 6])
     @test [color(bindingsites(r, i)) for i in 1:4] == [5, 6, 5, 6]
     @test symmetrynumber(r) == site_symmetry(r) == 2
-    # Colouring every edge alike cannot make a rectangle 4-fold symmetric
+    # Coloring every edge alike cannot make a rectangle 4-fold symmetric
     setcolors!(r, fill(7, 4))
     @test symmetrynumber(r) == site_symmetry(r) == 2
     @test length(unique(Roly.labels(graphrep(r)))) == 2
-    @test sitestabilisers(r) == fill(1, 4)
+    @test sitestabilizers(r) == fill(1, 4)
 
     # Check enumeration. `BindingRules` recolors its species itself; this only replaces the
     # all-alike coloring left above.

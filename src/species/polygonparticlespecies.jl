@@ -30,10 +30,10 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real
         Pose(SVector{2,F}(pol2cart(r_in, rotation_angle(ψ))), ψ)
     end
     # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout, and with
-    # it the stabiliser: the only rotation fixing a site is the identity.
+    # it the stabilizer: the only rotation fixing a site is the identity.
     gauges = ones(Int, n)
     labels = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilisers(poses, gauges, labels)
+    stabs = sitestabilizers(poses, gauges, labels)
 
     g, ranges = cycleencoding(n; labels)
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]

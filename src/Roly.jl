@@ -19,7 +19,7 @@ export facecentroid, facecentroids, facenormal, facenormals, edgemidpoint
 export inradius, minedgelength
 export dartencoding, cycleencoding
 export rotationgroup, geometriclabels, facegauge, siteorbits, site_symmetry, check_encoding
-export sitestabilisers
+export sitestabilizers
 export Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron, Pyramid, Prism, Antiprism
 export RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral, Icosahedral, grouporder
 

@@ -174,7 +174,7 @@ using LinearAlgebra: normalize, dot, det, norm
 
     # The general constructor takes the graph's structure but derives its labels, so a
     # labeling that does not describe the arrangement cannot be supplied in the first place.
-    # Three unevenly spaced patches come out distinct however the graph was labelled.
+    # Three unevenly spaced patches come out distinct however the graph was labeled.
     uneven = [SVector(cos(t), sin(t)) for t in (0.0, 0.5, 3.0)]
     for labs in (Cint[1, 1, 1], Cint[1, 2, 3])
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3); vertex_labels=labs), 1.0, uneven)
