@@ -52,6 +52,7 @@ export PolyhedronParticleSpecies, shape
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
+export MetaParticleSpecies, cluster
 
 
 include("utils.jl")
@@ -69,6 +70,7 @@ include("tiling.jl")
 include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
+include("species/metaparticlespecies.jl")
 
 include("ruleeditor.jl")
 export ruleeditor
