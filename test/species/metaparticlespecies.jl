@@ -56,6 +56,55 @@
         @test flatten(gm) == flatten(gp)
     end
 
+    @testset "choosing which sites to expose" begin
+        rows = exposablesites(dimer)
+        # every unbound site is offered, bound ones never are
+        @test length(rows) == 2 * nsites(UnitSquare) - 2
+        @test count(r -> !r.inert, rows) == length(open)
+        @test all(r -> 1 <= r.particle <= nparticles(dimer), rows)
+        # the default exposure is exactly the non-inert rows, in this order
+        @test [color(bindingsites(mp, i)) for i in 1:nsites(mp)] ==
+              [r.color for r in rows if !r.inert]
+
+        # a site that is inert inside the cluster becomes usable by being named and given a
+        # colour the new rules speak
+        inert = [(r.particle, r.site) for r in rows if r.inert]
+        @test !isempty(inert)
+        activated = MetaParticleSpecies(dimer, inert[1:2]; colors=[1, 2])
+        @test nsites(activated) == 2
+        @test [color(bindingsites(activated, i)) for i in 1:2] == [1, 2]
+        # and those sites really do bind under rules written over the new colors
+        @test [polyenum(BindingRules([1 1 1 2], activated); maxsize=k)[1] for k in 1:3] ==
+              [1, 2, 3]
+
+        # exposure order is the caller's
+        pair = [(r.particle, r.site) for r in rows if !r.inert]
+        @test [color(bindingsites(MetaParticleSpecies(dimer, reverse(pair)), i)) for i in 1:2] ==
+              reverse([r.color for r in rows if !r.inert])
+
+        bound = [(p, k) for p in 1:nparticles(dimer) for k in 1:nsites(UnitSquare)
+                 if (p, k) ∉ Set((r.particle, r.site) for r in rows)]
+        @test length(bound) == 2
+        @test_throws ArgumentError MetaParticleSpecies(dimer, bound[1:1])
+        @test_throws ArgumentError MetaParticleSpecies(dimer, [(1, 99)])
+        @test_throws ArgumentError MetaParticleSpecies(dimer, [(99, 1)])
+        @test_throws ArgumentError MetaParticleSpecies(dimer, [pair[1], pair[1]])
+        @test_throws ArgumentError MetaParticleSpecies(dimer, Tuple{Int,Int}[])
+    end
+
+    @testset "exposure decides the symmetry" begin
+        # the symmetric stack again: exposing both equivalent ends keeps the swap, exposing one
+        # of them cannot
+        selfrules = BindingRules([1 1 1 1; 1 2 1 2], UnitSquare)
+        sym = let strs = polygen(selfrules; maxsize=2)
+            strs[findfirst(s -> nparticles(s) == 2, strs)]
+        end
+        live = [(r.particle, r.site) for r in exposablesites(sym) if !r.inert]
+        @test length(live) == 2
+        @test symmetrynumber(MetaParticleSpecies(sym, live)) == 2
+        @test symmetrynumber(MetaParticleSpecies(sym, live[1:1])) == 1
+    end
+
     @testset "keywords and rejections" begin
         recolored = MetaParticleSpecies(dimer; colors=[4, 9])
         @test [color(bindingsites(recolored, i)) for i in 1:2] == [4, 9]

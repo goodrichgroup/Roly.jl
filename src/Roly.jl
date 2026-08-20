@@ -52,7 +52,7 @@ export PolyhedronParticleSpecies, shape
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
-export MetaParticleSpecies, cluster
+export MetaParticleSpecies, cluster, exposablesites
 
 
 include("utils.jl")

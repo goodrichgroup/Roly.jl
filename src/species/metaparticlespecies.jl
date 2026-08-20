@@ -4,9 +4,9 @@
 A `Polyform` wrapped as a `ParticleSpecies`, so that assemblies can be built out of whole
 assemblies.
 
-The cluster's open binding sites become the species' sites, in the order
-[`collect_open_bindingsites`](@ref) returns them. Geometry is delegated: two meta-particles
-overlap exactly when any of their constituent particles do.
+Chosen unbound sites of the cluster become the species' sites — by default every one that is not
+inert, and otherwise exactly those named, see [`exposablesites`](@ref). Geometry is delegated: two
+meta-particles overlap exactly when any of their constituent particles do.
 
 Meta-species describe *meta*-assembly systems, whose `BindingRules` say how blocks attach to
 blocks. A meta-particle cannot bond to a plain particle; wrap the plain species as its own
@@ -36,47 +36,104 @@ struct MetaParticleSpecies{D,F,B<:BindingSite,G<:AbstractNautyGraph,PF} <: Parti
 end
 
 """
+    exposablesites(poly::Polyform)
+
+Every *unbound* binding site of `poly`, as rows of `(particle, site, color, inert)`.
+
+These are the sites a [`MetaParticleSpecies`](@ref) can expose, in the order it exposes them by
+default. Bound sites are consumed by the bonds holding the cluster together and are never listed:
+exposing one would let two blocks bond through a bond that already exists.
+
+`inert` marks a site whose color takes part in no rule of the cluster's own system. Those are
+skipped by default and are exactly the sites to name explicitly when a meta-assembly should use
+them — selecting a site and giving it a live color is what activates it.
+"""
+function exposablesites(poly::Polyform)
+    sys = bindingrules(poly)
+    index = Dict(leading_vertex(p) => i for (i, p) in enumerate(poly.particles))
+    rows = @NamedTuple{particle::Int, site::Int, color::Int, inert::Bool}[]
+    for orig_v in poly.canon2orig
+        part = particle_from_leadingvertex(poly, orig_v)
+        isnothing(part) && continue
+        for k in 1:nsites(part, sys)
+            s = bindingsites(part, sys, k)
+            _isbound_vertex(poly, part, first(s.vertices)) && continue
+            push!(rows, (particle=index[leading_vertex(part)], site=k, color=color(s),
+                         inert=isinert(sys, color(s))))
+        end
+    end
+    return rows
+end
+
+"""
     MetaParticleSpecies(poly::Polyform; colors=nothing)
+    MetaParticleSpecies(poly::Polyform, sites; colors=nothing)
 
-Wrap `poly` as a species whose sites are its open binding sites.
+Wrap `poly` as a species whose sites are the ones named by `sites`, given as `(particle, site)`
+pairs and exposed in that order. Without them every unbound, non-inert site is exposed, in
+[`exposablesites`](@ref) order.
 
-  - `colors`: one interaction color per open site; by default each site keeps the color it has
+  - `colors`: one interaction color per exposed site; by default each keeps the color it has
     inside `poly`
+
+Naming the sites is how a meta-assembly departs from the rules the cluster was built under: a
+site that is inert inside `poly` becomes usable simply by being exposed and given a color that
+some rule of the new system uses. Colors are the whole interface to those rules, so a fresh
+coloring plus a `BindingRules` over it imposes whatever binding behaviour is wanted, and exposing
+only one of two equivalent sites correctly costs the meta-species the symmetry that related them.
 
 Each site's `gauge` and `locking` carry over from the cluster, while its `stab` is recomputed
 against the cluster by [`_sitestabilizer`](@ref): in 3D a face is free to twist about its own
 normal, and how much of that freedom survives depends on the cluster behind it, not on the face.
 """
-function MetaParticleSpecies(poly::Polyform{D}; colors=nothing) where {D}
-    open = collect_open_bindingsites(poly)
-    n = length(open)
-    n > 0 || throw(ArgumentError("`poly` has no open binding sites to expose"))
+MetaParticleSpecies(poly::Polyform; colors=nothing) =
+    MetaParticleSpecies(poly, [(r.particle, r.site) for r in exposablesites(poly) if !r.inert];
+                        colors)
+
+function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
+    sys = bindingrules(poly)
+    picks = [(Int(p), Int(k)) for (p, k) in sites]
+    n = length(picks)
+    n > 0 || throw(ArgumentError("a meta-species needs at least one exposed site"))
+    allunique(picks) || throw(ArgumentError("`sites` names the same site twice"))
+
+    exposable = Set((r.particle, r.site) for r in exposablesites(poly))
+    open = map(picks) do (p, k)
+        1 <= p <= nparticles(poly) ||
+            throw(ArgumentError("`poly` has $(nparticles(poly)) particles, so ($p, $k) is out of range"))
+        part = poly.particles[p]
+        1 <= k <= nsites(part, sys) ||
+            throw(ArgumentError("particle $p has $(nsites(part, sys)) sites, so ($p, $k) is out of range"))
+        (p, k) in exposable ||
+            throw(ArgumentError("site ($p, $k) is bound inside the cluster; a bond already " *
+                                "consumes it, so it cannot be exposed"))
+        return bindingsites(part, sys, k)
+    end
 
     cols = colors === nothing ? [color(s) for s in open] : collect(Int, colors)
     length(cols) == n ||
-        throw(DimensionMismatch("`poly` has $n open sites but $(length(cols)) colors were given"))
+        throw(DimensionMismatch("$n sites were exposed but $(length(cols)) colors were given"))
 
     # The cluster's graph in its *original* vertex order, where every particle owns a contiguous
     # block and each site keeps the vertex range it has inside the cluster. Canonical order would
     # scatter a 3D site's darts, which have to stay contiguous and in their cyclic order for
     # `contact_pairing` to twist a bond correctly.
     g = first(induced_subgraph(graphrep(poly), poly.orig2canon))
-    sites = map(1:n) do i
+    metasites = map(1:n) do i
         # `gauge` and `locking` belong to the site and carry over; `stab` counts the turns about
         # this site's normal that carry the *cluster* onto itself, which only the cluster knows
         return BindingSite(open[i].pose, cols[i], open[i].vertices, open[i].touching_tolerance,
                            open[i].alignment_tolerance, open[i].gauge,
                            _sitestabilizer(poly, open[i]), open[i].locking)
     end
-    _labelsites!(g, sites)
+    _labelsites!(g, metasites)
 
     F = numtype(poly)
-    sys = bindingrules(poly)
     rmax = maximum(poly.particles; init=zero(F)) do part
         norm(part.pose.x) + bounding_radius(species(sys, species_index(part)))
     end
-    return MetaParticleSpecies{D,F,eltype(sites),typeof(g),typeof(poly)}(g, sites, copy(poly),
-                                                                        convert(F, rmax))
+    return MetaParticleSpecies{D,F,eltype(metasites),typeof(g),typeof(poly)}(
+        g, metasites, copy(poly), convert(F, rmax))
 end
 
 """
