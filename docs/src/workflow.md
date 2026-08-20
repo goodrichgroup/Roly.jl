@@ -1,5 +1,9 @@
 # Workflow
 
+```@meta
+CurrentModule = Roly
+```
+
 ## Defining binding rules
 
 A `BindingRules` object holds a list of particle species and the bonds allowed between their binding sites.
@@ -35,7 +39,7 @@ julia> symmetrynumber(PolyhedronParticleSpecies(Cube()))                  # ever
 julia> symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))  # all faces alike
 24
 
-julia> caps = [abs(facenormal(Cube(), i)[3]) > 0.5 ? 2 : 1 for i in 1:6];
+julia> caps = [abs(Roly.facenormal(Cube(), i)[3]) > 0.5 ? 2 : 1 for i in 1:6];
 
 julia> symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=caps))     # caps apart from sides
 8
@@ -54,7 +58,7 @@ Bodies are built by name: [`Cube`](@ref), [`Prism`](@ref), [`Antiprism`](@ref) a
 [`rotationgroup`](@ref) lists the rotations a body has, and [`grouporder`](@ref) counts those of a named group.
 
 ```jldoctest workflow
-julia> length(rotationgroup(Cube()))
+julia> length(Roly.rotationgroup(Cube()))
 24
 
 julia> grouporder(Octahedral())

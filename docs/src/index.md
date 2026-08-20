@@ -1,5 +1,9 @@
 # Roly.jl
 
+```@meta
+CurrentModule = Roly
+```
+
 Roly.jl (*Reverse-search Polyform enumerator*) enumerates polyforms: aggregates built by connecting arbitrarily shaped blocks at their binding sites, in 2D or 3D.
 
 Given a set of building blocks and the bonds allowed between their sites, Roly.jl can:

@@ -1,5 +1,9 @@
 # Custom particle species
 
+```@meta
+CurrentModule = Roly
+```
+
 A particle species is a shape together with a set of binding sites on it.
 Every species is a subtype of `ParticleSpecies{D,B}`, where `D` is the spatial dimension and `B` is the concrete `BindingSite` type.
 
