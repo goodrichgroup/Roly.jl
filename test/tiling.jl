@@ -27,4 +27,31 @@
     # cantile finds a unit cell among the chain structures, and none in a closing system
     @test cantile(chainlike; maxtilesize=2) !== nothing
     @test cantile(dimerrules; maxtilesize=3) === nothing
+
+    @testset "cells of several copies" begin
+        # every closure above is a cell of one copy, and says so
+        @test all(t.order == 1 for t in tilings(chainmono))
+        @test all(t.order == 1 for t in tilings(sqmono; maxblock=1))
+
+        # site 1 binds site 2, a quarter turn, so no translation carries a single square onto a
+        # bonded copy -- the cell has to hold two of them, related by that turn, and only block
+        # growth can find it
+        turn = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
+        mono = first(polygen(turn; maxsize=1))
+        @test isempty(tilings(mono; maxblock=1))
+        blocked = tilings(mono; maxblock=2)
+        @test !isempty(blocked)
+        @test all(t.order == 2 for t in blocked)
+        # the bond joining the two copies belongs to the cell, so it is counted there
+        @test all(!isempty(t.bondtypes) for t in blocked)
+
+        # a supercell of a tiling is still a tiling, so raising the bound only adds cells
+        for k in 1:3
+            ts = tilings(chainmono; maxblock=k)
+            @test sort(unique(t.order for t in ts)) == collect(1:k)
+            @test all(t.complete for t in ts)
+            # a cell of k copies closes k bonds
+            @test all(length(t.bondtypes) == t.order for t in ts)
+        end
+    end
 end

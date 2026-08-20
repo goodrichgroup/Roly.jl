@@ -65,12 +65,12 @@ include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
 include("environments.jl")
-include("tiling.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
+include("tiling.jl")
 
 include("ruleeditor.jl")
 export ruleeditor
