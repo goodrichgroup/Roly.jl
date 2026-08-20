@@ -33,7 +33,7 @@
         hit = canchain(chainlike)
         @test hit !== nothing && nparticles(hit) == 1
         @test !isempty(tilings(hit))              # what was found really does close
-        @test isunbounded(chainlike; maxlength=1)
+        @test canchain(chainlike; maxlength=1) !== nothing
 
         # the square lattice is caught the same way, from a single particle
         @test isunbounded(squarerules)
@@ -56,6 +56,30 @@
         @test isunbounded(turnrules)
         # and a cell of two copies reaches the same fact from a one-particle chain
         @test nparticles(canchain(turnrules; maxlength=1, maxblock=2)) == 1
+    end
+
+    @testset "unbounded rules via a repeating motion" begin
+        # a repeat whose motion is a pure translation: the chain marches off forever
+        w = growthwitness(chainlike)
+        @test w !== nothing && w.period == 1
+        @test isunbounded(squarerules)
+        # structures that all close have no such motion
+        @test growthwitness(dimerrules) === nothing
+        # nor do rules that only fold back on themselves: a quarter turn repeated is a rotation,
+        # and its copies stay in a bounded annulus
+        @test !isunbounded(BindingRules([1 1 1 2], UnitSquare))
+
+        # two quarter turns compose to a translation over two particles. The motion accumulates a
+        # full 2pi, which has to be wrapped before it is judged to be turning at all
+        turnrules = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
+        wt = growthwitness(turnrules)
+        @test wt !== nothing && wt.period == 2
+        @test isapprox(rem(rotation_angle(wt.generator.psi), 2pi, RoundNearest), 0; atol=1e-8)
+        @test norm(wt.generator.x) ≈ 2
+
+        # 3D: a stack of cubes is caught the same way
+        cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
+        @test isunbounded(BindingRules([1 1 1 1], cube))
     end
 
     @testset "cells of several copies" begin

@@ -204,16 +204,129 @@ function canchain(rules::BindingRules;
 end
 
 """
-    isunbounded(rules::BindingRules; kwargs...)
+    isunbounded(rules::BindingRules; maxlength=chainstatebound(rules) + 1)
 
-Whether `rules` admits arbitrarily large structures, by [`canchain`](@ref) finding a periodic
-chain.
-
-`true` is always a proof. At the default `maxlength`, `false` is a proof too in 2D, and in 3D
-only means that no *periodic* chain exists — a helix whose screw turns by an irrational angle is
-unbounded and has none.
+Whether `rules` admits arbitrarily large structures. See [`growthwitness`](@ref), which returns
+the repeating motion behind a `true`.
 """
-isunbounded(rules::BindingRules; kwargs...) = canchain(rules; kwargs...) !== nothing
+isunbounded(rules::BindingRules; kwargs...) = growthwitness(rules; kwargs...) !== nothing
+
+"""
+    growthwitness(rules::BindingRules; maxlength=chainstatebound(rules) + 1)
+
+Find a rigid motion `g` and a cluster `C` such that `C, g(C), g²(C), …` is an infinite valid
+structure, or `nothing` if none exists.
+
+  - returns `(; generator, cell, period)`: the motion, the particles it repeats, and how many
+    particles that is
+
+Chains are grown one particle at a time, tracking each particle's state — its species, the site
+its incoming bond uses, and that bond's phase. There are [`chainstatebound`](@ref) such states, so
+a longer chain repeats one, and the motion `g` between the two occurrences repeats forever.
+Restricting to chains loses nothing: any connected part of a valid structure is valid, and an
+infinite structure's bond graph contains an infinite path.
+
+By Chasles' theorem `g` is a screw — a rotation by `θ` about an axis together with a translation
+`h` along it, degenerating to a pure rotation (`h = 0`) or a pure translation (`θ = 0`). The two
+cases settle the question:
+
+  - `h = 0`: every copy stays the same distance from the axis, so all of them lie in one bounded
+    region. Infinitely many particles of positive volume cannot, so growth stops. In 2D this is
+    every rotation, which is why the plane has no unbounded non-periodic growth
+  - `h ≠ 0`: copies `m` periods apart sit `m·h` apart along the axis, so once `|m·h|` exceeds the
+    cell's own axial extent they cannot touch. Only `m ≤ ⌈L/|h|⌉` placements can collide, and
+    checking those settles the whole infinite chain
+
+Both bounds are exact rather than cutoffs, so `false` is a proof and not a budget running out.
+The shapes never enter: a particle's reach along the axis is bounded by its own radius, so
+non-convex pieces can interlock only within the same window. What the guarantee does inherit is
+the exactness of pairwise `overlap` for the species in play.
+"""
+function growthwitness(rules::BindingRules; maxlength::Integer=chainstatebound(rules) + 1)
+    for i in 1:nspecies(rules)
+        w = _walkchain(Polyform(rules, i), [(i, 0, 0)], maxlength)
+        w === nothing || return w
+    end
+    return nothing
+end
+
+# Depth-first over directed chains, extending only at the particle last added, so the states seen
+# so far are exactly the chain read from its start.
+function _walkchain(poly::Polyform, states, maxlength)
+    sys = bindingrules(poly)
+    n = nparticles(poly)
+    part = poly.particles[end]
+    for k in 1:nsites(part, sys)
+        site = bindingsites(part, sys, k)
+        _isbound_vertex(poly, part, first(site.vertices)) && continue
+        isinert(sys, color(site)) && continue
+        for siteloc in compatible_sitelocs(sys, color(site))
+            mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
+            for r in 0:(nphases(site, mate) - 1)
+                child = copy(poly)
+                ismissing(raise!(child, site, siteloc, r)) && continue
+                # `raise!` forms every geometric contact, so growth may cross-link back onto the
+                # chain. That is a valid structure and often the interesting one -- the walk only
+                # insists that one particle was added, and always extends the newest
+                nparticles(child) == n + 1 || continue
+
+                state = (siteloc[1], siteloc[2], Int(r))
+                j = findlast(==(state), states)
+                if j !== nothing
+                    w = _screwwitness(child, j, n + 1)
+                    w === nothing || return w
+                end
+                if n + 1 < maxlength
+                    w = _walkchain(child, push!(copy(states), state), maxlength)
+                    w === nothing || return w
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+# The stretch between two occurrences of a state repeats under `g`. Whether that goes on forever
+# is decided by the screw's pitch, and if it can, by finitely many placements.
+function _screwwitness(poly::Polyform, i::Integer, j::Integer)
+    sys = bindingrules(poly)
+    cell = poly.particles[i:(j - 1)]
+    g = poly.particles[j].pose * inv(poly.particles[i].pose)
+
+    axis, h = _screwpitch(g)
+    h === nothing && return nothing               # a pure rotation cannot escape its own annulus
+
+    us = (dot(p.pose.x, axis) for p in cell)
+    rmax = maximum(bounding_radius(species(sys, species_index(p))) for p in cell)
+    extent = maximum(us) - minimum(us) + 2 * rmax
+    gm = g
+    for _ in 1:ceil(Int, extent / abs(h))
+        for p in cell
+            moved = gm * p
+            first(_overlap_and_contacts(cell, moved, sys)) === true && return nothing
+        end
+        gm = gm * g
+    end
+    return (; generator=g, cell=cell, period=length(cell))
+end
+
+# `(axis, pitch)` of a rigid motion, or `(nothing, nothing)` when it has no translation along its
+# axis: a pure rotation in 3D, any rotation in 2D, or the identity.
+function _screwpitch(g::Pose{D,F}) where {D,F}
+    tol = sqrt(eps(F))
+    # a composed motion accumulates its angle, so a full turn comes back as 2π rather than 0;
+    # wrap to (-π, π] before asking whether it turns at all
+    turning = abs(rem(rotation_angle(g.psi), 2 * F(π), RoundNearest)) > tol
+    if !turning
+        n = norm(g.x)
+        n > tol || return nothing, nothing        # the identity: no repeat at all
+        return g.x / n, n                         # a pure translation is a screw of zero angle
+    end
+    D == 3 || return nothing, nothing             # in the plane a turn has no axis to climb
+    axis = rotation_axis(g.psi)
+    pitch = dot(g.x, axis)
+    return axis, abs(pitch) > tol ? pitch : nothing
+end
 
 """
     chainstatebound(rules::BindingRules)

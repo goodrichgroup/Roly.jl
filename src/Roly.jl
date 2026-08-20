@@ -39,7 +39,7 @@ export bonds, bondindex, interior_edges, exterior_edges, subpolyform
 # Environments
 export Environment, ParticleEnvironment, BondEnvironment
 export particleenvironments, bondenvironments, crop, rootenvironment
-export tilings, isunitcell, tilelatticevectors, cantile, canchain, isunbounded, chainstatebound
+export tilings, isunitcell, tilelatticevectors, cantile, canchain, isunbounded, chainstatebound, growthwitness
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
