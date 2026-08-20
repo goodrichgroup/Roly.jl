@@ -1,5 +1,9 @@
 # API reference
 
+```@meta
+CurrentModule = Roly
+```
+
 ## Poses
 
 ```@docs

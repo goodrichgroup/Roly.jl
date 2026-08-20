@@ -1,5 +1,9 @@
 # Orientation and phases
 
+```@meta
+CurrentModule = Roly
+```
+
 A bond fixes which two sites touch, and how the two particles are turned relative to one another.
 On a symmetric particle it can fix that turn in more than one way, and each way is a *phase*.
 

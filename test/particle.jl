@@ -1,4 +1,4 @@
-using Roly: Particle, graphvertices, leading_vertex, species_index
+using Roly: Particle, graphvertices, leading_vertex, species_index, overlap, could_contact
 
 @testset "particle" begin
     sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)

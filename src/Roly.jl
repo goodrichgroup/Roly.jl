@@ -10,23 +10,16 @@ export Pose, dimension, numtype, posetype
 export Rotation, Angle2d, RotXYZ, RotMatrix3, rotation_angle, rotation_axis, SVector
 
 # Binding sites
-export BindingSite, color, contact_pairing
-export standard_offset, twistfreedom, bondperiod, nphases, phase
+export BindingSite, color
 
-# Polyhedra and graph encodings
-export Polyhedron, corners, faces, facevertices, nfaces, nedges
-export facecentroid, facecentroids, facenormal, facenormals, edgemidpoint
-export inradius, minedgelength
-export dartencoding, cycleencoding
-export rotationgroup, geometriclabels, facegauge, siteorbits, site_symmetry, check_encoding
-export sitestabilizers
+# Bodies and their symmetry groups
+export Polyhedron
 export Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron, Pyramid, Prism, Antiprism
 export RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral, Icosahedral, grouporder
 
 # Particle species
 export ParticleSpecies, SpeciesAndPose
-export nsites, bindingsites, graphrep, isconvex, symmetrynumber
-export bounding_radius, could_contact, overlap, sat_overlap, edgenormals
+export nsites, bindingsites, graphrep, symmetrynumber
 
 # Assembly system
 export BindingRules, interactionmatrix
@@ -43,10 +36,31 @@ export polyenum, polygen, countpolyforms, PolyformCount
 
 # Species
 export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
-export PolyhedronParticleSpecies, shape
+export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
+
+# Public, but not exported: reach for these as `Roly.faces(p)`, or import them by name.
+# They are stable API, but specific enough to a body, an encoding or a species that putting
+# them in every user's namespace is not worth it.
+
+# Polyhedron geometry
+public corners, faces, facevertices, nfaces, nedges
+public facecentroid, facecentroids, facenormal, facenormals, edgemidpoint
+public inradius, minedgelength
+
+# Graph encodings and the symmetry they record
+public dartencoding, cycleencoding
+public rotationgroup, geometriclabels, facegauge, siteorbits, sitestabilizers
+public site_symmetry, check_encoding
+
+# What a bond fixes about relative orientation
+public contact_pairing, standard_offset, twistfreedom, bondperiod, nphases, phase
+
+# The `ParticleSpecies` interface, implemented rather than called
+public isconvex, bounding_radius, could_contact, overlap
+public sat_overlap, edgenormals, shape
 
 
 include("utils.jl")

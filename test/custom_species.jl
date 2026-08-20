@@ -1,6 +1,6 @@
 # The species interface as `docs/src/custom_species.md` documents it.
 using Roly
-using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color,
+using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color, siteorbits,
             cycleencoding, sitestabilizers, sat_overlap, edgenormals
 import Roly: graphrep, nsites, bindingsites, bounding_radius, isconvex
 using NautyGraphs, StaticArrays, LinearAlgebra, Rotations
