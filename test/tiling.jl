@@ -43,10 +43,17 @@
         # rules that only fold rings back on themselves are bounded too
         @test !isunbounded(BindingRules([1 1 1 2], UnitSquare); maxlength=6)
 
+        # the default length is derived, not guessed: a chain past it must repeat a state
+        @test chainstatebound(chainlike) >= nsites(UnitSquare) ÷ 2
+        @test all(chainstatebound(r) >= 1 for (r, _) in
+                  ((chainlike, 0), (dimerrules, 0), (squarerules, 0)))
+
         # `maxlength` bounds the chain: this repeat needs two particles, not one
         turnrules = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
         @test canchain(turnrules; maxlength=1) === nothing
         @test nparticles(canchain(turnrules; maxlength=4)) == 2
+        # and the derived default reaches it without being told
+        @test isunbounded(turnrules)
         # and a cell of two copies reaches the same fact from a one-particle chain
         @test nparticles(canchain(turnrules; maxlength=1, maxblock=2)) == 1
     end

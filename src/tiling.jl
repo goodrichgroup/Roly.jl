@@ -157,25 +157,37 @@ function cantile(rules::BindingRules; maxtilesize, kwargs...)
 end
 
 """
-    canchain(rules::BindingRules; maxlength=8, kwargs...)
+    canchain(rules::BindingRules; maxlength=chainstatebound(rules) + 1, kwargs...)
 
 Grow linear chains of `rules`, attaching only at their two ends, and return the first one that
 closes periodically — or `nothing` if none does within `maxlength` particles.
 
-  - `maxlength`: longest chain to try; the search is over chains only, so this is a length, not a
-    structure count
+  - `maxlength`: longest chain to try. The default is long enough that no periodic chain can hide
+    below it, see [`chainstatebound`](@ref); lower it only to trade certainty for speed
   - other keyword arguments go to [`tilings`](@ref)
 
 A chain that closes proves the rules admit arbitrarily large structures: truncating its periodic
 continuation gives a valid cluster of every length. This is far cheaper than [`cantile`](@ref),
-which sweeps every structure, because chains branch only at their ends.
+which sweeps every structure, because chains branch only at their ends, and a system whose
+structures all close runs out of chains on its own well before the bound.
 
-The converse does not hold, so `nothing` is not a proof of finiteness. Growth may be branching
-rather than linear, the repeat may be longer than `maxlength`, or the rules may admit infinitely
-many structures with no periodic one at all — an aperiodic system is exactly that. See
-[`isunbounded`](@ref).
+Restricting the search to chains costs nothing in reach. Any connected part of a valid structure
+is valid here, and an infinite structure's bond graph is connected and locally finite, so it
+contains an infinite path: branching growth always implies chain growth.
+
+**In 2D** `nothing` at the default `maxlength` therefore means no infinite structure exists. A
+chain long enough to repeat one of its finitely many states repeats the rigid motion between the
+two occurrences forever, and in the plane that motion is a translation or a rotation — a rotation
+keeps every particle on a circle, so its iterates must eventually collide. Unbounded growth
+leaves only the translation, which is a periodic chain.
+
+**In 3D** it does not: the motion can be a screw, whose translation along the axis never
+collides. A screw by `2πp/q` closes into a translation over `q` copies and is found with
+`maxblock ≥ q`, but an irrational one never closes at all, and no periodicity test can see it.
+See [`isunbounded`](@ref).
 """
-function canchain(rules::BindingRules; maxlength::Integer=8, kwargs...)
+function canchain(rules::BindingRules;
+                  maxlength::Integer=chainstatebound(rules) + 1, kwargs...)
     frontier = [Polyform(rules, i) for i in 1:nspecies(rules)]
     seen = Set(hash(graphrep(p)) for p in frontier)
     while !isempty(frontier)
@@ -194,10 +206,41 @@ end
 """
     isunbounded(rules::BindingRules; kwargs...)
 
-Whether `rules` is known to admit arbitrarily large structures, by [`canchain`](@ref) finding a
-periodic chain. `true` is a proof; `false` only means none was found within the search.
+Whether `rules` admits arbitrarily large structures, by [`canchain`](@ref) finding a periodic
+chain.
+
+`true` is always a proof. At the default `maxlength`, `false` is a proof too in 2D, and in 3D
+only means that no *periodic* chain exists — a helix whose screw turns by an irrational angle is
+unbounded and has none.
 """
 isunbounded(rules::BindingRules; kwargs...) = canchain(rules; kwargs...) !== nothing
+
+"""
+    chainstatebound(rules::BindingRules)
+
+How long a chain of `rules` can get before it must repeat itself.
+
+What a chain can do next depends only on the species at its end, which of that species' sites
+carries the incoming bond, and with which phase — finitely many states. A longer chain visits one
+twice, and the stretch between the two visits is a cell that repeats forever, so searching past
+this length can find no periodic chain that a shorter one would have missed.
+"""
+function chainstatebound(rules::BindingRules)
+    total = 0
+    for i in 1:nspecies(rules)
+        ps = species(rules, i)
+        for k in 1:nsites(ps)
+            site = bindingsites(ps, k)
+            phases = 1
+            for loc in compatible_sitelocs(rules, color(site))
+                mate = bindingsites(species(rules, loc[1]), loc[2])
+                phases = max(phases, nphases(mate, site))
+            end
+            total += phases
+        end
+    end
+    return total
+end
 
 # How many of a particle's sites are bonded; a chain's ends are the particles with at most one.
 function _bonddegree(poly::Polyform, part)
