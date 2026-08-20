@@ -28,6 +28,29 @@
     @test cantile(chainlike; maxtilesize=2) !== nothing
     @test cantile(dimerrules; maxtilesize=3) === nothing
 
+    @testset "unbounded rules via periodic chains" begin
+        # the chain monomer repeats on its own, so one particle already proves it
+        hit = canchain(chainlike)
+        @test hit !== nothing && nparticles(hit) == 1
+        @test !isempty(tilings(hit))              # what was found really does close
+        @test isunbounded(chainlike; maxlength=1)
+
+        # the square lattice is caught the same way, from a single particle
+        @test isunbounded(squarerules)
+        # a system whose structures all close is not
+        @test canchain(dimerrules) === nothing
+        @test !isunbounded(dimerrules)
+        # rules that only fold rings back on themselves are bounded too
+        @test !isunbounded(BindingRules([1 1 1 2], UnitSquare); maxlength=6)
+
+        # `maxlength` bounds the chain: this repeat needs two particles, not one
+        turnrules = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
+        @test canchain(turnrules; maxlength=1) === nothing
+        @test nparticles(canchain(turnrules; maxlength=4)) == 2
+        # and a cell of two copies reaches the same fact from a one-particle chain
+        @test nparticles(canchain(turnrules; maxlength=1, maxblock=2)) == 1
+    end
+
     @testset "cells of several copies" begin
         # every closure above is a cell of one copy, and says so
         @test all(t.order == 1 for t in tilings(chainmono))

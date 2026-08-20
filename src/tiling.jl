@@ -156,6 +156,88 @@ function cantile(rules::BindingRules; maxtilesize, kwargs...)
     return hit[]
 end
 
+"""
+    canchain(rules::BindingRules; maxlength=8, kwargs...)
+
+Grow linear chains of `rules`, attaching only at their two ends, and return the first one that
+closes periodically — or `nothing` if none does within `maxlength` particles.
+
+  - `maxlength`: longest chain to try; the search is over chains only, so this is a length, not a
+    structure count
+  - other keyword arguments go to [`tilings`](@ref)
+
+A chain that closes proves the rules admit arbitrarily large structures: truncating its periodic
+continuation gives a valid cluster of every length. This is far cheaper than [`cantile`](@ref),
+which sweeps every structure, because chains branch only at their ends.
+
+The converse does not hold, so `nothing` is not a proof of finiteness. Growth may be branching
+rather than linear, the repeat may be longer than `maxlength`, or the rules may admit infinitely
+many structures with no periodic one at all — an aperiodic system is exactly that. See
+[`isunbounded`](@ref).
+"""
+function canchain(rules::BindingRules; maxlength::Integer=8, kwargs...)
+    frontier = [Polyform(rules, i) for i in 1:nspecies(rules)]
+    seen = Set(hash(graphrep(p)) for p in frontier)
+    while !isempty(frontier)
+        poly = popfirst!(frontier)
+        isempty(tilings(poly; kwargs...)) || return poly
+        nparticles(poly) < maxlength || continue
+        for child in _extendends(poly)
+            hash(graphrep(child)) in seen && continue
+            push!(seen, hash(graphrep(child)))
+            push!(frontier, child)
+        end
+    end
+    return nothing
+end
+
+"""
+    isunbounded(rules::BindingRules; kwargs...)
+
+Whether `rules` is known to admit arbitrarily large structures, by [`canchain`](@ref) finding a
+periodic chain. `true` is a proof; `false` only means none was found within the search.
+"""
+isunbounded(rules::BindingRules; kwargs...) = canchain(rules; kwargs...) !== nothing
+
+# How many of a particle's sites are bonded; a chain's ends are the particles with at most one.
+function _bonddegree(poly::Polyform, part)
+    sys = bindingrules(poly)
+    return count(1:nsites(part, sys)) do k
+        _isbound_vertex(poly, part, first(bindingsites(part, sys, k).vertices))
+    end
+end
+
+# Every chain one particle longer, grown at an end. `raise!` forms all geometric contacts, so an
+# attachment can branch the chain or close it into a ring; those are dropped, leaving paths.
+function _extendends(poly::Polyform)
+    sys = bindingrules(poly)
+    out = typeof(poly)[]
+    for part in poly.particles
+        nparticles(poly) == 1 || _bonddegree(poly, part) <= 1 || continue
+        for k in 1:nsites(part, sys)
+            site = bindingsites(part, sys, k)
+            _isbound_vertex(poly, part, first(site.vertices)) && continue
+            isinert(sys, color(site)) && continue
+            for siteloc in compatible_sitelocs(sys, color(site))
+                mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
+                for r in 0:(nphases(site, mate) - 1)
+                    child = copy(poly)
+                    ismissing(raise!(child, site, siteloc, r)) && continue
+                    _ischain(child) && push!(out, child)
+                end
+            end
+        end
+    end
+    return out
+end
+
+# A path: every particle bonded to at most two others, and no cycle.
+function _ischain(poly::Polyform)
+    nbonds = sum(part -> _bonddegree(poly, part), poly.particles; init=0) ÷ 2
+    return nbonds == nparticles(poly) - 1 &&
+           all(part -> _bonddegree(poly, part) <= 2, poly.particles)
+end
+
 _bondtype(sys, siteof, (r1, r2)) =
     findfirst(==(minmax(color(siteof[r1]), color(siteof[r2]))), sys._bondlist)
 
