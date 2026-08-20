@@ -69,12 +69,45 @@
         @test isempty(collect_open_bindingsites(trimer))
         @test_throws ArgumentError MetaParticleSpecies(trimer)
 
-        # 3D needs the site's stabilizer within the cluster to pin its twist freedom
-        cubes = BindingRules([1 1 1 2], UnitCube)
-        cubedimer = let strs = polygen(cubes; maxsize=2)
+    end
+
+    @testset "3D: symmetry and twist freedom come from the cluster" begin
+        # every face alike, so a cube is 24-fold and each face 4-fold about its normal
+        cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
+        @test symmetrynumber(cube) == 24
+        @test sitestabilizers(cube) == fill(4, 6)
+
+        stack = BindingRules([1 1 1 1], cube)
+        cubedimer = let strs = polygen(stack; maxsize=2)
             strs[findfirst(s -> nparticles(s) == 2, strs)]
         end
-        @test_throws ArgumentError MetaParticleSpecies(cubedimer)
+        # 4 turns about the stacking axis, times swapping the two cubes
+        @test symmetrynumber(cubedimer) == 8
+
+        cmp = MetaParticleSpecies(cubedimer)
+        @test dimension(cmp) == 3
+        @test symmetrynumber(cmp) == symmetrynumber(cubedimer)
+        @test nsites(cmp) == 10
+        # a dart-encoded face spans four vertices, which stay contiguous and in order
+        @test all(length(bindingsites(cmp, i).vertices) == 4 for i in 1:nsites(cmp))
+        @test nv(graphrep(cmp)) == nv(graphrep(cubedimer))
+
+        # the two faces opposite the bond keep the whole 4-fold twist, since turning about them
+        # carries the stack onto itself; the eight side faces keep none of it
+        stabs = sitestabilizers(cmp)
+        @test count(==(4), stabs) == 2
+        @test count(==(1), stabs) == 8
+        @test all(bindingsites(cmp, i).gauge == 4 for i in 1:nsites(cmp))
+
+        # a cube with distinctly coloured faces has no symmetry to inherit
+        plaindimer = let strs = polygen(BindingRules([1 1 1 2], UnitCube); maxsize=2)
+            strs[findfirst(s -> nparticles(s) == 2, strs)]
+        end
+        @test sitestabilizers(MetaParticleSpecies(plaindimer)) == [1, 1]
+
+        # and blocks assemble out of blocks in 3D too
+        metasys = BindingRules([1 1 1 1], cmp)
+        @test polyenum(metasys; maxsize=2)[1] >= 2
     end
 
     @testset "setcolors! relabels the sites and leaves the interior alone" begin

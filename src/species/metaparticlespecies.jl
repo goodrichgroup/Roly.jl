@@ -43,15 +43,11 @@ Wrap `poly` as a species whose sites are its open binding sites.
   - `colors`: one interaction color per open site; by default each site keeps the color it has
     inside `poly`
 
-Only 2D clusters are supported. In 3D a site carries a twist freedom greater than one, which the
-site's stabilizer within the cluster has to resolve: `nphases` takes the `lcm` of the two sites'
-twist freedoms and divides by the attached site's stabilizer, so getting it wrong drops
-attachment phases rather than merely costing work.
+Each site's `gauge` and `locking` carry over from the cluster, while its `stab` is recomputed
+against the cluster by [`_sitestabilizer`](@ref): in 3D a face is free to twist about its own
+normal, and how much of that freedom survives depends on the cluster behind it, not on the face.
 """
 function MetaParticleSpecies(poly::Polyform{D}; colors=nothing) where {D}
-    D == 2 || throw(ArgumentError("`MetaParticleSpecies` supports 2D clusters only; in 3D a " *
-                                  "site's twist freedom needs its stabilizer within the cluster, " *
-                                  "and getting that wrong drops attachment phases"))
     open = collect_open_bindingsites(poly)
     n = length(open)
     n > 0 || throw(ArgumentError("`poly` has no open binding sites to expose"))
@@ -60,18 +56,17 @@ function MetaParticleSpecies(poly::Polyform{D}; colors=nothing) where {D}
     length(cols) == n ||
         throw(DimensionMismatch("`poly` has $n open sites but $(length(cols)) colors were given"))
 
-    # the cluster's graph, with each open site's vertices carried over to canonical numbering
-    g = copy(graphrep(poly))
+    # The cluster's graph in its *original* vertex order, where every particle owns a contiguous
+    # block and each site keeps the vertex range it has inside the cluster. Canonical order would
+    # scatter a 3D site's darts, which have to stay contiguous and in their cyclic order for
+    # `contact_pairing` to twist a bond correctly.
+    g = first(induced_subgraph(graphrep(poly), poly.orig2canon))
     sites = map(1:n) do i
-        vs = [tocanon(poly, v) for v in open[i].vertices]
-        # a site occupies one vertex in 2D, so its canonical vertices stay contiguous
-        r = minimum(vs):maximum(vs)
-        length(r) == length(vs) ||
-            throw(ArgumentError("open site $i does not occupy a contiguous vertex range"))
-        # `gauge` and `locking` belong to the site; `stab` counts the symmetries of the whole
-        # particle fixing it, which in 2D is 1 whenever the twist freedom is
-        return BindingSite(open[i].pose, cols[i], r, open[i].touching_tolerance,
-                           open[i].alignment_tolerance, open[i].gauge, 1, open[i].locking)
+        # `gauge` and `locking` belong to the site and carry over; `stab` counts the turns about
+        # this site's normal that carry the *cluster* onto itself, which only the cluster knows
+        return BindingSite(open[i].pose, cols[i], open[i].vertices, open[i].touching_tolerance,
+                           open[i].alignment_tolerance, open[i].gauge,
+                           _sitestabilizer(poly, open[i]), open[i].locking)
     end
     _labelsites!(g, sites)
 
@@ -82,6 +77,49 @@ function MetaParticleSpecies(poly::Polyform{D}; colors=nothing) where {D}
     end
     return MetaParticleSpecies{D,F,eltype(sites),typeof(g),typeof(poly)}(g, sites, copy(poly),
                                                                         convert(F, rmax))
+end
+
+"""
+    _sitestabilizer(poly, site)
+
+How many of `site`'s `gauge` turns about its own normal carry `poly` onto itself.
+
+This is the cluster's version of what [`sitestabilizers`](@ref) reports for a rigid species, and
+it cannot be read off the site: the turn has to move every particle of the cluster onto a
+particle of the same species. `nphases` divides by the attached site's stabilizer and takes the
+`lcm` of the two twist freedoms, so overstating this drops attachment phases and understating it
+only costs redundant enumeration.
+
+In 2D a site has a single orientation, so the count is one by construction.
+"""
+function _sitestabilizer(poly::Polyform{D}, site) where {D}
+    (D == 2 || site.gauge <= 1) && return 1
+    F = numtype(poly)
+    sys = bindingrules(poly)
+    tosite = inv(site.pose)
+
+    # Every binding site of the cluster, in `site`'s frame, which puts the normal being turned
+    # about on the local x axis. The test is over sites rather than particles because a
+    # particle's pose is only defined up to its own symmetry -- a cube turned onto itself about a
+    # face normal has a different pose but is the same particle -- and a colour identifies a site
+    # within the rules, so matching the sites matches the cluster.
+    frames = [(color(s), tosite * s.pose, s.gauge)
+              for p in poly.particles for s in bindingsites(p, sys)]
+    tol = sqrt(eps(F))
+    atol = tol * maximum(norm(f.x) for (_, f, _) in frames; init=one(F))
+
+    return count(0:(site.gauge - 1)) do m
+        R = RotX(F(2π) * m / site.gauge)
+        all(frames) do (c, frame, _)
+            any(frames) do (c2, frame2, gauge2)
+                # a site's frame is only defined up to its own gauge turns, exactly as
+                # `_site_symmetries` matches them
+                c2 == c && isapprox(R * frame.x, frame2.x; atol) &&
+                    any(psi -> isapprox(R * frame.psi, psi; atol=tol),
+                        _siteturns(frame2.psi, gauge2))
+            end
+        end
+    end
 end
 
 # Give every open-site vertex a label determined by its color and placed above every interior
