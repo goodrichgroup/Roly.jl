@@ -2,16 +2,12 @@
     Environment{N}
 
 The local environment of `N` root particles: all particles within graph distance `depth` of a
-root, as an isomorphism class. See [`ParticleEnvironment`](@ref) and [`BondEnvironment`](@ref)
-for the two instantiations in use.
+root, as an isomorphism class. See [`ParticleEnvironment`](@ref) and [`BondEnvironment`](@ref).
 
   - `graph`: canonized graph representation with the root particles distinguished, in order
   - `rootvertices`: one canonical site vertex per root particle
   - `depth`: crop radius around each root
   - `rules`: the `BindingRules` the labels refer to
-
-Identity (`hash`/`==`) is `(graph, depth)`; `rootvertices` is convenience metadata. Every valid
-environment is itself a valid polyform.
 """
 struct Environment{N,G<:AbstractNautyGraph,S<:BindingRules}
     graph::G
@@ -24,7 +20,7 @@ end
     ParticleEnvironment
 
 [`Environment`](@ref) of a single particle: the ball of all particles within graph distance
-`depth` of the root. `rootvertices` holds the root's first site vertex.
+`depth` of the root.
 """
 const ParticleEnvironment{G,S} = Environment{1,G,S}
 
@@ -32,9 +28,7 @@ const ParticleEnvironment{G,S} = Environment{1,G,S}
     BondEnvironment
 
 [`Environment`](@ref) of a bond: all particles within graph distance `depth` of either endpoint,
-with the endpoints as roots, in order. `rootvertices` holds the anchoring bond's two site
-vertices — metadata only, since parallel bonds between the same particle pair share a class.
-`reverse` swaps the two roots; a bond environment equal to its own reversal is symmetric.
+with the endpoints as roots, in order.
 """
 const BondEnvironment{G,S} = Environment{2,G,S}
 
@@ -50,6 +44,7 @@ Base.show(io::Core.IO, e::Environment{N}) where {N} = print(io, _envname(N), "[k
 # Root marks are added in multiples of this, so marked labels never collide with site labels.
 function _markoffset(sys::BindingRules)
     m = 0
+    # find the largest label of any site in `sys`
     for i in 1:nspecies(sys)
         m = max(m, maximum(labels(graphrep(species(sys, i)))))
     end
@@ -57,37 +52,32 @@ function _markoffset(sys::BindingRules)
 end
 
 # Mark and canonize: bump the labels of the i-th group of vertices by i*offset. Marking every vertex
-# of a root particle (rather than a single one) preserves the particle's internal symmetry, so e.g.
-# a threefold-symmetric root does not split one class into three.
-#
-# Site-resolution marks (unbound vs outside-the-crop) need no encoding: they are determined by graph
-# distance from the roots, which any isomorphism of marked graphs preserves.
+# of a root particle (rather than a single one) preserves the particle's internal symmetry.
 function _canonmarked(g::AbstractNautyGraph, groups, offset)
     h = copy(g)
     for (i, vs) in enumerate(groups), v in vs
         setlabel!(h, v, labels(h)[v] + i * offset)
     end
-    # `canonize!` returns the new -> old permutation (`newlabels[i] == oldlabels[perm[i]]`); the
-    # callers hold old indices and want new ones, hence the inversion.
+    # `canonize!` returns the new -> old permutation (`newlabels[i] == oldlabels[perm[i]]`).
+    # downstream callers need opposite; invert here
     return h, invperm(collect(Int, canonize!(h)))
 end
 
 # Buffers for the particle-hop search, reusable across calls and polyforms.
 struct EnvironmentBuffers
-    dist::Vector{Int}               # particle -> bond-hops from the roots, -1 if unreached
-    queue::Vector{Int}
+    dist::Vector{Int}               # graph-distance of the particles
+    queue::Vector{Int}              # interal buffer
     vertex2particle::Vector{Int}    # original vertex -> owning particle
     neighbors::Vector{Int}          # neighbor scratch for `bfs!`
 end
 EnvironmentBuffers() = EnvironmentBuffers(Int[], Int[], Int[], Int[])
 function Base.copy(bufs::EnvironmentBuffers)
     return EnvironmentBuffers(copy(bufs.dist), copy(bufs.queue), copy(bufs.vertex2particle),
-                              copy(bufs.neighbors))
+        copy(bufs.neighbors))
 end
 
-# Particle-hop distances from the `roots` via `bfs!`: vertices of the same particle are free, bonds
-# cost one hop. Capped at `maxdepth`, so the cost is the ball, not the whole polyform. Fills and
-# returns `bufs.dist`.
+# Graph distances from the `roots` via `bfs!`: vertices of the same particle are free, bonds
+# cost one hop. Capped at `maxdepth`. Fills and returns `bufs.dist`.
 function _particledists!(bufs::EnvironmentBuffers, poly::Polyform, roots; maxdepth)
     sys = bindingrules(poly)
     g = graphrep(poly)
@@ -119,7 +109,7 @@ end
 # Induced marked subgraph on the particles with dist in [0, depth], with the `roots` particles
 # marked in order. `rootvertices` gives one original site vertex per root; the returned tuple holds
 # their canonical indices in the new graph.
-function _envgraph(poly::Polyform, dist::Vector{Int}, depth::Integer, roots, rootvertices)
+function _envgraph(poly::Polyform, dist::AbstractVector{<:Integer}, depth::Integer, roots, rootvertices)
     sys = bindingrules(poly)
     verts = Int[]
     offsets = zeros(Int, nparticles(poly))   # particle -> position of its first vertex in `verts`
@@ -132,11 +122,11 @@ function _envgraph(poly::Polyform, dist::Vector{Int}, depth::Integer, roots, roo
     end
 
     h = graphrep(poly)[verts]
-    groups = map(p -> offsets[p]:(offsets[p] + nsites(particles(poly, p), sys) - 1), roots)
+    groups = map(p -> offsets[p]:(offsets[p]+nsites(particles(poly, p), sys)-1), roots)
     hm, old2new = _canonmarked(h, groups, _markoffset(sys))
 
     canonrootvertices = map(roots, rootvertices) do p, ov
-        old2new[offsets[p] + ov - leading_vertex(particles(poly, p))]
+        old2new[offsets[p]+ov-leading_vertex(particles(poly, p))]
     end
     return hm, canonrootvertices
 end
@@ -169,7 +159,7 @@ function BondEnvironment(poly::Polyform, bond::Pair; depth::Integer, bufs=Enviro
     dist = _particledists!(bufs, poly, (p1, p2); maxdepth=depth)
     sitevertex(p, s) = first(bindingsites(particles(poly, p), sys, s).vertices)
     hm, rootvertices = _envgraph(poly, dist, depth, (p1, p2),
-                                 (sitevertex(p1, s1), sitevertex(p2, s2)))
+        (sitevertex(p1, s1), sitevertex(p2, s2)))
     return Environment(hm, rootvertices, Int(depth), sys)
 end
 
@@ -201,11 +191,10 @@ function Base.reverse(env::BondEnvironment)
     end
     old2new = invperm(collect(Int, canonize!(h)))
     return Environment(h, (old2new[env.rootvertices[2]], old2new[env.rootvertices[1]]), env.depth,
-                       env.rules)
+        env.rules)
 end
 
-# ------------------------------------------------------------------------------------------------
-# Enumeration of all particle environments of a rule set, by reverse search over rooted balls.
+### Enumeration of all particle environments of a rule set, by reverse search over rooted balls.
 
 mutable struct EnvironmentState{P<:Polyform,G<:AbstractNautyGraph}
     poly::P               # working polyform; the root is always particle 1
@@ -320,14 +309,14 @@ Enumerate every particle environment of `rules` at radius `depth`, streaming eac
 extensions of an environment, or `BREAK` to stop.
 """
 function particleenvironments(f, rules::BindingRules; depth::Integer, maxsize=Inf, maxstrs=Inf,
-                              kwargs...)
+    kwargs...)
     v₀ = EnvironmentState(rules)
     BS = BindingSite{posetype(rules),numtype(rules)}
     G = typeof(graphrep(v₀.poly))
     aux = EnvironmentEnumAux(Set{G}(), Tuple{BS,BindingSiteLoc}[], EnvironmentBuffers(), Int(depth))
     lsbufs = EnvironmentBuffers()
     rsys = RSSystem((w, v) -> _lsenv!(w, v, lsbufs), _adjenv!, v₀;
-                    compare=(a, b) -> a.key == b.key, aux)
+        compare=(a, b) -> a.key == b.key, aux)
 
     frs = (s, _) -> f(Environment(copy(s.key), (s.rootvertex,), Int(depth), rules), nparticles(s.poly))
     return reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs + 1, kwargs...)
@@ -498,14 +487,14 @@ function crop(env::BondEnvironment, depth::Integer)
     dist = fill(-1, length(compverts))
     queue = zeros(Int, length(compverts))
     bfs!(c -> adj[c], dist, queue,
-         (comp[env.rootvertices[1]], comp[env.rootvertices[2]]); maxdepth=depth)
+        (comp[env.rootvertices[1]], comp[env.rootvertices[2]]); maxdepth=depth)
 
     verts, pos = _keptvertices(compverts, dist, nv(g))
     # both roots keep their marks, so the labels carry over unchanged
     h = g[verts]
     old2new = invperm(collect(Int, canonize!(h)))
     return Environment(h, (old2new[pos[env.rootvertices[1]]], old2new[pos[env.rootvertices[2]]]),
-                       Int(depth), env.rules)
+        Int(depth), env.rules)
 end
 
 """

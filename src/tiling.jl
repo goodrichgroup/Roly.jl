@@ -10,13 +10,11 @@ Enumerate the periodic closures of `poly`: choices of up to `dimension` translat
 under which copies of a cell form valid bonds with each other and never overlap, each vector
 contributing at least one bond.
 
-  - `nreps`: neighbor shells placed and checked per vector; a cutoff, like every witness search
-  - `maxblock`: how many copies of `poly` a cell may contain. With `1` the cell is `poly` itself
-    and only its translations are tried; larger values also try the blocks the assembly machinery
-    can build out of `poly`, which is what admits a cell whose copies are *rotated* relative to
-    each other
+  - `nreps`: neighbor shells placed and checked per vector.
+  - `maxblock`: construct meta-polyforms up to size `maxblock`, which are then checked for translation tilings.
+    `maxblock > 1` makes it possible to find tilings where `poly` appears in rotated configurations.
   - returns a vector of `(; vectors, bondtypes, complete, order)`: the generating vectors, the
-    bond type of every bond one cell contributes — those inside the block included — whether all
+    bond type of every bond one cell contributes (those inside the block included), whether all
     open sites were closed, and how many copies of `poly` the cell holds
 
 A cell's composition is `order` copies of `poly` plus `bondtypes`.
@@ -29,7 +27,7 @@ function tilings(poly::Polyform; nreps::Integer=2, maxblock::Integer=1)
     sys = bindingrules(poly)
     V = fieldtype(posetype(sys), :x)
     T = NamedTuple{(:vectors, :bondtypes, :complete, :order),
-                   Tuple{Vector{V},Vector{Int},Bool,Int}}
+        Tuple{Vector{V},Vector{Int},Bool,Int}}
     out = T[]
     for (parts, opensites, prebonds, order) in _tileblocks(poly, maxblock)
         _addtilings!(out, parts, opensites, prebonds, order, sys, nreps)
@@ -54,20 +52,18 @@ function _addtilings!(out, parts, sites, prebonds, order, sys, nreps)
     siteof = Dict(s.vertices => s for s in sites)
     pretypes = [_bondtype(sys, siteof, c) for c in prebonds]
     state = (consumed=consumed, contacts=NTuple{2,UnitRange{Int}}[],
-             placed=Vector{eltype(parts)}[], chosen=Int[])
+        placed=Vector{eltype(parts)}[], chosen=Int[])
     record!() = push!(out, (vectors=vecs[state.chosen],
-                            bondtypes=vcat(pretypes,
-                                           [_bondtype(sys, siteof, c) for c in state.contacts]),
-                            complete=length(state.consumed) == length(siteof),
-                            order=order))
+        bondtypes=vcat(pretypes,
+            [_bondtype(sys, siteof, c) for c in state.contacts]),
+        complete=length(state.consumed) == length(siteof),
+        order=order))
     _tilings!(record!, state, parts, sys, vecs, siteof, nreps, dimension(sys), 1)
     return out
 end
 
 # The tiles to try: `poly` itself, then every block of up to `maxblock` copies that the assembly
-# machinery can build out of it. Growing blocks through `MetaParticleSpecies` is what lets a cell
-# be a *rotated* pair of copies -- the translation search that follows only ever considers
-# candidates that are already aligned, so a cell needing a turn is invisible to it otherwise.
+# machinery can build out of it.
 function _tileblocks(poly::Polyform, maxblock::Integer)
     sys = bindingrules(poly)
     inner = collect_open_bindingsites(poly)
@@ -151,7 +147,7 @@ first one found, or `nothing`.
 """
 function cantile(rules::BindingRules; maxtilesize, kwargs...)
     hit = Ref{Any}(nothing)
-    f(s, _) = isunitcell(s; kwargs...) ? (hit[] = copy(s); BREAK) : ACCEPT
+    f(s, _) = isunitcell(s; kwargs...) ? (hit[]=copy(s); BREAK) : ACCEPT
     polyenum(f, rules; maxsize=maxtilesize)
     return hit[]
 end
@@ -187,7 +183,7 @@ collides. A screw by `2πp/q` closes into a translation over `q` copies and is f
 See [`isunbounded`](@ref).
 """
 function canchain(rules::BindingRules;
-                  maxlength::Integer=chainstatebound(rules) + 1, kwargs...)
+    maxlength::Integer=chainstatebound(rules) + 1, kwargs...)
     frontier = [Polyform(rules, i) for i in 1:nspecies(rules)]
     seen = Set(hash(graphrep(p)) for p in frontier)
     while !isempty(frontier)
@@ -262,7 +258,7 @@ function _walkchain(poly::Polyform, states, maxlength)
         isinert(sys, color(site)) && continue
         for siteloc in compatible_sitelocs(sys, color(site))
             mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
-            for r in 0:(nphases(site, mate) - 1)
+            for r in 0:(nphases(site, mate)-1)
                 child = copy(poly)
                 ismissing(raise!(child, site, siteloc, r)) && continue
                 # `raise!` forms every geometric contact, so growth may cross-link back onto the
@@ -290,7 +286,7 @@ end
 # is decided by the screw's pitch, and if it can, by finitely many placements.
 function _screwwitness(poly::Polyform, i::Integer, j::Integer)
     sys = bindingrules(poly)
-    cell = poly.particles[i:(j - 1)]
+    cell = poly.particles[i:(j-1)]
     g = poly.particles[j].pose * inv(poly.particles[i].pose)
 
     axis, h = _screwpitch(g)
@@ -300,7 +296,7 @@ function _screwwitness(poly::Polyform, i::Integer, j::Integer)
     rmax = maximum(bounding_radius(species(sys, species_index(p))) for p in cell)
     extent = maximum(us) - minimum(us) + 2 * rmax
     gm = g
-    for _ in 1:ceil(Int, extent / abs(h))
+    for _ in 1:ceil(Int, extent/abs(h))
         for p in cell
             moved = gm * p
             first(_overlap_and_contacts(cell, moved, sys)) === true && return nothing
@@ -376,7 +372,7 @@ function _extendends(poly::Polyform)
             isinert(sys, color(site)) && continue
             for siteloc in compatible_sitelocs(sys, color(site))
                 mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
-                for r in 0:(nphases(site, mate) - 1)
+                for r in 0:(nphases(site, mate)-1)
                     child = copy(poly)
                     ismissing(raise!(child, site, siteloc, r)) && continue
                     _ischain(child) && push!(out, child)
