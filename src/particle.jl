@@ -47,8 +47,7 @@ Return a copy of `p` whose block of graph vertices starts `v` further along.
 Used when removing a particle compacts the original vertex numbering; compare
 [`shift_vertices`](@ref) for binding sites.
 """
-@inline shift_leadingvertex(p::Particle, v::Integer) =
-    typeof(p)(p.pose, p.leading_vertex + v, p.species_index)
+@inline shift_leadingvertex(p::Particle, v::Integer) = typeof(p)(p.pose, p.leading_vertex + v, p.species_index)
 
 """
     species_index(p::Particle)
@@ -88,22 +87,18 @@ end
 Return `true` if the particles could potentially be in contact.
 """
 function could_contact(p1::Particle, p2::Particle, sys::BindingRules)
-    return could_contact(species(sys, p1.species_index) => p1.pose,
-                         species(sys, p2.species_index) => p2.pose)
+    return could_contact(species(sys, p1.species_index) => p1.pose, species(sys, p2.species_index) => p2.pose)
 end
 
 """
     overlap(p1::Particle, p2::Particle, sys::BindingRules)
 
 Return `true` if the particles are overlapping.
-
-When every species of `sys` tiles space and every bond carries a cell onto a cell (see
-[`_tilingcell`](@ref)), the particles of an assembly sit on cells of one tiling and distinct
-cells have disjoint interiors, so overlapping means occupying the same cell. Coincident centers
-answer that, and no geometry runs. Every other system uses the species' own `overlap`.
 """
 function overlap(p1::Particle, p2::Particle, sys::BindingRules)
     spcs1, spcs2 = species(sys, p1.species_index), species(sys, p2.species_index)
+
+    # Binding rules can override the overlap check
     if sys._onlattice
         atol = sqrt(eps(numtype(spcs1))) * (bounding_radius(spcs1) + bounding_radius(spcs2))
         return norm(p1.pose.x - p2.pose.x) < atol

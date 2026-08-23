@@ -36,15 +36,12 @@ function Polyform(sys::BindingRules{D}, i::Integer) where {D}
     part = Particle(sys, i; leading_vertex=1)
     perm = first(nauty(g; canonize=true))
     cvs = convert(Vector{Int}, perm)
-    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(
-        g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys
-    )
+    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys)
 end
 
 function Base.copy(p::Polyform)
     return typeof(p)(
-        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon),
-        copy(p.particles), p.bindingrules
+        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon), copy(p.particles), p.bindingrules
     )
 end
 function Base.copy!(dst::Polyform, src::Polyform)
@@ -125,7 +122,7 @@ function _apply_perm!(poly::Polyform, perm)
     @inbounds for i in eachindex(poly.canon2orig)
         poly.orig2canon[poly.canon2orig[i]] = i
     end
-    return
+    return nothing
 end
 
 @inline is_leadingvertex(p::Polyform, v::Integer) = any(pt -> pt.leading_vertex == v, p.particles)
@@ -178,9 +175,6 @@ end
 
 Return `true` if the original graph vertex `v` of particle `part` is bonded to another
 particle, i.e. if it has a neighbor outside `part`'s own block of vertices.
-
-Internal: `part` has to be passed in because the caller already has it, and looking it up
-again from `v` would be the expensive half of the check.
 """
 function _isbound_vertex(p::Polyform, part::Particle, v::Integer)
     own = graphvertices(part, bindingrules(p))
@@ -330,8 +324,7 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::I
         add_edge!(graphrep(poly), src + leading_vertex - 1, dst + leading_vertex - 1)
     end
 
-    # Every contact is paired in the phase it was *found* in, not the one this call
-    # placed the particle in: a ring closure brings sites together that raise! never chose.
+    # Every contact is paired in the phase it was found in, not the one this call
     for (vs1, vs2, reg, L) in contacting_vertices
         for (v1, v2) in contact_pairing(vs1, vs2, reg, L)
             add_edge!(graphrep(poly), tocanon(poly, v1), v2)
@@ -343,7 +336,6 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::I
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
-
     return poly
 end
 
@@ -372,8 +364,8 @@ function lower!(poly::Polyform)
     visited = zeros(Bool, nv_g)
     queue = zeros(Cint, nv_g)
 
-    # A particle owns one vertex per site, so the scan revisits it. The list stays short: the
-    # scan stops at the first removable particle.
+    # A particle owns >=1 vertex per site, so the scan will revisit vertices many times.
+    # -> store for performance.
     tested = Int[]
     part = nothing
     for v in Iterators.reverse(poly.canon2orig)
@@ -495,21 +487,22 @@ particle cannot disconnect what removing a different one leaves behind.
 
 The runner-up lets a host exclude itself in O(1); see [`collect_compatible_pairs!`](@ref).
 """
-function _deletable_species(poly::Polyform, target, visited, queue)
+function _deletable_species(poly::Polyform; target, visited, queue)
     sys = bindingrules(poly)
     n = nparticles(poly)
-    best, second, bestleading = 0, 0, 0
+    best, second, best_lv = 0, 0, 0
     for part in poly.particles
-        n > 1 && is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]);
-                           target, visited, queue) && continue
+        n > 1 &&
+            is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) &&
+            continue
         s = species_index(part)
         if s > best
-            best, second, bestleading = s, best, leading_vertex(part)
+            best, second, best_lv = s, best, leading_vertex(part)
         elseif s > second
             second = s
         end
     end
-    return best, second, bestleading
+    return best, second, best_lv
 end
 
 function collect_compatible_pairs!(pairs, poly::Polyform)
@@ -518,18 +511,17 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
     nv_g = nv(graphrep(poly))
     target, visited, queue = zeros(Bool, nv_g), zeros(Bool, nv_g), zeros(Cint, nv_g)
 
-    best, second, bestleading = _deletable_species(poly, target, visited, queue)
+    best, second, best_lv = _deletable_species(poly; target, visited, queue)
     for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
 
         # The host is excluded, so it takes the runner-up when it is itself the top scorer.
-        deletable = leading_vertex(part) == bestleading ? second : best
+        deletable = leading_vertex(part) == best_lv ? second : best
         for k in 1:nsites(part, sys)
             site = bindingsites(part, sys, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(sys, color(site)) && continue
-
 
             # only keep one partner site per orbit
             for siteloc in attachment_reps(sys, color(site))

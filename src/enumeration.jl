@@ -10,8 +10,6 @@ function ls!(k::Polyform, s::Polyform)
 end
 
 function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
-    ### TODO: exploit that canonical labels are in order of color (Nauty User Guide p.4)
-    ### to filter possible offspring by the color of the particle that would be removed
     if nparticles(v) == 0
         j > nspecies(bindingrules(v)) && return nothing
         return copy!(u, Polyform(bindingrules(v), j))
@@ -58,7 +56,7 @@ the underlying reverse search: `Finished` if the enumeration ran to completion, 
 """
 function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
     v₀ = Polyform(rules)
-    BS = BindingSite{posetype(rules), numtype(rules)}
+    BS = BindingSite{posetype(rules),numtype(rules)}
     aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,BindingSiteLoc,Int}[])
     rsys = RSSystem(ls!, adj!, v₀; aux)
 
@@ -104,8 +102,9 @@ struct PolyformCount
     trials::Vector{Float64}
 end
 
-PolyformCount(n::Integer, largest_size, size_truncated) =
+function PolyformCount(n::Integer, largest_size, size_truncated)
     PolyformCount(Float64(n), true, 0.0, largest_size, size_truncated, Float64[])
+end
 
 function PolyformCount(trials::AbstractVector{<:Real}, largest_size, size_truncated)
     uncertainty = length(trials) > 1 ? std(trials) / sqrt(length(trials)) : NaN
@@ -123,7 +122,7 @@ function Base.show(io::Core.IO, c::PolyformCount)
     return print(io, "PolyformCount[n≈$n ± $err, $bound$trunc]")
 end
 
-# Enumerate exactly at sizes 1, 2, 3, … until number of polyforms reaches `budget`.
+# Enumerate exactly at sizes 1, 2, 3, ... until number of polyforms reaches `budget`.
 # Report the cumulative number of structures at each size, the largest structure seen, and why the enumeration stopped.
 function _count_upto_budget(sys::BindingRules; maxsize, budget)
     counts = Int[]
@@ -161,8 +160,7 @@ end
 # A subsampled search that dies out before reaching `maxsize` misses the deepest structures entirely,
 # and one that explodes is unaffordable. Optimize `pkeep` on throwaway pilot runs so the estimate more likely
 # reaches the bottom of the search tree, without oversampling.
-function _calibrate_pkeep(sys::BindingRules; pkeep, depth, n0, maxsize, maxsamples, rng, npilots=4,
-                          pmax=0.95)
+function _calibrate_pkeep(sys::BindingRules; pkeep, depth, n0, maxsize, maxsamples, rng, npilots=4, pmax=0.95)
     pkeep = clamp(pkeep, eps(float(pkeep)), pmax)
     for _ in 1:npilots
         pkeep >= pmax && return pmax
@@ -205,9 +203,16 @@ References:
 
 See also [`polyenum`](@ref), [`polygen`](@ref).
 """
-function countpolyforms(sys::BindingRules; maxsize=Inf, exact_budget=5_000, ntrials=5, eta=1.2,
-                        pkeep=nothing, maxsamples=10^6, rng=Random.default_rng())
-
+function countpolyforms(
+    sys::BindingRules;
+    maxsize=Inf,
+    exact_budget=5_000,
+    ntrials=5,
+    eta=1.2,
+    pkeep=nothing,
+    maxsamples=10^6,
+    rng=Random.default_rng(),
+)
     budget = max(exact_budget, nspecies(sys) + nbonds(sys) + 1) # ensure we visit at least all monomers and dimers
     counts, largest, status = _count_upto_budget(sys; maxsize, budget)
 
@@ -216,15 +221,19 @@ function countpolyforms(sys::BindingRules; maxsize=Inf, exact_budget=5_000, ntri
     end
 
     if isinf(maxsize)
-        throw(ArgumentError("`sys` allows structures of unbounded size, of which there are " *
-                            "infinitely many. Pass an explicit `maxsize` to count the structures " *
-                            "up to a given number of particles."))
+        throw(
+            ArgumentError(
+                "`sys` allows structures of unbounded size, of which there are " *
+                "infinitely many. Pass an explicit `maxsize` to count the structures " *
+                "up to a given number of particles.",
+            ),
+        )
     end
 
     depth, n0 = length(counts), counts[end]
     if isnothing(pkeep)
         counts_per_size = diff([0; counts])
-        branching = counts_per_size[end] / counts_per_size[end-1]
+        branching = counts_per_size[end] / counts_per_size[end - 1]
         pkeep = _calibrate_pkeep(sys; pkeep=max(eta, 1)/branching, depth, n0, maxsize, maxsamples, rng)
     elseif !(0 < pkeep <= 1)
         throw(ArgumentError("pkeep=$pkeep must be between 0 and 1."))
@@ -235,8 +244,11 @@ function countpolyforms(sys::BindingRules; maxsize=Inf, exact_budget=5_000, ntri
     samples = [t.estimate for t in trials if t.status != MaxVerticesReached] # dont count trials that ran out of nodes
 
     if isempty(samples)
-        throw(ErrorException("all $ntrials trials exceeded maxsamples=$maxsamples; raise " *
-                             "`maxsamples` or lower `maxsize`"))
+        throw(
+            ErrorException(
+                "all $ntrials trials exceeded maxsamples=$maxsamples; raise " * "`maxsamples` or lower `maxsize`"
+            ),
+        )
     end
 
     return PolyformCount(samples, largest, true)

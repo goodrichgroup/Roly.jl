@@ -22,7 +22,7 @@ function PatchyParticleSpecies(
     r::Real,
     patch_positions,
     patch_twists=zeros(float(typeof(r)), length(patch_positions));
-    colors=1:length(patch_positions)
+    colors=1:length(patch_positions),
 )
     D = length(first(patch_positions))
     F = float(eltype(first(patch_positions)))
@@ -47,10 +47,6 @@ end
 
 A 2D disk of radius `r` with one binding site placed at each angle in `angles` (radians,
 measured counterclockwise from the +x axis).
-
-`colors` assigns interaction colors to the patches, and the symmetry follows from it: two
-patches are interchangeable exactly when a rotation carries one onto the other and they are the
-same color (see [`siteorbits`](@ref)).
 """
 function PatchyDisk(angles, r=1; colors=1:length(angles))
     F = float(eltype(angles))
@@ -78,8 +74,9 @@ polyhedron's rotation group.
 
 See [`PolyhedronParticleSpecies`](@ref) for documentation of the keyword arguments.
 """
-PatchySphere(p::Polyhedron, r::Real=1; colors=1:nfaces(p), locking=true, twists=0) =
+function PatchySphere(p::Polyhedron, r::Real=1; colors=1:nfaces(p), locking=true, twists=0)
     _patchysphere(p, r, colors, locking, twists, nothing)
+end
 
 """
     _reseat_radially(pose, r)
@@ -98,15 +95,22 @@ end
 
 function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists, usecycle::Union{Nothing,Bool}) where {F}
     n = nfaces(p)
-    length(colors) == n ||
-        throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
+    length(colors) == n || throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
 
     r = F(r)
     tol = sqrt(eps(F)) * r
     patchposes(fs) = [_reseat_radially(q, r) for q in _faceposes(p, fs)]
 
-    g, sites = _facesites(p, patchposes, colors, _perface(locking, n, "locking flags"),
-                          _perface(twists, n, "twists"), usecycle, tol, tol / r)
+    g, sites = _facesites(
+        p,
+        patchposes,
+        colors,
+        _perface(locking, n, "locking flags"),
+        _perface(twists, n, "twists"),
+        usecycle,
+        tol,
+        tol / r,
+    )
     return check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
 end
 
@@ -114,24 +118,18 @@ function Base.show(io::Core.IO, ps::PatchyParticleSpecies{D}) where {D}
     return print(io, "$(D)d PatchyParticleSpecies with $(nsites(ps)) sites")
 end
 
-Base.copy(ps::PatchyParticleSpecies) =
-    typeof(ps)(copy(ps.g), copy(ps.sites), ps.r, ps.skin)
-
+Base.copy(ps::PatchyParticleSpecies) = typeof(ps)(copy(ps.g), copy(ps.sites), ps.r, ps.skin)
 
 graphrep(ps::PatchyParticleSpecies) = ps.g
 nsites(ps::PatchyParticleSpecies) = length(ps.sites)
 bindingsites(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
 isconvex(::PatchyParticleSpecies) = true
 
-function could_contact(
-    ::SpeciesAndPose{<:PatchyParticleSpecies}, ::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...
-)
+function could_contact(::SpeciesAndPose{<:PatchyParticleSpecies}, ::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...)
     return true # this check would be identical with overlap, so no need to do it twice
 end
 
-function overlap(
-    p1::SpeciesAndPose{<:PatchyParticleSpecies}, p2::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...
-)
+function overlap(p1::SpeciesAndPose{<:PatchyParticleSpecies}, p2::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...)
     spcs1, pose1 = p1
     spcs2, pose2 = p2
     return norm(pose1.x - pose2.x) < (spcs1.r + spcs2.r) - (spcs1.skin + spcs2.skin)

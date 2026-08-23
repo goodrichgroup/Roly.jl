@@ -18,12 +18,8 @@ Create a pose from a position vector `x` and orientation `psi`.
 Pose(x::AbstractVector, psi::R) where {R<:Rotation} = Pose{length(x),eltype(x),R}(SVector{length(x),eltype(x)}(x), psi)
 Pose{D,F}(x::AbstractVector, psi::R) where {D,F,R<:Rotation{D,F}} = Pose{D,F,R}(SVector{D,F}(x), psi)
 
-# Rotation types are not closed under multiplication -- `RotXYZ * RotXYZ` is a `RotMatrix3` --
-# so a pose can easily arrive in a different parameterisation than the one a field is declared
-# with. Rotations.jl converts between them; `Pose` just needs to pass the request along, which
-# is what lets a `BindingSite` pinned to one type be transformed by a pose of another.
-Base.convert(::Type{Pose{D,F,R}}, p::Pose{D,F}) where {D,F,R<:Rotation{D,F}} =
-    Pose{D,F,R}(p.x, convert(R, p.psi))
+# Rotation types are not closed under multiplication ()`RotXYZ * RotXYZ` is a `RotMatrix3`)
+Base.convert(::Type{Pose{D,F,R}}, p::Pose{D,F}) where {D,F,R<:Rotation{D,F}} = Pose{D,F,R}(p.x, convert(R, p.psi))
 
 """
     one(::Type{Pose{D,F,R}})

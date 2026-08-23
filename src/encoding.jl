@@ -53,7 +53,7 @@ Base.show(io::Core.IO, ::Dihedral{N}) where {N} = print(io, "Dihedral($N)")
 """
     grouporder(group::RotationGroup)
 
-Return the number of rotations in `group`.
+Return the number of elements in `group`.
 """
 grouporder(::Cyclic{N}) where {N} = N
 grouporder(::Dihedral{N}) where {N} = 2N
@@ -88,7 +88,7 @@ Base.copy(p::Polyhedron) = Polyhedron(copy(p.corners), [copy(f) for f in p.faces
     Polyhedron(corners, faces)
     Polyhedron(corners)
 
-Construct a polyhedron from its `corners` and `faces`. 
+Construct a convex polyhedron from its `corners` and `faces`. 
 
 Faces must be wound counter-clockwise as seen from outside the body.
 If `faces` is omitted, they are derived from the corners by finding all supporting planes of
@@ -96,13 +96,10 @@ the convex hull.
 """
 function Polyhedron(corners::AbstractVector{<:AbstractVector}, faces)
     F = float(eltype(first(corners)))
-    return Polyhedron(
-        SVector{3,F}[SVector{3,F}(c) for c in corners], Vector{Int}[collect(Int, f) for f in faces]
-    )
+    return Polyhedron(SVector{3,F}[SVector{3,F}(c) for c in corners], Vector{Int}[collect(Int, f) for f in faces])
 end
 function Polyhedron(corners::AbstractVector{<:AbstractVector})
     F = float(eltype(first(corners)))
-    # `_derive_faces` needs corners measured from the centroid to orient its normals.
     cs = _recenter(SVector{3,F}[SVector{3,F}(c) for c in corners])
     return Polyhedron(cs, _derive_faces(cs))
 end
@@ -120,10 +117,12 @@ function _check_winding(ncorners::Integer, faces::AbstractVector{<:AbstractVecto
     for f in faces, v in f
         checkindex(Bool, eachindex(used), v) && (used[v] = true)
     end
-    all(used) || throw(ArgumentError(
-        "corner$(count(!, used) > 1 ? "s" : "") $(join(findall(!, used), ", ")) " *
-        "$(count(!, used) > 1 ? "are" : "is") used by no face"
-    ))
+    all(used) || throw(
+        ArgumentError(
+            "corner$(count(!, used) > 1 ? "s" : "") $(join(findall(!, used), ", ")) " *
+            "$(count(!, used) > 1 ? "are" : "is") used by no face",
+        ),
+    )
 
     seen = Dict{Tuple{Int,Int},Int}()
     for (i, f) in enumerate(faces)
@@ -132,16 +131,17 @@ function _check_winding(ncorners::Integer, faces::AbstractVector{<:AbstractVecto
         all(in(1:ncorners), f) || throw(ArgumentError("face $i indexes a nonexistent corner"))
         for k in eachindex(f)
             e = (f[k], f[mod1(k + 1, length(f))]) # edge
-            haskey(seen, e) && throw(ArgumentError(
-                "directed edge $e occurs in faces $(seen[e]) and $i; faces must all be wound counter-clockwise seen from outside"
-            ))
+            haskey(seen, e) && throw(
+                ArgumentError(
+                    "directed edge $e occurs in faces $(seen[e]) and $i; faces must all be wound counter-clockwise seen from outside",
+                ),
+            )
             seen[e] = i
         end
     end
     for (e, i) in seen
-        haskey(seen, reverse(e)) || throw(ArgumentError(
-            "edge $e of face $i is not shared with a second face; the surface is not closed"
-        ))
+        haskey(seen, reverse(e)) ||
+            throw(ArgumentError("edge $e of face $i is not shared with a second face; the surface is not closed"))
     end
     return nothing
 end
@@ -163,9 +163,8 @@ function _check_convex(corners::Vector{SVector{3,F}}, faces::AbstractVector{<:Ab
         nrm = normalize(nrm)
         d = dot(nrm, centroid)
         for (j, x) in enumerate(corners)
-            dot(nrm, x) <= d + atol || throw(ArgumentError(
-                "corner $j lies outside the plane of face $i, so the body is not convex."
-            ))
+            dot(nrm, x) <= d + atol ||
+                throw(ArgumentError("corner $j lies outside the plane of face $i, so the body is not convex."))
         end
     end
     return nothing
@@ -177,16 +176,13 @@ end
 Return `faces` with each corner list cyclically permuted so that the face begins at an
 intrinsically chosen corner, fixing the twist reference of that face's binding site.
 
-A site's local z points at the midpoint of its face's *first* edge, so the first corner
-determines the site's twist reference. Faces that are related by a rotation of the body
-must pick corresponding twist reference. For example, a rectangle has gauge 2 and degree 4, 
-its corners falling into two classes a 90deg turn apart. Picking a long edge on one face 
-and a short edge on another hides the symmetry that relates them.
+Convention: a site's local z axis points to the midpoint of its face's first edge.
+Faces that are related by a rotation of the body must pick compatible orderings.
+For example, a rectangle has gauge 2 and degree 4, so corners fall into two classes a 90deg turn apart.
+Picking as a reference edge both long edges on some faces and a short edges on others hides the symmetry that relates them.
 
 The choice of twist reference is made from the geometry of the face: rotate to the lexicographically
-least cyclic word of `(edge length, interior angle)`. That word determines a planar polygon
-and its cyclic symmetries are exactly the face's own rotations, so the minimizing positions are all within one gauge 
-orbit. Congruent faces have identical words, so their minimizing positions correspond up to a gauge turn.
+least cyclic word of `(edge length, interior angle)`, which ensures compatible references throughout.
 """
 function _canonical_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     atol = sqrt(eps(F)) * maximum(norm, corners)
@@ -222,11 +218,10 @@ label-preserving rotation of the body have the compatible ordering of corners.
 For example, consider a triangular prism with square sides. All square sides need to be
 oriented in such a way that rotations around the major axis map them to each other.
 Otherwise, spurrous 90deg rotations might appear. The issue comes from a mismatch of the
-faces' `gauge (== 4)` and `stab (== 2)`. `_propagate_faces` fixes this by propagating the
+faces' gauge (== 4) and stabilizer (== 2). `_propagate_faces` fixes this by propagating the
 orientation of a reference face across its symmetry orbit.
 """
-function _propagate_faces(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}},
-                          labels) where {F}
+function _propagate_faces(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}, labels) where {F}
     atol = sqrt(eps(F)) * maximum(norm, cs)
     centroid(f) = sum(cs[v] for v in f) / length(f)
     midpoint(f, k) = (cs[f[k]] + cs[f[mod1(k + 1, length(f))]]) / 2
@@ -251,7 +246,7 @@ function _propagate_faces(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}},
             labels[i] == labels[j] || continue
             # A symmetry carrying face i's centroid onto face j's carries the face itself, and
             # so carries its first edge midpoint onto one of face j's.
-            
+
             # find a group element that maps face face i's midpoint to face j
             k = findfirst(Q -> isapprox(Q * centroid(faces[i]), cj; atol), group)
             isnothing(k) && continue
@@ -276,7 +271,7 @@ end
 Find the faces of the convex hull of `corners` by testing every corner triple for a
 supporting plane, then winding each face counter-clockwise about its outward normal.
 
-`corners` must be centered on the centroid, so that the sign of a plane's offset orients its
+`corners` must be centered around the origin, so that the sign of a plane's offset orients its
 normal outward.
 
 Every corner on a face's plane joins that face, including one sitting mid-edge, which allows a
@@ -302,9 +297,7 @@ function _derive_faces(corners::Vector{SVector{3,F}}) where {F}
         any(pl -> isapprox(pl[1], nrm; atol) && isapprox(pl[2], d; atol), planes) && continue
 
         push!(planes, (nrm, d))
-        push!(faces, _wind_counterclockwise!(
-            corners, findall(c -> abs(dot(nrm, c) - d) <= atol, corners), nrm
-        ))
+        push!(faces, _wind_counterclockwise!(corners, findall(c -> abs(dot(nrm, c) - d) <= atol, corners), nrm))
     end
     return faces
 end
@@ -431,9 +424,7 @@ inradius(p::Polyhedron) = minimum(norm(facecentroid(p, i)) for i in 1:nfaces(p))
 Return the length of the shortest edge of `p`.
 """
 function minedgelength(p::Polyhedron)
-    return minimum(
-        norm(p.corners[f[k]] - p.corners[f[mod1(k + 1, length(f))]]) for f in p.faces for k in eachindex(f)
-    )
+    return minimum(norm(p.corners[f[k]] - p.corners[f[mod1(k + 1, length(f))]]) for f in p.faces for k in eachindex(f))
 end
 
 """
@@ -530,8 +521,8 @@ function facegauge(p::Polyhedron{F}, i::Integer) where {F}
     nrm = facenormal(p, i)
     rel = [corners(p)[v] - c for v in f]
     atol = sqrt(eps(F)) * maximum(norm, rel)
-    # A rotational symmetry of a k-gon shifts its corner ring cyclically, and the shift by s is
-    # realized by the turn 2πs/k about the normal.
+    # A rotational symmetry of a k-gon shifts its corner ring cyclically, and a shift by s is
+    # realized by the turn 2π/k * s about the normal
     return count(0:(k - 1)) do s
         R = AngleAxis(2F(π) * s / k, nrm[1], nrm[2], nrm[3])
         all(j -> isapprox(R * rel[j], rel[mod1(j + s, k)]; atol), 1:k)
@@ -623,8 +614,7 @@ This is the 2D polygon encoding. It is also valid in 3D when every site's twist 
 and all labels are distinct, and not otherwise.
 """
 function cycleencoding(nsites::Integer; labels=1:nsites)
-    length(labels) == nsites ||
-        throw(ArgumentError("expected $nsites labels, one per site, got $(length(labels))"))
+    length(labels) == nsites || throw(ArgumentError("expected $nsites labels, one per site, got $(length(labels))"))
     nsites < 1 && throw(ArgumentError("a particle needs at least one binding site"))
 
     g = NautyDiGraph(cycle_digraph(nsites); vertex_labels=collect(Cint, labels))
@@ -646,8 +636,7 @@ Expand a per-face keyword to a length-`n` vector, a scalar meaning the same for 
 """
 function _perface(x, n::Integer, what::AbstractString)
     x isa Union{Bool,Real} && return fill(x, n)
-    length(x) == n ||
-        throw(ArgumentError("expected $n $what, one per face, got $(length(x))"))
+    length(x) == n || throw(ArgumentError("expected $n $what, one per face, got $(length(x))"))
     return collect(x)
 end
 
@@ -674,9 +663,16 @@ three steps:
 the key `siteorbits` groups by, alongside the color, so that twisting one face of an orbit
 differently from its fellows splits that orbit.
 """
-function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists,
-                    usecycle::Union{Nothing,Bool}, touching_tol::Real,
-                    alignment_tol::Real) where {F}
+function _facesites(
+    p::Polyhedron{F},
+    poseof,
+    colors,
+    locking,
+    twists,
+    usecycle::Union{Nothing,Bool},
+    touching_tol::Real,
+    alignment_tol::Real,
+) where {F}
     n = nfaces(p)
     gauges = facegauge(p)
     labels = siteorbits(poseof(faces(p)), gauges, collect(zip(colors, twists)))
@@ -689,15 +685,16 @@ function _facesites(p::Polyhedron{F}, poseof, colors, locking, twists,
     # phases apart, not to mark a physical coincidence, and both survive.
     steps = [round(Int, t * length(f) / (2F(π))) for (f, t) in zip(fs, twists)]
     fs = [circshift(f, -mod(m, length(f))) for (f, m) in zip(fs, steps)]
-    poses = [pose * RotX(F(t) - 2F(π) * m / length(f))
-             for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
+    poses = [pose * RotX(F(t) - 2F(π) * m / length(f)) for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
     stabs = sitestabilizers(poses, gauges, labels)
 
     cyclic = something(usecycle, _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
     g, ranges = cyclic ? cycleencoding(n; labels) : dartencoding(fs; labels)
 
-    sites = [BindingSite(poses[i], colors[i], ranges[i], touching_tol, alignment_tol,
-                         gauges[i], stabs[i], locking[i]) for i in 1:n]
+    sites = [
+        BindingSite(poses[i], colors[i], ranges[i], touching_tol, alignment_tol, gauges[i], stabs[i], locking[i]) for
+        i in 1:n
+    ]
     return g, sites
 end
 
@@ -714,9 +711,8 @@ freedom must be 1.
 """
 _cycle_suffices(twistfreedoms, labels) = allunique(labels) && all(isone, twistfreedoms)
 
-
-############### Polyhedra library
-_recenter(cs) = (c0 = sum(cs) / length(cs); [c - c0 for c in cs])
+############### Polyhedra
+_recenter(cs) = (c0=sum(cs) / length(cs); [c - c0 for c in cs])
 
 # Scale a solid to edge length `a`, after construction so that the faces exist and the divisor
 # is the true minimum edge length.
@@ -780,12 +776,7 @@ function Dodecahedron(a::Real=1.0)
     φ = (1 + sqrt(F(5))) / 2
     cs = SVector{3,F}[SVector{3,F}(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
     for s1 in (-1, 1), s2 in (-1, 1)
-        push!(
-            cs,
-            SVector{3,F}(0, s1 / φ, s2 * φ),
-            SVector{3,F}(s1 / φ, s2 * φ, 0),
-            SVector{3,F}(s2 * φ, 0, s1 / φ),
-        )
+        push!(cs, SVector{3,F}(0, s1 / φ, s2 * φ), SVector{3,F}(s1 / φ, s2 * φ, 0), SVector{3,F}(s2 * φ, 0, s1 / φ))
     end
     return _scaleto(Polyhedron(cs), a)
 end
@@ -849,9 +840,6 @@ end
 
 The orientations of a site that are equivalent by symmetry of the face: turns by `2π/gauge` 
 about the sites own outward normal, which `normal_pose` puts on the site's local x axis.
-
-In 2D there is no rotation about an in-plane axis, so a site has exactly one orientation and
-this is a singleton by construction rather than by arithmetic.
 """
 _siteturns(psi::Rotation{3,F}, gauge::Integer) where {F} = (psi * RotX(F(2π) * m / gauge) for m in 0:(gauge - 1))
 _siteturns(psi::Rotation{2}, ::Integer) = (psi,)
@@ -879,8 +867,7 @@ function _sitedata(ps::ParticleSpecies)
     n = nsites(ps)
     sites = [bindingsites(ps, i) for i in 1:n]
     labs = labels(graphrep(ps))
-    return ([s.pose for s in sites], [s.gauge for s in sites],
-            [labs[first(s.vertices)] for s in sites])
+    return ([s.pose for s in sites], [s.gauge for s in sites], [labs[first(s.vertices)] for s in sites])
 end
 
 """
@@ -905,8 +892,7 @@ function _site_symmetries(poses, gauges, keys)
             j = findfirst(1:n) do j
                 keys[j] == keys[i] &&
                     isapprox(Q * poses[i].x, poses[j].x; atol) &&
-                    any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol),
-                        _siteturns(poses[j].psi, gauges[j]))
+                    any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _siteturns(poses[j].psi, gauges[j]))
             end
             isnothing(j) && return nothing
             perm[i] = j
@@ -934,10 +920,12 @@ return one orbit index per site.
 function siteorbits(poses, gauges, colors)
     n = length(poses)
     orbit = collect(1:n)
-    for perm in _site_symmetries(poses, gauges, colors), i in 1:n
-        lo, hi = minmax(orbit[i], orbit[perm[i]])
-        hi == lo && continue
-        replace!(orbit, hi => lo)
+    for perm in _site_symmetries(poses, gauges, colors)
+        for i in 1:n
+            lo, hi = minmax(orbit[i], orbit[perm[i]])
+            hi == lo && continue
+            replace!(orbit, hi => lo)
+        end
     end
     # compact to 1:k so the result can be used as graph labels directly.
     ids = sort!(unique(orbit))
@@ -949,13 +937,6 @@ end
     sitestabilizers(poses, gauges, keys)
 
 Return, per site, how many of the particle's own symmetries leave that site where it is.
-
-Where [`site_symmetry`](@ref) counts all of them, this counts the ones fixing each site: the
-turns about that site's normal that carry the whole particle onto itself. It is at most the
-site's `gauge`, and usually less: a triangular prism is 2-fold about a square side face, so
-that face has gauge 4 but a stabilizer of 2, while a cube's face has both equal to 4.
-The difference is what decides how many *distinct* ways a partner can attach there, see
-[`nphases`](@ref).
 """
 sitestabilizers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
 
@@ -979,12 +960,14 @@ function _recolor!(ps::ParticleSpecies, sites::AbstractVector{<:BindingSite}, co
         err isa ArgumentError || rethrow()
         copy!(sites, oldsites)
         setlabels!(graphrep(ps), oldlabels)
-        throw(ArgumentError(
-            "this recoloring changes the particle's symmetry by more than its graph encoding " *
-            "can express, so it cannot be applied. Build the species with its dartencoding instead ($(err.msg))"
-        ))
+        throw(
+            ArgumentError(
+                "this recoloring changes the particle's symmetry by more than its graph encoding " *
+                "can express, so it cannot be applied. Build the species with its dartencoding instead ($(err.msg))",
+            ),
+        )
     end
-    return
+    return nothing
 end
 
 function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors)
@@ -1018,10 +1001,12 @@ function _check_labeling(ps::ParticleSpecies)
         b = bindingsites(ps, i)
         l = labs[first(b.vertices)]
         c = get!(seen, l, color(b))
-        c == color(b) || throw(ArgumentError(
-            "Sites sharing symmetry label $l have colors $c and $(color(b)). A labeling must " *
-            "be at least as fine as the coloring."
-        ))
+        c == color(b) || throw(
+            ArgumentError(
+                "Sites sharing symmetry label $l have colors $c and $(color(b)). A labeling must " *
+                "be at least as fine as the coloring.",
+            ),
+        )
     end
     return ps
 end
@@ -1039,13 +1024,19 @@ function check_encoding(ps::ParticleSpecies)
     _check_labeling(ps)
     geometric = site_symmetry(ps)
     graph = symmetrynumber(ps)
-    graph == geometric || throw(ArgumentError(
-        "Graph encoding claims a symmetry number of $graph, but the geometry of this " *
-        "$(dimension(ps))d species have a rotational symmetry of $geometric. " *
-        (graph > geometric ?
-         "The labels declare sites equivalent that no rotation maps onto each other." :
-         "The graph distinguishes sites that a rotation does map onto each other; the " *
-         "encoding does not describe this site arrangement.")
-    ))
+    graph == geometric || throw(
+        ArgumentError(
+            "Graph encoding claims a symmetry number of $graph, but the geometry of this " *
+            "$(dimension(ps))d species have a rotational symmetry of $geometric. " *
+            (
+                if graph > geometric
+                    "The labels declare sites equivalent that no rotation maps onto each other."
+                else
+                    "The graph distinguishes sites that a rotation does map onto each other; the " *
+                    "encoding does not describe this site arrangement."
+                end
+            ),
+        ),
+    )
     return ps
 end
