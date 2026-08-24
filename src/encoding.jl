@@ -183,6 +183,10 @@ Picking as a reference edge both long edges on some faces and a short edges on o
 
 The choice of twist reference is made from the geometry of the face: rotate to the lexicographically
 least cyclic word of `(edge length, interior angle)`, which ensures compatible references throughout.
+
+This is the half of the job that can be done face by face, before any labeling exists, and it is
+what makes the encoding independent of the order the caller happened to list a face's corners in.
+[`_propagate_faces`](@ref) does the other half, which needs the symmetry group.
 """
 function _canonical_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     atol = sqrt(eps(F)) * maximum(norm, corners)
@@ -220,6 +224,10 @@ oriented in such a way that rotations around the major axis map them to each oth
 Otherwise, spurrous 90deg rotations might appear. The issue comes from a mismatch of the
 faces' sitesym (== 4) and stabilizer (== 2). `_propagate_faces` fixes this by propagating the
 orientation of a reference face across its symmetry orbit.
+
+It only makes an orbit internally consistent; which corner the orbit's own reference face starts
+at is left as it arrived, from [`_canonical_faces`](@ref). Both passes are needed, and in that
+order: the intrinsic one has no group to consult, and this one has no way to pick a reference.
 """
 function _propagate_faces(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}, labels) where {F}
     atol = sqrt(eps(F)) * maximum(norm, cs)
@@ -378,6 +386,9 @@ facecentroids(p::Polyhedron) = [facecentroid(p, i) for i in 1:nfaces(p)]
 Return the outward unit normal of the `i`th face of `p`.
 """
 function facenormal(p::Polyhedron{F}, i::Integer) where {F}
+    # Summed over the whole face, not taken from the first two edges: `_derive_faces` admits a
+    # corner sitting mid-edge, so the first two edges can be collinear and their cross product
+    # zero. Summing is also steadier on a face whose corners are nearly collinear.
     f = p.faces[i]
     c = facecentroid(p, i)
     nrm = zero(SVector{3,F})
@@ -463,6 +474,7 @@ function _rotationgroup(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) wh
     return group
 end
 
+# See `facenormal` for why this sums over the whole face rather than taking one cross product.
 function _facenormal(cs::Vector{SVector{3,F}}, f::Vector{Int}) where {F}
     c = sum(cs[v] for v in f) / length(f)
     nrm = zero(SVector{3,F})
