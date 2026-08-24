@@ -11,11 +11,27 @@ struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,B}
 end
 
 """
-    PatchyParticleSpecies(g::NautyDiGraph, r, poses; colors=eachindex(poses))
+    PatchyParticleSpecies(g::NautyDiGraph, r, patch_positions, patch_twists=zeros(...);
+                          colors, vertices, sitesyms, locking, labels)
 
 Construct a `D`-dimensional sphere of radius `r` with binding sites on its surface.
 
-General constructor, requiring manual encoding of the particle's symmetry into a `NautyDiGraph`.
+General constructor, taking the particle's symmetry as the graph encoding `g`.
+
+  - `patch_positions`, `patch_twists`: where each patch sits and how its frame is turned about
+    its own normal, see [`normal_pose`](@ref).
+  - `colors=1:npatches`: the interaction color of each patch.
+  - `vertices=[i:i for i in 1:npatches]`: which vertices of `g` each patch owns. The ranges must
+    be disjoint and cover `g`. The default gives each patch one vertex, the layout
+    [`cycleencoding`](@ref) produces.
+  - `sitesyms=1`: each patch's own rotational symmetry about its normal, a scalar or one entry
+    per patch. A patch owning a single vertex leaves no room for a turn about its normal, so its
+    symmetry is 1 whatever the arrangement; a patch that needs its own symmetry needs the
+    several vertices [`dartencoding`](@ref) gives it.
+  - `locking=true`: whether a patch pins its partner's twist, a scalar or one entry per patch.
+  - `labels=nothing`: the symmetry label of each patch. `nothing` derives them from the patch
+    geometry and colors with [`siteorbits`](@ref); pass one label per patch to impose a labeling
+    of your own, which [`check_encoding`](@ref) then has to agree with.
 """
 function PatchyParticleSpecies(
     g::NautyDiGraph,
@@ -23,22 +39,41 @@ function PatchyParticleSpecies(
     patch_positions,
     patch_twists=zeros(float(typeof(r)), length(patch_positions));
     colors=1:length(patch_positions),
+    vertices=[i:i for i in eachindex(patch_positions)],
+    sitesyms=1,
+    locking=true,
+    labels=nothing,
 )
     D = length(first(patch_positions))
     F = float(eltype(first(patch_positions)))
     r = F(r)
     n = length(patch_positions)
 
-    tol = sqrt(eps(F)) * r
-    poses = [normal_pose(patch_positions[i], patch_twists[i]) for i in eachindex(patch_positions)]
-    # One vertex per patch leaves no room for a turn about the patch normal, so the sitesym is 1
-    # whatever the arrangement; a patch that needs its own symmetry needs `dartencoding`.
-    sitesyms = ones(Int, n)
-    labs = siteorbits(poses, sitesyms, collect(colors))
-    stabs = stabilizerorders(poses, sitesyms, labs)
-    setlabels!(g, collect(Cint, labs))
+    length(vertices) == n ||
+        throw(ArgumentError("expected $n vertex ranges, one per patch, got $(length(vertices))"))
+    owned = collect(Iterators.flatten(vertices))
+    (allunique(owned) && sort!(owned) == 1:nv(g)) || throw(
+        ArgumentError("the patches' vertex ranges must be disjoint and cover all $(nv(g)) vertices of the graph"),
+    )
 
-    sites = [BindingSite(poses[i], colors[i], i:i, tol, tol / r, 1, stabs[i]) for i in 1:n]
+    tol = sqrt(eps(F)) * r
+    poses = [normal_pose(patch_positions[i], patch_twists[i]) for i in 1:n]
+    syms = _expandperface(sitesyms, n, "site symmetries")
+    locks = _expandperface(locking, n, "locking flags")
+
+    labs = isnothing(labels) ? siteorbits(poses, syms, collect(colors)) : collect(labels)
+    length(labs) == n || throw(ArgumentError("expected $n labels, one per patch, got $(length(labs))"))
+    stabs = stabilizerorders(poses, syms, labs)
+
+    vertexlabels = zeros(Cint, nv(g))
+    for i in 1:n, v in vertices[i]
+        vertexlabels[v] = labs[i]
+    end
+    setlabels!(g, vertexlabels)
+
+    sites = [
+        BindingSite(poses[i], colors[i], vertices[i], tol, tol / r, syms[i], stabs[i], locks[i]) for i in 1:n
+    ]
     return check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
 end
 
