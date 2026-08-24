@@ -94,6 +94,28 @@ function BindingRules(bonds, particlespecies::ParticleSpecies)
     return BindingRules(bonds, particlespecies)
 end
 
+# A `Bool` matrix is an interaction matrix, never a bond list, so the species count has to come
+# from its size rather than from the largest species index a bond names.
+function BindingRules(intmat::AbstractMatrix{Bool}, particlespecies::ParticleSpecies)
+    n = size(intmat, 1)
+    n == size(intmat, 2) || throw(ArgumentError("interaction matrix must be square"))
+    k = _colorspan(particlespecies)
+    n % k == 0 || throw(
+        ArgumentError(
+            "an interaction matrix of size $n cannot be split among copies of a species " *
+            "spanning $k colors; give one species per block instead",
+        ),
+    )
+    return BindingRules(intmat, [particlespecies for _ in 1:(n ÷ k)])
+end
+
+# How many columns of the interaction matrix one copy of `ps` claims, matching the contiguous
+# range `_adjust_labels_and_colors` gives it.
+function _colorspan(ps::ParticleSpecies)
+    cols = [color(bindingsite(ps, si)) for si in 1:nsites(ps)]
+    return maximum(cols) - minimum(cols) + 1
+end
+
 """
     _onlattice(pss)
 
@@ -390,7 +412,7 @@ function _parse_intmat(intmat::AbstractMatrix{Bool}, siteloc2color, ncolors)
     return Symmetric(Matrix{Bool}(intmat))
 end
 function _intmat_from_bonds(bonds, siteloc2color, ncolors)
-    intmat = falses(ncolors, ncolors)
+    intmat = zeros(Bool, ncolors, ncolors)
     for bond in bonds
         spcs1, site1, spcs2, site2 = bond
         c1 = siteloc2color[(spcs1, site1)]
