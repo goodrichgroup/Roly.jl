@@ -297,20 +297,20 @@ function composition(p::Polyform)
 end
 
 """
-    raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r=0)
+    raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t=0)
 
 Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`,
-in phase `r` of the bond (see [`standard_offset`](@ref)).
+in twist `t` of the bond (see [`standard_twist`](@ref)).
 
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
-function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::Integer=0; kwargs...)
+function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t::Integer=0; kwargs...)
     rules = bindingrules(poly)
     speciesindex, site_index = siteloc
     particle_species = species(rules, speciesindex)
     leadingvertex = nv(graphrep(poly)) + 1
     mate = bindingsites(particle_species, site_index)
-    particle_pose = standard_offset(site, r, bondperiod(site, mate)) * inv(mate.pose)
+    particle_pose = standard_twist(site, t, twistfreedom(site, mate)) * inv(mate.pose)
     attached_particle = Particle(particle_pose, leadingvertex, speciesindex)
 
     has_overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
@@ -324,9 +324,9 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::I
         add_edge!(graphrep(poly), src + leadingvertex - 1, dst + leadingvertex - 1)
     end
 
-    # Every contact is paired in the phase it was found in, not the one this call
-    for (vs1, vs2, reg, L) in contacting_vertices
-        for (v1, v2) in contact_pairing(vs1, vs2, reg, L)
+    # Every contact is paired in the twist it was found in, not the one this call
+    for (vs1, vs2, twst, ntwists) in contacting_vertices
+        for (v1, v2) in contact_pairing(vs1, vs2, twst, ntwists)
             add_edge!(graphrep(poly), tocanon(poly, v1), v2)
             add_edge!(graphrep(poly), v2, tocanon(poly, v1))
         end
@@ -439,9 +439,9 @@ function _overlap_and_contacts(
             istouching(b1, b2) || continue
             interacting = intmat[color(b1), color(b2)]
             !allow_noninteracting && !interacting && return true, nothing
-            reg = phase(b1, b2)
-            !allow_misaligned && isnothing(reg) && return true, nothing
-            push!(contacts, (b1.vertices, b2.vertices, something(reg, 0), bondperiod(b1, b2)))
+            twst = twist(b1, b2)
+            !allow_misaligned && isnothing(twst) && return true, nothing
+            push!(contacts, (b1.vertices, b2.vertices, something(twst, 0), twistfreedom(b1, b2)))
         end
     end
     return false, contacts
@@ -530,8 +530,8 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
                 # particle and the parent test would reject it.
                 siteloc[1] < deletable && continue
                 mate = bindingsites(species(rules, siteloc[1]), siteloc[2])
-                for r in 0:(nphases(site, mate) - 1)
-                    push!(pairs, (site, siteloc, r))
+                for t in 0:(_ndistincttwists(site, mate) - 1)
+                    push!(pairs, (site, siteloc, t))
                 end
             end
         end

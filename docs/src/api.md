@@ -20,17 +20,16 @@ BindingSite
 color
 ```
 
-### Bonds and phases
+### Bonds and twists
 
 How many distinct ways a partner may attach at a site, and which one a given attachment is.
-See [Orientation and phases](orientation.md) for what the numbers mean.
+See [Orientation and twists](orientation.md) for what the numbers mean.
 
 ```@docs
-twistfreedom
-bondperiod
-nphases
-phase
-standard_offset
+twistfreedom(::BindingSite)
+twistfreedom(::BindingSite, ::BindingSite)
+twist
+standard_twist
 contact_pairing
 ```
 

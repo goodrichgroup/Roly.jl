@@ -1,5 +1,5 @@
 using Roly
-using Roly: bindingsites, nsites, color, _siteturns, raise!, collect_compatible_pairs, Polyform
+using Roly: bindingsites, nsites, color, _sitetwists, raise!, collect_compatible_pairs, Polyform
 using LinearAlgebra, StaticArrays, Rotations
 
 """
@@ -24,7 +24,7 @@ function site_rotations(poly)
     cs = [color(b) for b in bs]
     n = length(bs)
     atol = 1e-7 * max(1.0, maximum(norm, xs))
-    turns(i) = collect(_siteturns(ps[i], gs[i]))
+    turns(i) = collect(_sitetwists(ps[i], gs[i]))
 
     found = typeof(ps[1] * inv(ps[1]))[]
     for a in 1:n

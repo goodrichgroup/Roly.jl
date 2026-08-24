@@ -50,7 +50,7 @@ The answer 8 is `D_4`: telling two opposite faces apart leaves the 4-fold axis t
 
 Two more keywords say what a bond at a face *means*, rather than which bonds exist.
 `locking` decides whether a site holds its partner in the orientation its frame names, and `twists` turns a site about its normal to pick which orientation that is.
-See [Orientation and phases](orientation.md).
+See [Orientation and twists](orientation.md).
 
 ## Symmetry groups
 

@@ -155,7 +155,7 @@ using StaticArrays: SVector
                 Roly.isinert(rules, color(site)) && continue
                 for siteloc in sitelocs_of(rules, color(site))
                     mate = bindingsites(Roly.species(rules, siteloc[1]), siteloc[2])
-                    for r in 0:(Roly.nphases(site, mate) - 1)
+                    for r in 0:(Roly._ndistincttwists(site, mate) - 1)
                         trial = copy(poly)
                         ismissing(raise!(trial, site, siteloc, r)) && continue
                         push!(out, copy(graphrep(trial)))

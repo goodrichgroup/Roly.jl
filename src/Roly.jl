@@ -56,7 +56,7 @@ public rotationgroup, geometriclabels, facesym, siteorbits, sitestabilizers
 public site_symmetry, check_encoding
 
 # What a bond fixes about relative orientation
-public contact_pairing, standard_offset, twistfreedom, bondperiod, nphases, phase
+public contact_pairing, standard_twist, twistfreedom, twist
 
 # The `ParticleSpecies` interface, implemented rather than called
 public isconvex, bounding_radius, could_contact, overlap

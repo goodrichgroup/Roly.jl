@@ -682,7 +682,7 @@ function _facesites(
     # the face's corner list, which moves the frame and the vertex numbering together and keeps
     # `contact_pairing`'s anchor on a pair of coincident darts; the remainder is applied to the
     # frame alone. That remainder is fine: the anchor has to be consistent and to tell
-    # phases apart, not to mark a physical coincidence, and both survive.
+    # twists apart, not to mark a physical coincidence, and both survive.
     steps = [round(Int, t * length(f) / (2F(π))) for (f, t) in zip(fs, twists)]
     fs = [circshift(f, -mod(m, length(f))) for (f, m) in zip(fs, steps)]
     poses = [pose * RotX(F(t) - 2F(π) * m / length(f)) for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
@@ -836,13 +836,13 @@ function Antiprism(n::Integer, a::Real=1.0)
 end
 
 """
-    _siteturns(psi, sitesym)
+    _sitetwists(psi, sitesym)
 
 The orientations of a site that are equivalent by symmetry of the face: turns by `2π/sitesym` 
 about the sites own outward normal, which `normal_pose` puts on the site's local x axis.
 """
-_siteturns(psi::Rotation{3,F}, sitesym::Integer) where {F} = (psi * RotX(F(2π) * m / sitesym) for m in 0:(sitesym - 1))
-_siteturns(psi::Rotation{2}, ::Integer) = (psi,)
+_sitetwists(psi::Rotation{3,F}, sitesym::Integer) where {F} = (psi * RotX(F(2π) * m / sitesym) for m in 0:(sitesym - 1))
+_sitetwists(psi::Rotation{2}, ::Integer) = (psi,)
 
 """
     site_symmetry(ps::ParticleSpecies)
@@ -892,7 +892,7 @@ function _site_symmetries(poses, sitesyms, keys)
             j = findfirst(1:n) do j
                 keys[j] == keys[i] &&
                     isapprox(Q * poses[i].x, poses[j].x; atol) &&
-                    any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _siteturns(poses[j].psi, sitesyms[j]))
+                    any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _sitetwists(poses[j].psi, sitesyms[j]))
             end
             isnothing(j) && return nothing
             perm[i] = j
@@ -903,7 +903,7 @@ function _site_symmetries(poses, sitesyms, keys)
     perms = Vector{Int}[]
     for a in 1:n
         keys[a] == keys[1] || continue
-        for psi in _siteturns(poses[a].psi, sitesyms[a])
+        for psi in _sitetwists(poses[a].psi, sitesyms[a])
             perm = permutation(psi * inv(poses[1].psi))
             isnothing(perm) || push!(perms, perm)
         end

@@ -111,7 +111,7 @@ end
     normal_pose(x, twist=0; orientationtype=RotMatrix3)
 
 Create a pose at point `x`, whose local x axis also points outward along `x`. `twist` rotates
-the y,z axes about x, which is how a patch's bond phase is chosen: the twist is the site's
+the y,z axes about x, which is how a patch's bond twist is chosen: the twist is the site's
 reference direction, and turning it turns the partner it holds.
 """
 # The 3D default is `RotMatrix3`, not an Euler parameterisation, because rotation types are not

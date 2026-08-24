@@ -56,7 +56,7 @@
 
     # 3D lattice animals
     sidefaces(p) = [i for i in 1:nfaces(p) if abs(Roly.facenormal(p, i)[3]) < 1e-8]
-    function rules(shp, sticky)
+    function sidebonded(shp, sticky)
         colors = [i in sticky ? 1 : 2 for i in 1:nfaces(shp)]
         return BindingRules([1 first(sticky) 1 first(sticky)],
                             PolyhedronParticleSpecies(shp; colors))
@@ -74,10 +74,10 @@
     ]
 
     for (name, shp, sticky, want) in lattice_animals
-        rules = rules(shp, sticky)
+        rules = sidebonded(shp, sticky)
         ps = species(rules, 1)
-        # one phase per bond, so it cannot leave the lattice.
-        @test all(i -> Roly.nphases(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
+        # one twist per bond, so it cannot leave the lattice.
+        @test all(i -> Roly._ndistincttwists(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
                   sticky)
         @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
     end
@@ -86,10 +86,10 @@
     # The face is then 4-fold about its normal where the prism is only 2-fold about it, so the
     # two solids differ in `sitesym` but not in `stab`.
     for (shp, want) in [(Prism(3), [1, 2, 3, 6, 10, 22]), (Prism(6), [1, 2, 5, 12, 34])]
-        rules = rules(shp, sidefaces(shp))
+        rules = sidebonded(shp, sidefaces(shp))
         b = Roly.bindingsites(species(rules, 1), first(sidefaces(shp)))
         @test (b.sitesym, b.stab) == (4, 2)
-        @test Roly.nphases(b, b) == 1
+        @test Roly._ndistincttwists(b, b) == 1
         @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
     end
 
@@ -100,7 +100,7 @@
         ps = PolyhedronParticleSpecies(shp; colors, locking=[!(i in sides) for i in 1:nfaces(shp)])
         b = Roly.bindingsites(ps, first(sides))
         @test Roly.twistfreedom(b) == b.sitesym == 4
-        @test Roly.nphases(b, b) == 2
+        @test Roly._ndistincttwists(b, b) == 2
         rules = BindingRules([1 first(sides) 1 first(sides)], ps)
         @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
     end

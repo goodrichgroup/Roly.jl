@@ -71,100 +71,107 @@ posetype(::BindingSite{P}) where {P} = P
 posetype(::Type{<:BindingSite{P}}) where {P} = P
 
 @inline standard_rotation(::Type{F}, ::Val{2}, args...) where {F} = Angle2d{F}(π)
-@inline standard_rotation(::Type{F}, ::Val{3}, r::Integer=0, L::Integer=1) where {F} = RotXYZ{F}(2F(π) * r / L, 0, π)
+@inline standard_rotation(::Type{F}, ::Val{3}, t::Integer=0, ntwists::Integer=1) where {F} =
+    RotXYZ{F}(2F(π) * t / ntwists, 0, π)
 
 """
-    standard_offset(b::BindingSite, r=0, L=1)
-    standard_offset(p::Pose, r=0, L=1)
+    standard_twist(b::BindingSite, t=0, ntwists=1)
+    standard_twist(p::Pose, t=0, ntwists=1)
 
-Calculate the offset between binding site `b` and a partner attached in phase `r` of `L`.
+Return the pose a partner of binding site `b` takes when the bond is in twist `t` of `ntwists`.
+
 We employ the convention that attached binding sites are "facing each other": their poses are
 related via a 180 degree rotation around their (shared) z-axes.
 
 A bond in 3D additionally admits a *twist* about the bond (x-)axis.
 This twist is generally fixed by the two sites' frames, except that the frame of a symmetric particle
 can only be determined up to symmetry transformations.
-If there are `L` admissable twists, then any twists angle that is a multiple of `2π/L` is valid.
+If there are `ntwists` admissable twists, then any twist angle that is a multiple of `2π/ntwists`
+is valid, and `t` indexes them from 0.
 """
-@inline standard_offset(b::BindingSite{<:Pose{D,F}}, r::Integer=0, L::Integer=1) where {D,F} =
-    b.pose * standard_rotation(F, Val(D), r, L)
-@inline standard_offset(p::Pose{D,F}, r::Integer=0, L::Integer=1) where {D,F} = p * standard_rotation(F, Val(D), r, L)
+@inline standard_twist(b::BindingSite{<:Pose{D,F}}, t::Integer=0, ntwists::Integer=1) where {D,F} =
+    b.pose * standard_rotation(F, Val(D), t, ntwists)
+@inline standard_twist(p::Pose{D,F}, t::Integer=0, ntwists::Integer=1) where {D,F} =
+    p * standard_rotation(F, Val(D), t, ntwists)
 
 """
     twistfreedom(b::BindingSite)
 
 Return how many possible twists binding site `b` allows. Equal to `stab` if the site is locking,
-and equal to `sitesym` otherwise. See [`BindingSite`](@ref) and [`bondperiod`](@ref).
+and equal to `sitesym` otherwise. See [`BindingSite`](@ref).
 """
 @inline twistfreedom(b::BindingSite) = b.locking ? b.stab : b.sitesym
 
 """
-    bondperiod(b1::BindingSite, b2::BindingSite)
+    twistfreedom(b1::BindingSite, b2::BindingSite)
 
-Return `L`, the number of twists about the bond axis that a bond between `b1` and `b2` admits.
-Equal to the least common multiple of the two sites' [`twistfreedom`](@ref)s. See
-[`standard_offset`](@ref).
+Return `ntwists`, the number of twists about the bond axis that a bond between `b1` and `b2`
+admits. Equal to the least common multiple of the two sites' own twist freedoms, since the
+admissible set has to be closed under both. See [`standard_twist`](@ref).
 """
-@inline bondperiod(b1::BindingSite, b2::BindingSite) = lcm(twistfreedom(b1), twistfreedom(b2))
+@inline twistfreedom(b1::BindingSite, b2::BindingSite) = lcm(twistfreedom(b1), twistfreedom(b2))
 
 """
-    nphases(bbody::BindingSite, battach::BindingSite)
+    _ndistincttwists(bbody::BindingSite, battach::BindingSite)
 
-Return how many of the [`bondperiod`](@ref) twists give *distinct* structures when binding site `battch`
-to a binding site on a polyform, `bbbody`.
+Return how many of the `twistfreedom(bbody, battach)` twists give *distinct* structures when
+binding site `battach` is attached to a binding site `bbody` on a polyform.
 
-This count excludes twists that are differing by a symmetry of the particle being attached, of which
-there are exactly `b2.stab`.
+This count excludes twists that differ by a symmetry of the particle being attached, of which
+there are exactly `battach.stab`.
 Note the asymmetry: only the *attached* binding site's stabilizer is quotiented out. The symmetries of the
 polyform carrying `bbody` can merge structures too, but these are not knowable from one site,
 and need to be caught through canonization.
 """
-@inline nphases(bbody::BindingSite, battach::BindingSite) = bondperiod(bbody, battach) ÷ battach.stab
+@inline _ndistincttwists(bbody::BindingSite, battach::BindingSite) =
+    twistfreedom(bbody, battach) ÷ battach.stab
 
 """
-    contact_pairing(vs1::UnitRange, vs2::UnitRange, r=0, L=1)
+    contact_pairing(vs1::UnitRange, vs2::UnitRange, t=0, ntwists=1)
 
 Return the pairs of graph vertices that should be joined when two bonding binding sites occupying the vertex
-ranges `vs1` and `vs2` meet in phase `r` of `L` (see [`standard_offset`](@ref)).
+ranges `vs1` and `vs2` meet in twist `t` of `ntwists` (see [`standard_twist`](@ref)).
 
 Imagine the vertices corresponds to corners of a regular n-gon attached to the site, number the vertices of each site
 starting from zero and denote `kᵢ = length(vsᵢ)`. Vertex `a` of site 1 then sits at angle `2πa/k₁` in site 1's frame,
-and vertex `b` of site 2  (whose frame is turned by `2πr/L` and then flipped, so its cyclic order runs the other way 
-around) sits at `2πr/L - 2πb/k₂`. Writing `K = lcm(k₁, k₂)`, `s₁ = K/k₁`, `s₂ = K/k₂`, the coincidences are the
-solutions of
+and vertex `b` of site 2  (whose frame is turned by `2πt/ntwists` and then flipped, so its cyclic order runs the other
+way around) sits at `2πt/ntwists - 2πb/k₂`. Writing `K = lcm(k₁, k₂)`, `s₁ = K/k₁`, `s₂ = K/k₂`, the coincidences are
+the solutions of
 
-    a*s₁ + b*s₂ = t   (mod K),      t = r*K/L
+    a*s₁ + b*s₂ = m   (mod K),      m = t*K/ntwists
 
-`t` is always an integer: a site's sitesym `gᵢ` divides its vertex count, so `L = lcm(g₁, g₂)`
-divides `K`. Since `gcd(s₁, s₂) = 1`, the congruence has exactly `gcd(k₁, k₂)` solutions for
-every `t`, and distinct phases give disjoint solution sets, so the pairing count never
-depends on the phase, and the graph records which phase a bond is in.
+`m` is always an integer: a site's `sitesym` `gᵢ` divides its vertex count, so
+`ntwists = lcm(g₁, g₂)` divides `K`. Since `gcd(s₁, s₂) = 1`, the congruence has exactly
+`gcd(k₁, k₂)` solutions for every `m`, and distinct twists give disjoint solution sets, so the
+pairing count never depends on the twist, and the graph records which twist a bond is in.
 """
-@inline function contact_pairing(vs1::UnitRange{<:Integer}, vs2::UnitRange{<:Integer}, r::Integer=0, L::Integer=1)
+@inline function contact_pairing(
+    vs1::UnitRange{<:Integer}, vs2::UnitRange{<:Integer}, t::Integer=0, ntwists::Integer=1
+)
     k1, k2 = length(vs1), length(vs2)
     G = gcd(k1, k2)
     K = k1 * k2 ÷ G
-    a0, b0 = _phase_shift(k1, k2, K, r, L)
+    a0, b0 = _twist_shift(k1, k2, K, t, ntwists)
     return (vs1[1 + mod(a0 + j * (k1 ÷ G), k1)] => vs2[1 + mod(b0 - j * (k2 ÷ G), k2)] for j in 0:(G - 1))
 end
 
-# One solution of a*s1 + b*s2 = r*K/L (mod K); the rest follow by stepping the two ranges in
-# opposite directions. Zero-based, and `(0, 0)` for the base phase.
-@inline function _phase_shift(k1::Int, k2::Int, K::Int, r::Integer, L::Integer)
-    r == 0 && return 0, 0
-    K % L == 0 || throw(
+# One solution of a*s1 + b*s2 = t*K/ntwists (mod K); the rest follow by stepping the two ranges
+# in opposite directions. Zero-based, and `(0, 0)` for the untwisted bond.
+@inline function _twist_shift(k1::Int, k2::Int, K::Int, t::Integer, ntwists::Integer)
+    t == 0 && return 0, 0
+    K % ntwists == 0 || throw(
         ArgumentError(
-            "a bond in $L phases cannot be encoded by sites of $k1 and $k2 graph vertices: " *
-            "$L must divide lcm($k1, $k2) = $K. Give the sites more vertices, i.e. a graph built " *
+            "a bond in $ntwists twists cannot be encoded by sites of $k1 and $k2 graph vertices: " *
+            "$ntwists must divide lcm($k1, $k2) = $K. Give the sites more vertices, i.e. a graph built " *
             "by `dartencoding` rather than `cycleencoding`, or declare a smaller sitesym.",
         ),
     )
     s1, s2 = K ÷ k1, K ÷ k2
-    t = r * K ÷ L
-    # u*s1 = 1 (mod s2), so a0 = t*u solves the congruence mod s2 and hence mod K once b0
+    m = t * K ÷ ntwists
+    # u*s1 = 1 (mod s2), so a0 = m*u solves the congruence mod s2 and hence mod K once b0
     # absorbs the remainder. gcd(s1, s2) = 1 always, so the inverse exists.
-    a0 = s2 == 1 ? 0 : mod(t * invmod(s1, s2), k1)
-    return a0, mod((t - a0 * s1) ÷ s2, k2)
+    a0 = s2 == 1 ? 0 : mod(m * invmod(s1, s2), k1)
+    return a0, mod((m - a0 * s1) ÷ s2, k2)
 end
 
 """
@@ -188,18 +195,18 @@ function istouching(b1::BindingSite, b2::BindingSite)
 end
 
 """
-    phase(b1::BindingSite, b2::BindingSite)
+    twist(b1::BindingSite, b2::BindingSite)
 
-Return which of the bond's phases the two sites are in, or `nothing` if their
+Return which of the bond's twists the two sites are in, or `nothing` if their
 orientations are not related by any of them.
 
 This function is symmetric in its arguments.
 """
-function phase(b1::BindingSite, b2::BindingSite)
+function twist(b1::BindingSite, b2::BindingSite)
     atol = b1.alignment_tolerance + b2.alignment_tolerance
-    L = bondperiod(b1, b2)
-    for r in 0:(L - 1)
-        isapprox(b1.pose.psi, standard_offset(b2, r, L).psi; atol, rtol=0) && return r
+    ntwists = twistfreedom(b1, b2)
+    for t in 0:(ntwists - 1)
+        isapprox(b1.pose.psi, standard_twist(b2, t, ntwists).psi; atol, rtol=0) && return t
     end
     return nothing
 end
@@ -208,9 +215,9 @@ end
     isaligned(b1::BindingSite, b2::BindingSite)
 
 Check whether the orientation components of the binding sites' poses
-differ by a standard offset, in any phase the bond admits.
+differ by a [`standard_twist`](@ref), in any twist the bond admits.
 """
-isaligned(b1::BindingSite, b2::BindingSite) = !isnothing(phase(b1, b2))
+isaligned(b1::BindingSite, b2::BindingSite) = !isnothing(twist(b1, b2))
 
 """
     isincontact(b1::BindingSite, b2::BindingSite)
