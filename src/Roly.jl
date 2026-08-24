@@ -79,6 +79,7 @@ include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 
 include("ruleeditor.jl")
+using .RuleEditor: ruleeditor
 export ruleeditor
 
 export render, polyformplot, polyformplot!

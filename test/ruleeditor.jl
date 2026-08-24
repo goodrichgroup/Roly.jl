@@ -1,6 +1,6 @@
-using Roly: EditorState, SquareLat, TriangleLat, HexLat, Key,
-            inferred_bonds, bonds_matrix, _handle_key!, _visible_species_count,
-            _ensure_species!
+using Roly.RuleEditor: EditorState, SquareLat, TriangleLat, HexLat, Key,
+                      inferred_bonds, bonds_matrix, _handle_key!, _visible_species_count,
+                      _ensure_species!
 
 # Convenience: build a fresh EditorState with just the fields tests care about.
 function _mkstate(lat, sp; cells=Dict{Tuple{Int,Int},Tuple{Int,Int}}(),
