@@ -623,19 +623,12 @@ function cycleencoding(nsites::Integer; labels=1:nsites)
 end
 
 """
-    _twistfreedoms(sitesyms, stabs, locking)
-
-Per-site [`twistfreedom`](@ref) from the two symmetry counts and the locking flags.
-"""
-_twistfreedoms(sitesyms, stabs, locking) = [l ? s : g for (g, s, l) in zip(sitesyms, stabs, locking)]
-
-"""
-    _perface(x, n, what)
+    _expandperface(x, n, what)
 
 Expand a per-face keyword to a length-`n` vector, a scalar meaning the same for every face.
 `what` names the argument in the length-mismatch error.
 """
-function _perface(x, n::Integer, what::AbstractString)
+function _expandperface(x, n::Integer, what::AbstractString)
     x isa Union{Bool,Real} && return fill(x, n)
     length(x) == n || throw(ArgumentError("expected $n $what, one per face, got $(length(x))"))
     return collect(x)
@@ -689,7 +682,8 @@ function _facesites(
     poses = [pose * RotX(F(t) - 2F(π) * m / length(f)) for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
     stabs = sitestabilizers(poses, sitesyms, labels)
 
-    cyclic = something(usecycle, _cycle_suffices(_twistfreedoms(sitesyms, stabs, locking), labels))
+    freedoms = [l ? s : g for (g, s, l) in zip(sitesyms, stabs, locking)]
+    cyclic = something(usecycle, _cycle_suffices(freedoms, labels))
     g, ranges = cyclic ? cycleencoding(n; labels) : dartencoding(fs; labels)
 
     sites = [
