@@ -1,8 +1,8 @@
 mutable struct PolyformAux{BS<:BindingSite}
     seen::Set{NautyDiGraph}
-    pairs::Vector{Tuple{BS,BindingSiteLoc,Int}}
+    attachments::Vector{Tuple{BS,BindingSiteLoc,Int}}
 end
-Base.copy(polyaux::PolyformAux) = typeof(polyaux)(copy(polyaux.seen), copy(polyaux.pairs))
+Base.copy(polyaux::PolyformAux) = typeof(polyaux)(copy(polyaux.seen), copy(polyaux.attachments))
 
 function ls!(k::Polyform, s::Polyform)
     copy!(k, s)
@@ -15,12 +15,12 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
         return copy!(u, Polyform(bindingrules(v), j))
     end
 
-    j == 1 && collect_compatible_pairs!(aux.pairs, v)
-    j > length(aux.pairs) && return nothing
+    j == 1 && collect_attachments!(aux.attachments, v)
+    j > length(aux.attachments) && return nothing
 
-    site, siteloc, r = aux.pairs[j]
+    site, siteloc, t = aux.attachments[j]
     copy!(u, v)
-    out = raise!(u, site, siteloc, r)
+    out = raise!(u, site, siteloc, t)
     (ismissing(out) || isnothing(out)) && return out
 
     if graphrep(out) ∈ aux.seen

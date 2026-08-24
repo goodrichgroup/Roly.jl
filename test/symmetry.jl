@@ -1,5 +1,5 @@
 using Roly
-using Roly: bindingsites, nsites, color, _sitetwists, raise!, collect_compatible_pairs, Polyform
+using Roly: bindingsites, nsites, color, _sitetwists, raise!, collect_attachments, Polyform
 using LinearAlgebra, StaticArrays, Rotations
 
 """

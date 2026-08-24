@@ -506,10 +506,10 @@ function collect_open_bindingsites(poly::Polyform)
 end
 
 """
-    _deletable_species(poly, target, visited, queue)
+    _deletable_species(poly; target, visited, queue)
 
-Return `(best, second, leading)`: the two largest species indices among the particles `lower!`
-could delete, and the leading vertex of the particle achieving `best`.
+Return `(top, runnerup, leading)`: the two largest species indices among the particles `lower!`
+could delete from `poly`, and the leading vertex of the particle achieving `top`.
 
 `lower!` deletes from the highest label class holding a removable particle. Canonical position
 runs with vertex label (nauty orders classes by color, `vertexlabels2labptn` by label), and
@@ -517,63 +517,87 @@ runs with vertex label (nauty orders classes by color, `vertexlabels2labptn` by 
 order is label order. Removability is read off `poly` rather than the child: attaching a
 particle cannot disconnect what removing a different one leaves behind.
 
-The runner-up lets a host exclude itself in O(1); see [`collect_compatible_pairs!`](@ref).
+The runner-up lets the anchor particle exclude itself in O(1); see
+[`collect_attachments!`](@ref).
 """
 function _deletable_species(poly::Polyform; target, visited, queue)
     rules = bindingrules(poly)
     n = nparticles(poly)
-    best, second, best_lv = 0, 0, 0
+    top, runnerup, top_lv = 0, 0, 0
     for part in poly.particles
         n > 1 &&
             is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, rules)]); target, visited, queue) &&
             continue
         s = speciesindex(part)
-        if s > best
-            best, second, best_lv = s, best, leadingvertex(part)
-        elseif s > second
-            second = s
+        if s > top
+            top, runnerup, top_lv = s, top, leadingvertex(part)
+        elseif s > runnerup
+            runnerup = s
         end
     end
-    return best, second, best_lv
+    return top, runnerup, top_lv
 end
 
-function collect_compatible_pairs!(pairs, poly::Polyform)
+"""
+    collect_attachments!(attachments, poly::Polyform)
+
+Fill `attachments` with every way of growing `poly` by one particle, as triples
+`(site, siteloc, t)`: an open binding site of `poly`, the species and site index of the
+particle to attach, and which of the bond's distinct twists to attach it in.
+
+Two filters keep the list down to what reverse search can use. Only one partner site per
+symmetry orbit is kept, since the others give the same child. And a candidate is dropped when
+`lower!` would not undo it, i.e. when the child holds a removable particle from a species
+index above the one being attached: the child's parent would then be a different polyform and
+reverse search would reject the pair anyway.
+
+The second filter is conservative about the *anchor* particle, the one carrying `site`. The
+anchor is excluded from the removable set, because a new particle bonded to it alone leaves it
+a cut vertex of the child. When the attachment also closes a ring the anchor does stay
+removable, and excluding it then only lets a few extra candidates through, which reverse search
+rejects. Deciding it exactly would mean building the child first, which is what this filter is
+there to avoid.
+"""
+function collect_attachments!(attachments, poly::Polyform)
     rules = bindingrules(poly)
-    empty!(pairs)
+    empty!(attachments)
     nv_g = nv(graphrep(poly))
     target, visited, queue = zeros(Bool, nv_g), zeros(Bool, nv_g), zeros(Cint, nv_g)
 
-    best, second, best_lv = _deletable_species(poly; target, visited, queue)
+    top, runnerup, top_lv = _deletable_species(poly; target, visited, queue)
     for orig_v in poly.canon2orig
-        part = particle_from_leadingvertex(poly, orig_v)
-        isnothing(part) && continue
+        anchor = particle_from_leadingvertex(poly, orig_v)
+        isnothing(anchor) && continue
 
-        # The host is excluded, so it takes the runner-up when it is itself the top scorer.
-        deletable = leadingvertex(part) == best_lv ? second : best
-        for k in 1:nsites(part, rules)
-            site = bindingsite(part, rules, k)
-            _isbound_vertex(poly, part, first(site.vertices)) && continue
+        # The anchor is excluded, so it takes the runner-up when it is itself the top scorer.
+        deletable = leadingvertex(anchor) == top_lv ? runnerup : top
+        for k in 1:nsites(anchor, rules)
+            site = bindingsite(anchor, rules, k)
+            _isbound_vertex(poly, anchor, first(site.vertices)) && continue
             isinert(rules, color(site)) && continue
 
-            # only keep one partner site per orbit
             for siteloc in distinct_attachments(rules, color(site))
                 # The new particle is always removable, so `lower!` stops at its label class
-                # unless a higher one survives. If one does, the child's deletion is some other
-                # particle and the parent test would reject it.
+                # unless a higher one survives.
                 siteloc[1] < deletable && continue
                 mate = bindingsite(species(rules, siteloc[1]), siteloc[2])
                 for t in 0:(_ndistincttwists(site, mate) - 1)
-                    push!(pairs, (site, siteloc, t))
+                    push!(attachments, (site, siteloc, t))
                 end
             end
         end
     end
-    return pairs
+    return attachments
 end
 
-function collect_compatible_pairs(poly::Polyform)
+"""
+    collect_attachments(poly::Polyform)
+
+Return every way of growing `poly` by one particle, allocating the vector.
+See [`collect_attachments!`](@ref).
+"""
+function collect_attachments(poly::Polyform)
     rules = bindingrules(poly)
     BS = BindingSite{posetype(rules),numtype(rules)}
-    pairs = Tuple{BS,BindingSiteLoc,Int}[]
-    return collect_compatible_pairs!(pairs, poly)
+    return collect_attachments!(Tuple{BS,BindingSiteLoc,Int}[], poly)
 end

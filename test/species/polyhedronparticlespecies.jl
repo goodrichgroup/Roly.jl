@@ -6,11 +6,11 @@ using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron
             faceorbits, rotationgroup, inradius, edgemidpoint,
             nsites, dimension, isconvex, numtype, bindingsites, graphrep, setcolors!, color,
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
-            collect_compatible_pairs, tocanon, toorig, BindingRules, Polyform, nbonds,
+            collect_attachments, tocanon, toorig, BindingRules, Polyform, nbonds,
             site_symmetry, PatchySphere
 
 using Roly: PolyhedronParticleSpecies, Prism, Tetrahedron, BindingRules, Polyform,
-            raise!, collect_compatible_pairs, symmetrynumber, graphrep, nfaces
+            raise!, collect_attachments, symmetrynumber, graphrep, nfaces
 using Rotations: RotMatrix3, rotation_angle
 using LinearAlgebra: inv
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
@@ -108,7 +108,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         step = 2 * norm(facecentroid(shp, first(sides)))
         poly = Polyform(rules, 1)
         grown = 0
-        for (site, loc, r) in collect_compatible_pairs(poly)
+        for (site, loc, r) in collect_attachments(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
             a, b = trial.particles
@@ -404,7 +404,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     rebuilt = copy(big)
     lower!(rebuilt)
     @test nparticles(rebuilt) == nparticles(big) - 1
-    for (site, loc) in collect_compatible_pairs(rebuilt)
+    for (site, loc) in collect_attachments(rebuilt)
         trial = copy(rebuilt)
         ismissing(raise!(trial, site, loc)) && continue
         trial == big && (@test trial.canon2orig == big.canon2orig; break)
@@ -458,7 +458,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         ps = dartspecies(Tetrahedron(); twists=[0.0, t, 0.0, 0.0])
         @test symmetrynumber(ps) == 1
         poly = Polyform(BindingRules([1 1 1 2], ps), 1)
-        for (site, loc, r) in collect_compatible_pairs(poly)
+        for (site, loc, r) in collect_attachments(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
             return trial

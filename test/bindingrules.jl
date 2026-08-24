@@ -5,7 +5,7 @@ using Roly: nspecies, nbonds, nsites, dimension, species,
 using Roly: PolygonParticleSpecies, PolyhedronParticleSpecies, PatchyDisk, Cube, Prism,
             Tetrahedron, Polyhedron, facenormal, nfaces
 
-using Roly: compatible_sitelocs, distinct_attachments, siteloc2color, collect_compatible_pairs,
+using Roly: compatible_sitelocs, distinct_attachments, siteloc2color, collect_attachments,
             raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
             Cube, Prism, nfaces, color, bindingsites
 
@@ -180,7 +180,7 @@ using StaticArrays: SVector
         for _ in 1:3     # monomer, then grow, so the host is asymmetric in later rounds too
             @test children(poly, compatible_sitelocs) == children(poly, distinct_attachments)
             nxt = nothing
-            for (site, loc, r) in collect_compatible_pairs(poly)
+            for (site, loc, r) in collect_attachments(poly)
                 trial = copy(poly)
                 ismissing(raise!(trial, site, loc, r)) && continue
                 nxt = trial; break

@@ -19,7 +19,7 @@ using Roly: PatchySphere, Polyhedron, Tetrahedron, Cube, Dodecahedron, Prism,
             nfaces, facecentroid, faceorbits, rotationgroup, symmetrynumber,
             graphrep, edgemidpoint
 
-using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_compatible_pairs,
+using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_attachments,
             nparticles
 
 using Rotations: RotMatrix3, rotation_angle
@@ -199,7 +199,7 @@ using LinearAlgebra: normalize, dot, det, norm
         @test all(i -> Roly.bindingsite(ps, i).sitesym == 1, 1:4)
         rules = BindingRules([1 1 1 2], ps)
         poly = Polyform(rules, 1)
-        for (site, loc, r) in collect_compatible_pairs(poly)
+        for (site, loc, r) in collect_attachments(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
             @test r == 0                      # sitesym 1 on both sides, so one twist

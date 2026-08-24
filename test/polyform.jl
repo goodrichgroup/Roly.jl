@@ -1,7 +1,7 @@
 using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimension,
             bonds, bondindex, composition, interior_edges, exterior_edges, tocanon, toorig,
             BindingRules, UnitSquare, nbonds, raise!, lower!, bindingsites, graphrep,
-            collect_open_bindingsites, collect_compatible_pairs, particle_from_leadingvertex,
+            collect_open_bindingsites, collect_attachments, particle_from_leadingvertex,
             PolygonParticleSpecies, species, polygen
 
 @testset "polyform" begin
@@ -48,7 +48,7 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     end
 
     di = copy(mono)
-    site, siteloc = first(collect_compatible_pairs(di))
+    site, siteloc = first(collect_attachments(di))
     @test !isnothing(raise!(di, site, siteloc))
     @test nparticles(di) == 2
     @test nsites(di) == 8
@@ -79,12 +79,12 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     poly_raise = copy(poly)
     lower!(poly_raise)
 
-    compatible_pairs = collect_compatible_pairs(poly_raise)
-    site, siteloc = first(compatible_pairs)
+    attachments = collect_attachments(poly_raise)
+    site, siteloc = first(attachments)
     i = 1
-    while ismissing(raise!(poly_raise, compatible_pairs[i]...))
+    while ismissing(raise!(poly_raise, attachments[i]...))
         i += 1
-        site_siteloc = compatible_pairs[i]
+        site_siteloc = attachments[i]
     end
 
     @test poly == poly_raise
