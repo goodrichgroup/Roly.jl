@@ -246,3 +246,115 @@ function overlap(p1::SpeciesAndPose{<:MetaParticleSpecies},
     end
     return false
 end
+
+"""
+    metarules(ps::MetaParticleSpecies)
+
+Lift the interactions of `ps`' cluster to `ps` itself: the [`BindingRules`](@ref) under which two
+copies of `ps` bond exactly where the sites they expose would have bonded as ordinary sites.
+
+Only meaningful while `ps` still carries the colors it inherited from the cluster, which is the
+default; a recoloring is a statement that the meta-assembly follows rules of its own, and those
+have to be written out.
+"""
+function metarules(ps::MetaParticleSpecies)
+    rules = bindingrules(cluster(ps))
+    intmat = interactionmatrix(rules)
+    cols = [color(bindingsite(ps, i)) for i in 1:nsites(ps)]
+    all(c -> 1 <= c <= ncolors(rules), cols) || throw(
+        ArgumentError(
+            "`ps` carries colors the cluster's rules do not have, so its interactions cannot be " *
+            "lifted from them. Write the meta rules out instead.",
+        ),
+    )
+    rows = [[1, i, 1, j] for i in eachindex(cols) for j in i:length(cols) if intmat[cols[i], cols[j]]]
+    bonds = isempty(rows) ? zeros(Int, 0, 4) : permutedims(reduce(hcat, rows))
+    return BindingRules(bonds, [ps])
+end
+
+# Lay a meta-polyform's copies out as plain particles, renumbering each copy's vertices so that
+# every site keeps a range of its own. Returns the particles, every contact between them (in
+# `_overlap_and_contacts` form), and the sites each copy exposes, all in the new numbering.
+function _unwrapparts(meta::Polyform)
+    metarules = bindingrules(meta)
+    first(species(metarules)) isa MetaParticleSpecies ||
+        throw(ArgumentError("`meta` is not an assembly of meta-particles"))
+    rules = bindingrules(cluster(species(metarules, 1)))
+
+    P = eltype(cluster(species(metarules, 1)).particles)
+    parts = P[]
+    contacts = Tuple{UnitRange{Int},UnitRange{Int},Int,Int}[]
+    sites = eltype(typeof(species(metarules, 1).sites))[]
+    off = 0
+    for mpart in meta.particles
+        ps = species(metarules, speciesindex(mpart))
+        cl = cluster(ps)
+        for p in cl.particles
+            sp = P(mpart.pose * p.pose, p.leadingvertex + off, p.speciesindex)
+            ov, cts = _overlap_and_contacts(parts, sp, rules)
+            # A valid meta-assembly never overlaps: its own `overlap` already ruled that out.
+            ov && error("Internal error: a meta-assembly unwrapped to overlapping particles. Please file an issue.")
+            append!(contacts, cts)
+            push!(parts, sp)
+        end
+        append!(sites, (shift_vertices(mpart.pose * s, off) for s in ps.sites))
+        off += nv(graphrep(ps))
+    end
+    return parts, contacts, sites
+end
+
+"""
+    unwrap(meta::Polyform)
+
+Read a meta-polyform as an ordinary [`Polyform`](@ref) over the species its clusters are made of.
+
+Every copy of every cluster becomes a particle in its own right, and every bond becomes a bond:
+those the clusters already carried and those the meta-assembly added. The result is the polyform
+the particles would have formed had they been placed one at a time.
+"""
+function unwrap(meta::Polyform{D}) where {D}
+    parts, contacts, _ = _unwrapparts(meta)
+    rules = bindingrules(cluster(species(bindingrules(meta), 1)))
+
+    g = NautyDiGraph(0)
+    for part in parts
+        blockdiag!(g, graphrep(species(rules, speciesindex(part))))
+    end
+    for (vs1, vs2, t, ntwists) in contacts
+        for (v1, v2) in contact_pairing(vs1, vs2, t, ntwists)
+            add_edge!(g, v1, v2)
+            add_edge!(g, v2, v1)
+        end
+    end
+
+    # `g` is built in original vertex order, so the canonical permutation is `canon2orig` itself.
+    perm, autg = nauty(g; canonize=true)
+    cvs = collect(Int, perm)
+    P = eltype(parts)
+    return Polyform{D,P,typeof(rules),typeof(g)}(g, convert(Int, autg.n), cvs, invperm(cvs), parts, rules)
+end
+
+"""
+    metabonds(meta::Polyform)
+
+The bonds a meta-polyform adds, as pairs of binding site vertex ranges in [`unwrap`](@ref)'s
+numbering.
+
+These are the bonds between copies. The ones inside a copy came with its cluster, so
+`bonds(unwrap(meta))` is the two sets together.
+"""
+function metabonds(meta::Polyform)
+    _, contacts, sites = _unwrapparts(meta)
+    exposed = Set(s.vertices for s in sites)
+    return [(c[1], c[2]) for c in contacts if c[1] in exposed && c[2] in exposed]
+end
+
+"""
+    exposedsites(meta::Polyform)
+
+Every site the copies of a meta-polyform expose, in [`unwrap`](@ref)'s numbering.
+
+Includes the ones the meta-polyform's own bonds consume, since a cell built from it needs both
+what it offers and what it has already spent; [`metabonds`](@ref) names the spent ones.
+"""
+exposedsites(meta::Polyform) = last(_unwrapparts(meta))

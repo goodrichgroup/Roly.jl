@@ -46,7 +46,7 @@ puts the turn inside the cell, leaving a lattice that is a pure translation agai
 function tilings(poly::Polyform; nreps::Integer=2, maxblock::Integer=1)
     rules = bindingrules(poly)
     out = Tiling{SVector{dimension(rules),numtype(rules)}}[]
-    for (parts, opensites, prebonds, order) in _tileblocks(poly, maxblock)
+    for (parts, opensites, prebonds, order) in _tilecells(poly, maxblock)
         _addtilings!(out, parts, opensites, prebonds, order, rules, nreps)
     end
     return out
@@ -83,64 +83,22 @@ function _addtilings!(out, parts, sites, prebonds, order, rules, nreps)
     return out
 end
 
-# The tiles to try: `poly` itself, then every block of up to `maxblock` copies that the assembly
-# machinery can build out of it.
-function _tileblocks(poly::Polyform, maxblock::Integer)
-    rules = bindingrules(poly)
+# The cells to try: every meta-polyform of up to `maxblock` copies of `poly` that the assembly
+# machinery can build, laid back out as plain particles. `maxblock == 1` needs no special case,
+# since the meta-monomer is `poly` itself.
+function _tilecells(poly::Polyform, maxblock::Integer)
     inner = collect_open_bindingsites(poly)
     S = eltype(inner)
     P = eltype(poly.particles)
-    blocks = Tuple{Vector{P},Vector{S},Vector{NTuple{2,UnitRange{Int}}},Int}[]
-    push!(blocks, (poly.particles, inner, NTuple{2,UnitRange{Int}}[], 1))
-    (maxblock <= 1 || isempty(inner)) && return blocks
+    cells = Tuple{Vector{P},Vector{S},Vector{NTuple{2,UnitRange{Int}}},Int}[]
+    # With no open site there is nothing for a translate to bond to, and no meta-species to build.
+    isempty(inner) && return cells
 
-    metasys = _blockrules(poly, inner, rules)
-    metasys === nothing && return blocks
-    for mb in polygen(metasys; maxsize=maxblock)
-        nparticles(mb) == 1 && continue          # that is `poly` itself, already listed
-        blk = _unwrapblock(mb, poly, inner, rules)
-        blk === nothing || push!(blocks, blk)
+    for meta in polygen(metarules(MetaParticleSpecies(poly)); maxsize=maxblock)
+        parts, _, sites = _unwrapparts(meta)
+        push!(cells, (parts, sites, metabonds(meta), nparticles(meta)))
     end
-    return blocks
-end
-
-# Blocks bond to blocks exactly where the underlying sites do, so the meta-rules are read off the
-# cluster's own interaction matrix.
-function _blockrules(poly, inner, rules)
-    mp = MetaParticleSpecies(poly)
-    intmat = interactionmatrix(rules)
-    rows = Vector{Int}[]
-    for i in eachindex(inner), j in i:length(inner)
-        intmat[color(inner[i]), color(inner[j])] || continue
-        push!(rows, [1, i, 1, j])
-    end
-    isempty(rows) && return nothing
-    return BindingRules(permutedims(reduce(hcat, rows)), mp)
-end
-
-# Lay a block's copies of `poly` out as plain particles, renumbering each copy's vertices so every
-# site keeps a range of its own, and collect the bonds the copies make with each other.
-function _unwrapblock(mb::Polyform, poly::Polyform, inner, rules)
-    nvc = nv(graphrep(poly))
-    P = eltype(poly.particles)
-    parts = P[]
-    sites = eltype(inner)[]
-    prebonds = NTuple{2,UnitRange{Int}}[]
-    for (b, mpart) in enumerate(mb.particles)
-        off = (b - 1) * nvc
-        pose = mpart.pose
-        copyparts = [P(pose * p.pose, p.leadingvertex + off, p.speciesindex)
-                     for p in poly.particles]
-        for sp in copyparts
-            ov, cts = _overlap_and_contacts(parts, sp, rules)
-            ov && return nothing        # a valid meta-assembly should never land here
-            # a contact also carries its phase and period, which the cell does not need
-            append!(prebonds, ((c[1], c[2]) for c in cts))
-        end
-        append!(parts, copyparts)
-        append!(sites, (shift_vertices(pose * s, off) for s in inner))
-    end
-    return parts, sites, prebonds, nparticles(mb)
+    return cells
 end
 
 """
