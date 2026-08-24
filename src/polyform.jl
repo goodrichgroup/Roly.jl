@@ -150,17 +150,17 @@ Return a lazy iterator over the external edges of `graphrep(p)`, corresponding t
 @inline exterior_edges(p::Polyform) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
 
 """
-    _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs=false)
+    _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs=true)
 
 Return `true` if the graph vertices `u` and `v` belong to the same particle.
 
-`canonidxs` says which numbering `u` and `v` are in: `false` for the stable original one,
-`true` for the canonical one that `graphrep(p)` is in, which is converted first.
+`canonidxs` says which numbering `u` and `v` are in, the same way it does for
+[`bondindex`](@ref) and [`_isbound_vertex`](@ref).
 
 Each particle owns a contiguous block of original vertices starting at its leading vertex, so
 `u` and `v` are split apart exactly when some leading vertex falls between them.
 """
-@inline function _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs::Bool=false)
+@inline function _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs::Bool=true)
     canonidxs && ((u, v) = (toorig(p, u), toorig(p, v)))
     lo, hi = minmax(u, v)
     return !any(pt -> lo < leadingvertex(pt) <= hi, p.particles)
@@ -169,20 +169,23 @@ end
 # An edge is a bond exactly when its endpoints belong to different particles
 function _filter_edges(p::Polyform, ::Val{exterior}) where {exterior}
     return Iterators.filter(edges(graphrep(p))) do (; src, dst)
-        same = _same_particle(p, src, dst; canonidxs=true)
+        same = _same_particle(p, src, dst)
         return exterior ? !same : same
     end
 end
 
 """
-    _isbound_vertex(p::Polyform, part::Particle, v::Integer)
+    _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs=true)
 
-Return `true` if the original graph vertex `v` of particle `part` is bonded to another
-particle, i.e. if it has a neighbor outside `part`'s own block of vertices.
+Return `true` if the graph vertex `v` of particle `part` is bonded to another particle, i.e. if
+it has a neighbor outside `part`'s own block of vertices.
+
+`canonidxs` says which numbering `v` is in, the same way it does for [`bondindex`](@ref) and
+[`_same_particle`](@ref).
 """
-function _isbound_vertex(p::Polyform, part::Particle, v::Integer)
+function _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs::Bool=true)
     own = graphvertices(part, bindingrules(p))
-    neighs = NautyGraphs.adjrow(graphrep(p), tocanon(p, v))
+    neighs = NautyGraphs.adjrow(graphrep(p), canonidxs ? v : tocanon(p, v))
     for w in eachindex(neighs)
         neighs[w] || continue
         toorig(p, w) in own || return true
@@ -191,25 +194,29 @@ function _isbound_vertex(p::Polyform, part::Particle, v::Integer)
 end
 
 """
-    bondindex(poly::Polyform, src::Integer, dst::Integer)
+    bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs=true)
 
-Return the index into `bonded_colors(bindingrules(poly))` for the bond between
-canonical graph vertices `src` and `dst`, or `nothing` if they don't form a valid
-bond type.
+Return the index into `bonded_colors(bindingrules(poly))` for the bond between the graph
+vertices `src` and `dst`, or `nothing` if they don't form a valid bond type.
+
+`canonidxs` says which numbering `src` and `dst` are in: `true`, the default, for the canonical
+one that `graphrep(poly)` and its `edges` are in, and `false` for the stable original one that
+`BindingSite.vertices` and `Particle.leadingvertex` are in. Every function on a `Polyform`
+taking bare vertex indices spells the choice this way.
 """
-function bondindex(poly::Polyform, src::Integer, dst::Integer)
+function bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs::Bool=true)
     rules = bindingrules(poly)
-    p1, b1 = _vertex_to_particle_site(poly, src)
-    p2, b2 = _vertex_to_particle_site(poly, dst)
+    p1, b1 = _vertex_to_particle_site(poly, src; canonidxs)
+    p2, b2 = _vertex_to_particle_site(poly, dst; canonidxs)
     c1 = color(bindingsite(particles(poly, p1), rules, b1))
     c2 = color(bindingsite(particles(poly, p2), rules, b2))
     return findfirst(==(minmax(c1, c2)), bonded_colors(rules))
 end
 
-# Map a canonical graph vertex back to (particle_index, site_index).
-function _vertex_to_particle_site(p::Polyform, v::Integer)
+# Map a graph vertex back to (particle_index, site_index). `canonidxs` as in `bondindex`.
+function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool=true)
     rules = bindingrules(p)
-    orig_v = toorig(p, v)
+    orig_v = canonidxs ? toorig(p, v) : v
     for (i, part) in enumerate(p.particles)
         orig_v in graphvertices(part, rules) || continue
         for j in 1:nsites(part, rules)
@@ -598,7 +605,7 @@ function collect_open_bindingsites!(sites, poly::Polyform)
         isnothing(part) && continue
         for k in 1:nsites(part, rules)
             site = bindingsite(part, rules, k)
-            _isbound_vertex(poly, part, first(site.vertices)) && continue
+            _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
             isinert(rules, color(site)) && continue
             push!(sites, site)
         end
@@ -680,7 +687,7 @@ function collect_attachments!(attachments, poly::Polyform)
         deletable = leadingvertex(anchor) == top_lv ? runnerup : top
         for k in 1:nsites(anchor, rules)
             site = bindingsite(anchor, rules, k)
-            _isbound_vertex(poly, anchor, first(site.vertices)) && continue
+            _isbound_vertex(poly, anchor, first(site.vertices); canonidxs=false) && continue
             isinert(rules, color(site)) && continue
 
             for siteloc in distinct_attachments(rules, color(site))
