@@ -183,18 +183,15 @@ end
 # label. Automorphisms then have to preserve what a bond can see (the colors) on top of the
 # cluster's interior structure, and equal colors on genuinely equivalent sites stay equivalent.
 function _labelsites!(g, sites)
-    labs = labels(g)
     sitevertices = Set(v for s in sites for v in s.vertices)
-    interior = (labs[v] for v in 1:nv(g) if v ∉ sitevertices)
-    base = maximum(interior; init=0)
+    base = maximum((label(g, v) for v in 1:nv(g) if v ∉ sitevertices); init=0)
     palette = sort!(unique(color(s) for s in sites))
     for s in sites
         l = base + searchsortedfirst(palette, color(s))
         for v in s.vertices
-            labs[v] = l
+            setlabel!(g, v, l)
         end
     end
-    setlabels!(g, labs)
     return g
 end
 
@@ -238,11 +235,11 @@ Whether two posed meta-particles overlap, i.e. whether any of their constituent 
 function overlap(p1::SpeciesAndPose{<:MetaParticleSpecies},
                  p2::SpeciesAndPose{<:MetaParticleSpecies}; kwargs...)
     (s1, pose1), (s2, pose2) = p1, p2
-    sys1, sys2 = bindingrules(s1.cluster), bindingrules(s2.cluster)
+    rules1, rules2 = bindingrules(s1.cluster), bindingrules(s2.cluster)
     for a in s1.cluster.particles
-        pa = species(sys1, speciesindex(a)) => pose1 * a.pose
+        pa = species(rules1, speciesindex(a)) => pose1 * a.pose
         for b in s2.cluster.particles
-            pb = species(sys2, speciesindex(b)) => pose2 * b.pose
+            pb = species(rules2, speciesindex(b)) => pose2 * b.pose
             could_contact(pa, pb) || continue
             overlap(pa, pb; kwargs...) && return true
         end

@@ -4,6 +4,30 @@
 # leaves the other open — so partial closures are enumerated too, with completeness a property.
 
 """
+    Tiling{V}
+
+One periodic closure of a polyform: the lattice its copies form, and what one cell of that
+lattice holds. Returned by [`tilings`](@ref).
+
+  - `vectors`: the generating translations, at most `dimension` of them
+  - `bondtypes`: the bond type of every bond one cell contributes, those inside the cell included
+  - `complete`: whether the closure leaves no open site
+  - `order`: how many copies of the polyform the cell holds
+
+A cell's composition is `order` copies of the polyform plus `bondtypes`.
+"""
+struct Tiling{V}
+    vectors::Vector{V}
+    bondtypes::Vector{Int}
+    complete::Bool
+    order::Int
+end
+
+function Base.show(io::Core.IO, t::Tiling)
+    return print(io, "Tiling[d=$(length(t.vectors)), order=$(t.order)", t.complete ? ", complete]" : "]")
+end
+
+"""
     tilings(poly::Polyform; nreps=2, maxblock=1)
 
 Enumerate the periodic closures of `poly`: choices of up to `dimension` translation vectors
@@ -13,11 +37,7 @@ contributing at least one bond.
   - `nreps`: neighbor shells placed and checked per vector.
   - `maxblock`: construct meta-polyforms up to size `maxblock`, which are then checked for translation tilings.
     `maxblock > 1` makes it possible to find tilings where `poly` appears in rotated configurations.
-  - returns a vector of `(; vectors, bondtypes, complete, order)`: the generating vectors, the
-    bond type of every bond one cell contributes (those inside the block included), whether all
-    open sites were closed, and how many copies of `poly` the cell holds
-
-A cell's composition is `order` copies of `poly` plus `bondtypes`.
+  - returns a vector of [`Tiling`](@ref)
 
 Candidate vectors connect interacting, aligned pairs of open sites, so a closure that needs a
 turn is found only through the block it makes: growing blocks with [`MetaParticleSpecies`](@ref)
@@ -25,10 +45,7 @@ puts the turn inside the cell, leaving a lattice that is a pure translation agai
 """
 function tilings(poly::Polyform; nreps::Integer=2, maxblock::Integer=1)
     rules = bindingrules(poly)
-    V = fieldtype(posetype(rules), :x)
-    T = NamedTuple{(:vectors, :bondtypes, :complete, :order),
-        Tuple{Vector{V},Vector{Int},Bool,Int}}
-    out = T[]
+    out = Tiling{SVector{dimension(rules),numtype(rules)}}[]
     for (parts, opensites, prebonds, order) in _tileblocks(poly, maxblock)
         _addtilings!(out, parts, opensites, prebonds, order, rules, nreps)
     end
@@ -53,11 +70,15 @@ function _addtilings!(out, parts, sites, prebonds, order, rules, nreps)
     pretypes = [_bondtype(rules, siteof, c) for c in prebonds]
     state = (consumed=consumed, contacts=NTuple{2,UnitRange{Int}}[],
         placed=Vector{eltype(parts)}[], chosen=Int[])
-    record!() = push!(out, (vectors=vecs[state.chosen],
-        bondtypes=vcat(pretypes,
-            [_bondtype(rules, siteof, c) for c in state.contacts]),
-        complete=length(state.consumed) == length(siteof),
-        order=order))
+    record!() = push!(
+        out,
+        Tiling(
+            vecs[state.chosen],
+            vcat(pretypes, [_bondtype(rules, siteof, c) for c in state.contacts]),
+            length(state.consumed) == length(siteof),
+            order,
+        ),
+    )
     _tilings!(record!, state, parts, rules, vecs, siteof, nreps, dimension(rules), 1)
     return out
 end
@@ -390,8 +411,13 @@ function _ischain(poly::Polyform)
            all(part -> _bonddegree(poly, part) <= 2, poly.particles)
 end
 
-_bondtype(rules, siteof, (r1, r2)) =
-    findfirst(==(minmax(color(siteof[r1]), color(siteof[r2]))), rules._bondlist)
+# Every recorded contact joins two sites that interact -- `_overlap_and_contacts` refuses the
+# others before they reach here -- so their color pair is always in the bond list.
+function _bondtype(rules, siteof, (r1, r2))
+    i = findfirst(==(minmax(color(siteof[r1]), color(siteof[r2]))), bonded_colors(rules))
+    isnothing(i) && error("Internal error: a recorded contact has no bond type. Please file an issue.")
+    return i
+end
 
 # Translations that lay an open site onto a compatible, already-aligned partner site. Both signs
 # appear (the site pair swaps), so the shell search only needs non-negative coefficients.

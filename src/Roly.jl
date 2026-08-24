@@ -33,7 +33,7 @@ public canonbindingsite, canonbindingsites
 # Environments
 export PolyformEnvironment, ParticleEnvironment, BondEnvironment
 export particleenvironments, bondenvironments, crop, rootenvironment
-export tilings, isunitcell, tilelatticevectors, cantile, canchain, isunbounded, chainstatebound, growthwitness
+export Tiling, tilings, isunitcell, tilelatticevectors, cantile, canchain, isunbounded, chainstatebound, growthwitness
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
