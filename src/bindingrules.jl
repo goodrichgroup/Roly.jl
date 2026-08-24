@@ -97,9 +97,8 @@ end
 # A `Bool` matrix is an interaction matrix, never a bond list, so the species count has to come
 # from its size rather than from the largest species index a bond names.
 function BindingRules(intmat::AbstractMatrix{Bool}, particlespecies::ParticleSpecies)
-    n = size(intmat, 1)
-    n == size(intmat, 2) || throw(ArgumentError("interaction matrix must be square"))
-    k = _colorspan(particlespecies)
+    _checkshape(intmat)
+    n, k = size(intmat, 1), _colorspan(particlespecies)
     n % k == 0 || throw(
         ArgumentError(
             "an interaction matrix of size $n cannot be split among copies of a species " *
@@ -408,10 +407,9 @@ function _parse_intmat(bonds::AbstractMatrix{<:Integer}, siteloc2color, ncolors)
 end
 
 function _parse_intmat(intmat::AbstractMatrix{Bool}, siteloc2color, ncolors)
+    _checkshape(intmat)
     n = size(intmat, 1)
-    n == size(intmat, 2) || throw(ArgumentError("interaction matrix must be square"))
     n == ncolors || throw(ArgumentError("interaction matrix size ($n) does not match the number of colors ($ncolors)"))
-    intmat == intmat' || throw(ArgumentError("interaction matrix must be symmetric"))
     return Symmetric(Matrix{Bool}(intmat))
 end
 function _intmat_from_bonds(bonds, siteloc2color, ncolors)
@@ -425,6 +423,12 @@ function _intmat_from_bonds(bonds, siteloc2color, ncolors)
     return Symmetric(intmat)
 end
 
+# `Bool` is an `Integer`, so this is what keeps an interaction matrix out of the bond-list check.
+function _checkshape(intmat::AbstractMatrix{Bool})
+    size(intmat, 1) == size(intmat, 2) || throw(ArgumentError("interaction matrix must be square"))
+    intmat == intmat' || throw(ArgumentError("interaction matrix must be symmetric"))
+    return nothing
+end
 function _checkshape(bonds::AbstractMatrix{<:Integer})
     mustbe4 = size(bonds, 2)
     mustbe4 != 4 && throw(ArgumentError("bonds must be defined in the form [spcs1 site1 spcs2 site2]"))
