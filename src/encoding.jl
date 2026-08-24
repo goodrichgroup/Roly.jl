@@ -959,12 +959,12 @@ function _eachsitesymmetry(f, poses, sitesyms, sitelabels)
 end
 
 """
-    _site_symmetries(poses, sitesyms, sitelabels)
+    _sitesymmetries(poses, sitesyms, sitelabels)
 
 Return the site permutations of [`_eachsitesymmetry`](@ref), for callers that hold the site
 geometry rather than a [`ParticleSpecies`](@ref).
 """
-function _site_symmetries(poses, sitesyms, sitelabels)
+function _sitesymmetries(poses, sitesyms, sitelabels)
     perms = Vector{Int}[]
     _eachsitesymmetry((_, perm) -> push!(perms, perm), poses, sitesyms, sitelabels)
     return perms
@@ -1014,7 +1014,7 @@ return one orbit index per site.
 function siteorbits(poses, sitesyms, colors)
     n = length(poses)
     orbit = collect(1:n)
-    for perm in _site_symmetries(poses, sitesyms, colors)
+    for perm in _sitesymmetries(poses, sitesyms, colors)
         for i in 1:n
             lo, hi = minmax(orbit[i], orbit[perm[i]])
             hi == lo && continue
@@ -1044,7 +1044,7 @@ Return the order of each site's stabilizer: how many of the particle's own
 symmetries leave the site where it is.
 """
 function stabilizerorders(poses, sitesyms, sitelabels)
-    perms = _site_symmetries(poses, sitesyms, sitelabels)
+    perms = _sitesymmetries(poses, sitesyms, sitelabels)
     return [count(perm -> perm[i] == i, perms) for i in eachindex(poses)]
 end
 
