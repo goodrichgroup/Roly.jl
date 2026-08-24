@@ -26,7 +26,7 @@ A species must define these methods:
 |---|---|
 | `graphrep(ps)` | The species' `NautyDiGraph`. See below. |
 | `nsites(ps)` | Number of binding sites. |
-| `bindingsites(ps, i)` | The `i`th `BindingSite`. |
+| `bindingsite(ps, i)` | The `i`th `BindingSite`. |
 | `bounding_radius(ps)` | Radius of a sphere at the pose origin enclosing the particle. |
 | `overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)` | Whether two particles at given poses overlap. |
 | `Base.copy(ps)` | Deep copy. `BindingRules` copies each species to reassign its colors. |
@@ -51,22 +51,39 @@ Each `BindingSite` records its vertices in the `vertices` field, so `BindingSite
 A site may instead span a contiguous range of vertices, which is how 3D species record the twist of a face: [`dartencoding`](@ref) gives each face its own directed cycle.
 A graph built that way must keep each site's vertices together, so that no automorphism can carry part of one site onto part of another.
 
+### Every finite rotation group has a dart encoding
+
+Whatever your species looks like, if its rotation group is finite you can encode it as the dart encoding of one of Roly's bodies.
+Three facts chain together.
+
+1. The finite subgroups of `SO(3)` are exactly `C_n`, `D_n`, `T`, `O` and `I` (the classification of finite rotation groups).
+   [`RotationGroup`](@ref) names these five families and nothing else.
+2. Each is realized as the proper rotation group of a convex polyhedron Roly can build: `C_n` by [`Pyramid`](@ref), `D_n` by [`Prism`](@ref) and [`Antiprism`](@ref), and `T`, `O`, `I` by the Platonic solids.
+3. The automorphism group of a body's dart encoding is that body's rotation group.
+   A rotation is determined by the image of a single dart, and no rotation other than the identity fixes a dart, so the group acts freely on the darts and the graph can record it exactly.
+
+Labeling then carves out any subgroup you need: [`dartencoding`](@ref) inherits one label per face, and the automorphisms that survive are those preserving the labeling.
+Taking all labels distinct leaves the trivial group, taking them all equal leaves the full rotation group, and [`faceorbits`](@ref) gives the labeling for anything in between.
+So picking an encoding for a custom species is a matter of finding the body with your species' rotation group, not of inventing a graph.
+
+In 2D the question does not arise: the finite subgroups of `SO(2)` are the `C_n`, and [`cycleencoding`](@ref) covers them all.
+
 ## What a binding site records
 
 Besides its pose and color, a [`BindingSite`](@ref) carries three numbers that decide how a partner attaches:
 
 | field | meaning |
 |---|---|
-| `gauge` | order of the site's own rotational symmetry about its normal. Always 1 in 2D. [`facegauge`](@ref) computes it for a polyhedron face. |
-| `stab` | order of the site's stabilizer in the particle's rotation group, from [`sitestabilizers`](@ref). |
+| `sitesym` | order of the site's own rotational symmetry about its normal. Always 1 in 2D. [`facesym`](@ref) computes it for a polyhedron face. |
+| `stab` | order of the site's stabilizer in the particle's rotation group, from [`stabilizerorders`](@ref). |
 | `locking` | whether the site holds its partner in the orientation its frame names (the default) or admits every orientation the shape permits. |
 
-[`nphases`](@ref) reads these to decide how many distinct bonds a pair of sites has.
+Roly reads these to decide how many distinct bonds a pair of sites has.
 
-In 2D both `gauge` and `stab` are 1, so the five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` is right.
-In 3D `gauge` is still 1 for a site on a single vertex, but `stab` need not be, since a rotation about a patch's axis can carry the particle onto itself.
-Compute it with [`sitestabilizers`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, gauge, stab)`.
-See [Orientation and phases](orientation.md).
+In 2D both `sitesym` and `stab` are 1, so the five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` is right.
+In 3D `sitesym` is still 1 for a site on a single vertex, but `stab` need not be, since a rotation about a patch's axis can carry the particle onto itself.
+Compute it with [`stabilizerorders`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, sitesym, stab)`.
+See [Orientation and twists](orientation.md).
 
 ## A worked example: rectangle
 
@@ -75,7 +92,7 @@ A non-square rectangle with a site at each edge midpoint, exercising the whole i
 ```julia
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose
-import Roly: graphrep, nsites, bindingsites,
+import Roly: graphrep, nsites, bindingsite,
              bounding_radius, isconvex, overlap
 using NautyGraphs
 using StaticArrays, LinearAlgebra, Rotations
@@ -115,7 +132,7 @@ function Rectangle(width::Real, height::Real; colors=1:4)
         Pose(SVector{2,F}(-w/2, 0),  Angle2d{F}(F(π))),
         Pose(SVector{2,F}(0,   h/2), Angle2d{F}(F(π)/2)),
     ]
-    # A 2D site has no turn about its in-plane normal, so every gauge is 1.
+    # A 2D site has no turn about its in-plane normal, so every `sitesym` is 1.
     labels = siteorbits(poses, ones(Int, 4), collect(colors))
 
     # Directed 4-cycle, one vertex per binding site; `ranges[i]` is `i:i` here.
@@ -143,6 +160,7 @@ For this rectangle it returns `[1, 2, 1, 2]` even when all four colors are equal
 The same call on a square with one color returns `[1, 1, 1, 1]`.
 
 If you do write labels by hand, call [`check_encoding`](@ref) in your constructor to confirm they match the shape.
+It requires the labeling to be *exactly* the symmetry orbits, not merely fine enough to give the right symmetry number, because everything downstream reads a shared label as "a rotation carries one of these sites onto the other".
 
 ### Interface methods
 
@@ -151,7 +169,7 @@ Four of them just read the struct:
 ```julia
 graphrep(ps::Rectangle) = ps.g
 nsites(ps::Rectangle) = length(ps.sites)
-bindingsites(ps::Rectangle, i::Integer) = ps.sites[i]
+bindingsite(ps::Rectangle, i::Integer) = ps.sites[i]
 bounding_radius(ps::Rectangle) = sqrt(ps.width^2 + ps.height^2) / 2
 isconvex(::Rectangle) = true
 
@@ -188,7 +206,7 @@ It now works like any built-in one:
 rect = Rectangle(2.0, 1.0)
 bonds = [1 1 1 3;  # right edge binds to left edge
          1 2 1 4]  # bottom edge binds to top edge
-sys = BindingRules(bonds, rect)
+rules = BindingRules(bonds, rect)
 
-polys = polygen(sys; maxsize=6)
+polys = polygen(rules; maxsize=6)
 ```

@@ -9,8 +9,7 @@ overlap, and it is enough to test a finite candidate set. In 2D the edge normals
 In 3D it takes both solids' face normals and the cross products of their edge directions,
 which catch the edge-on-edge configurations no face normal separates.
 
-Axes need not be normalized or even nonzero: each is scaled here, and a degenerate one (from
-parallel edges, say) carries no information and is skipped.
+Axes need not be normalized: each axis is scaled, and degenerate ones (e.g. from parallel edges) are skipped.
 """
 function sat_overlap(axes, corners1, pose1, corners2, pose2, skin::Real)
     for axis in axes
@@ -30,12 +29,11 @@ end
 The normals of a 2D polygon's edges, in world coordinates: candidate separating
 axes for [`sat_overlap`](@ref). Only the direction matters, so the sign is not fixed.
 """
-edgenormals(corners, pose) = (
-    let e = pose.psi * (corners[mod1(i + 1, length(corners))] - corners[i])
+function edgenormals(corners, pose)
+    (let e = pose.psi * (corners[mod1(i + 1, length(corners))] - corners[i])
         SVector(-e[2], e[1])
-    end
-    for i in eachindex(corners)
-)
+    end for i in eachindex(corners))
+end
 
 """
     is_cutset(g, vs[; target, visited, queue])
@@ -44,11 +42,13 @@ Return `true` if removing vertices `vs` from `g` disconnects the graph.
 
 `target`, `visited`, and `queue` are buffer arrays of length `nv(g)`, which will be modified.
 """
-function is_cutset(g::AbstractNautyGraph, vs::AbstractVector{<:Integer};
+function is_cutset(
+    g::AbstractNautyGraph,
+    vs::AbstractVector{<:Integer};
     target::AbstractVector{Bool}=zeros(Bool, nv(g)),
     visited::AbstractVector{Bool}=zeros(Bool, nv(g)),
-    queue::AbstractVector=zeros(Cint, nv(g)))
-
+    queue::AbstractVector=zeros(Cint, nv(g)),
+)
     fill!(target, false)
     fill!(visited, false)
     visited[vs] .= true
@@ -88,7 +88,6 @@ function is_cutset(g::AbstractNautyGraph, vs::AbstractVector{<:Integer};
 
     return true
 end
-
 
 function blockdiag!(g::AbstractNautyGraph, h::AbstractNautyGraph)
     ng, nh = nv(g), nv(h)

@@ -20,17 +20,16 @@ BindingSite
 color
 ```
 
-### Bonds and phases
+### Bonds and twists
 
 How many distinct ways a partner may attach at a site, and which one a given attachment is.
-See [Orientation and phases](orientation.md) for what the numbers mean.
+See [Orientation and twists](orientation.md) for what the numbers mean.
 
 ```@docs
-twistfreedom
-bondperiod
-nphases
-phase
-standard_offset
+twistfreedom(::BindingSite)
+twistfreedom(::BindingSite, ::BindingSite)
+twist
+standard_twist
 contact_pairing
 ```
 
@@ -48,13 +47,16 @@ facenormal
 edgemidpoint
 minedgelength
 inradius
-rotationgroup
-geometriclabels
-facegauge
+rotationgroup(::Polyhedron)
+rotationgroup(::ParticleSpecies)
+faceorbits
+facesym
 siteorbits
-site_symmetry
+sitelabel
+permutationgroup
 check_encoding
-sitestabilizers
+stabilizerorders(::ParticleSpecies)
+stabilizerorders(::Any, ::Any, ::Any)
 dartencoding
 cycleencoding
 ```
@@ -89,6 +91,7 @@ Antiprism
 ```@docs
 ParticleSpecies
 SpeciesAndPose
+bindingsite
 bindingsites
 nsites
 graphrep
@@ -105,11 +108,12 @@ edgenormals
 
 ```@docs
 PolygonParticleSpecies
+UnitNgon
 UnitTriangle
 UnitSquare
 UnitHexagon
 PolyhedronParticleSpecies
-shape
+polyhedron
 UnitTetrahedron
 UnitCube
 UnitOctahedron
@@ -145,6 +149,10 @@ Polyform
 nparticles
 bindingrules
 composition
+canonbindingsite
+canonbindingsites
+rotationgroup(::Polyform)
+permutationgroup(::Polyform)
 bonds
 bondindex
 interior_edges

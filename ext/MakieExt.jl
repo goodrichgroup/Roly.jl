@@ -4,7 +4,7 @@ using Roly
 using Makie
 using LinearAlgebra: dot, normalize
 import Roly: species, bindingrules, polyformplot, polyformplot!, render
-import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, shape, bounding_radius
+import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, polyhedron, bounding_radius
 
 @recipe PolyformPlot (poly, ) begin
     bindingrules = nothing
@@ -21,7 +21,7 @@ function Makie.plot!(p::PolyformPlot{<:Tuple{<:ParticleSpecies}})
     # rules are optional too, and decide which sites are drawn as bonding.
     pose = p.pose[]
     args = isnothing(pose) ? (p.poly[],) : (p.poly[], pose)
-    plot_particlespecies!(p, args...; sys=p.bindingrules[])
+    plot_particlespecies!(p, args...; rules=p.bindingrules[])
     return p
 end
 
@@ -36,11 +36,11 @@ end
 
 
 """
-    plot_particlespecies!(ax, spcs::ParticleSpecies, pose::Pose; site_color, kwargs...)
+    plot_particlespecies!(ax, spcs::ParticleSpecies, pose::Pose; sitecolor, kwargs...)
 
 Draw the particle species `spcs` at `pose` onto `ax`.
 
-`site_color` is an optional callback `(species_index, site_index) -> color` that controls
+`sitecolor` is an optional callback `(speciesindex, siteindex) -> color` that controls
 per-site coloring. When omitted, the species' palette is used, with sites that no bond can
 use greyed out.
 """
@@ -74,15 +74,15 @@ Species that provide a [`particlemesh`](@ref) are merged into one mesh so they d
 against each other; the rest are drawn one plot per particle.
 """
 function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
-    sys = bindingrules(poly)
+    rules = bindingrules(poly)
     pts, tris, cols = Point3f[], NTuple{3,Int}[], RGBAf[]
 
     for part in poly.particles
-        ps = species(sys, part.species_index)
+        ps = species(rules, part.speciesindex)
         part_pose = isnothing(pose) ? part.pose : pose * part.pose
-        geom = particlemesh(ps, part_pose; sys, kwargs...)
+        geom = particlemesh(ps, part_pose; rules, kwargs...)
         if isnothing(geom)
-            plot_particlespecies!(ax, ps, part_pose; sys, kwargs...)
+            plot_particlespecies!(ax, ps, part_pose; rules, kwargs...)
             continue
         end
         p, t, c = geom

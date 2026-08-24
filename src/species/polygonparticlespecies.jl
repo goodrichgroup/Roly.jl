@@ -29,11 +29,11 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real
         ψ = Angle2d{F}(-F(π) * (1 / 2 + 2 / n * (i - 1)))
         Pose(SVector{2,F}(pol2cart(r_in, rotation_angle(ψ))), ψ)
     end
-    # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout, and with
+    # A 2D site has no turn about its in-plane normal, so its sitesym is 1 throughout, and with
     # it the stabilizer: the only rotation fixing a site is the identity.
-    gauges = ones(Int, n)
-    labels = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilizers(poses, gauges, labels)
+    sitesyms = ones(Int, n)
+    labels = siteorbits(poses, sitesyms, collect(colors))
+    stabs = stabilizerorders(poses, sitesyms, labels)
 
     g, ranges = cycleencoding(n; labels)
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]
@@ -44,9 +44,7 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real
     corners = [
         SVector{2,F}(r_out * cos(-π / 2 - (2k - 1) * π / n), r_out * sin(-π / 2 - (2k - 1) * π / n)) for k in 1:n
     ]
-    return check_encoding(
-        PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, tol)
-    )
+    return check_encoding(PolygonParticleSpecies{F,eltype(sites)}(g, sites, corners, r_in, r_out, tol))
 end
 
 function Base.show(io::Core.IO, ps::PolygonParticleSpecies)
@@ -54,15 +52,12 @@ function Base.show(io::Core.IO, ps::PolygonParticleSpecies)
 end
 
 function Base.copy(pps::PolygonParticleSpecies)
-    return PolygonParticleSpecies(
-        copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax, pps.skin
-    )
+    return PolygonParticleSpecies(copy(pps.g), copy(pps.sites), copy(pps.corners), pps.rmin, pps.rmax, pps.skin)
 end
-
 
 graphrep(p::PolygonParticleSpecies) = p.g
 nsites(p::PolygonParticleSpecies) = length(p.sites)
-bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
+bindingsite(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolygonParticleSpecies) = true
 
 """
@@ -82,9 +77,9 @@ end
 
 # The three regular polygons that tile the plane. `rmin` is the inradius r, and a regular n-gon
 # has edge length 2r*tan(pi/n).
-_tilingcell(ps::PolygonParticleSpecies) =
-    nsites(ps) in (3, 4, 6) && _isregular(ps.corners) ?
-    (nsites(ps), 2 * ps.rmin * tan(π / nsites(ps))) : nothing
+function _tilingcell(ps::PolygonParticleSpecies)
+    nsites(ps) in (3, 4, 6) && _isregular(ps.corners) ? (nsites(ps), 2 * ps.rmin * tan(π / nsites(ps))) : nothing
+end
 
 function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPose{<:PolygonParticleSpecies}; kwargs...)
     spcs1, pose1 = p1
@@ -96,12 +91,27 @@ function overlap(p1::SpeciesAndPose{<:PolygonParticleSpecies}, p2::SpeciesAndPos
     d >= spcs1.rmax + spcs2.rmax && return false
     d < (spcs1.rmin + spcs2.rmin) - skin && return true
 
-    return sat_overlap(Iterators.flatten((edgenormals(spcs1.corners, pose1),
-                                          edgenormals(spcs2.corners, pose2))),
-                       spcs1.corners, pose1, spcs2.corners, pose2, skin)
+    return sat_overlap(
+        Iterators.flatten((edgenormals(spcs1.corners, pose1), edgenormals(spcs2.corners, pose2))),
+        spcs1.corners,
+        pose1,
+        spcs2.corners,
+        pose2,
+        skin,
+    )
 end
 
 bounding_radius(ps::PolygonParticleSpecies) = ps.rmax
+
+"""
+    UnitNgon(n, a=1.0; kwargs...)
+
+A regular `n`-gon with edge length `a`, with one binding site per edge. Rotation group `C_n`.
+
+Spelled to match [`UnitPrism`](@ref) and the other body constructors; it is
+[`PolygonParticleSpecies`](@ref) under a name that reads the same way.
+"""
+UnitNgon(n::Integer, a::Real=1.0; kwargs...) = PolygonParticleSpecies(n, a; kwargs...)
 
 """
     UnitTriangle

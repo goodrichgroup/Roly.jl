@@ -1,14 +1,14 @@
-# Orientation and phases
+# Orientation and twists
 
 ```@meta
 CurrentModule = Roly
 ```
 
 A bond fixes which two sites touch, and how the two particles are turned relative to one another.
-On a symmetric particle it can fix that turn in more than one way, and each way is a *phase*.
+On a symmetric particle it can fix that turn in more than one way, and each way is a *twist*.
 
 This page matters for 3D species whose faces have their own symmetry.
-In 2D every bond has exactly one phase.
+In 2D every bond has exactly one twist.
 
 ## What a site's pose says
 
@@ -20,27 +20,27 @@ For a polyhedron face the twist reference is "local z points at the midpoint of 
 | quantity | meaning | square side face of a triangular prism |
 |---|---|---|
 | `degree` | graph vertices the site owns under [`dartencoding`](@ref) | 4 |
-| `gauge` | order of the face's own rotational symmetry about its normal | 4 |
+| `sitesym` | order of the face's own rotational symmetry about its normal | 4 |
 | `stab` | order of that site's stabilizer in the particle's symmetry group | 2 |
 
 Each divides the next, and all three are equal for a cube face.
-[`facegauge`](@ref) computes `gauge` from the face, [`sitestabilizers`](@ref) computes `stab` from the particle.
+[`facesym`](@ref) computes `sitesym` from the face, [`stabilizerorders`](@ref) computes `stab` from the particle.
 
-## How many phases a bond has
+## How many distinct twists a bond has
 
 A bond fixes the partner's position and normal, leaving a turn about the bond axis.
 Two turns describe the same structure when a rotation of the particle relates them, so the count comes from the particle's symmetry.
 
-Writing `q` for a site's [`twistfreedom`](@ref):
+Writing `q` for a site's own [`twistfreedom`](@ref):
 
 ```
-L = lcm(q₁, q₂)          q = stab if the site is locking, gauge if not
-R = L / stab₂
+ntwists = lcm(q₁, q₂)     q = stab if the site is locking, sitesym if not
+ndistinct = ntwists / stab₂
 ```
 
-`L` is [`bondperiod`](@ref), the turns the bond admits.
-`R` is [`nphases`](@ref), those giving different structures, with `stab₂` the stabilizer of the site being attached.
-A particle with no symmetry has one phase per bond.
+`ntwists` is the two-argument [`twistfreedom`](@ref), the turns the bond admits.
+`ndistinct` counts those giving different structures, with `stab₂` the stabilizer of the site being attached.
+A particle with no symmetry has one twist per bond.
 
 ## Choosing how a bond turns
 
@@ -54,7 +54,7 @@ Making a triangular prism's square sides rotation-free gives both the flat and t
 Turning both faces of a bond by the same angle turns the partner by twice that angle.
 Turning one face of a symmetry orbit differently from the others splits the orbit and lowers the symmetry number, while turning a whole orbit leaves the symmetry alone.
 
-On a symmetric particle the phases come as a set, since a symmetry relates them.
+On a symmetric particle the twists come as a set, since a symmetry relates them.
 Take them all with `locking=false`, or give the faces different colors to single one out.
 
 ## Frames on symmetric faces
@@ -64,6 +64,6 @@ Roly arranges this when the species is built, using the rotations that preserve 
 
 ## Checking a species
 
-[`site_symmetry`](@ref) counts the rotations that carry every site onto a site of the same color.
+[`permutationgroup`](@ref) lists the rotations that carry every site onto a site of the same label, as site permutations; [`rotationgroup`](@ref) lists the same group as rotations.
 [`check_encoding`](@ref) compares that against the graph's symmetry number and throws if they disagree.
 Every built-in species runs it in its constructor; call it in your own if you write graph labels by hand.

@@ -1,30 +1,25 @@
 """
     ParticleSpecies{D,B<:BindingSite}
 
-Abstract supertype of all particle species. `D` is the spatial dimension and `B` is the
-concrete `BindingSite` type.
+Abstract supertype of all particle species in `D` spatial dimensions.
 """
 abstract type ParticleSpecies{D,B<:BindingSite} end
 
 """
     SpeciesAndPose{SPC}
 
-A species paired with a placement, `species => pose`: one particle, positioned. This is what
-the geometric predicates take, since neither a species nor a pose alone is a thing in space.
-[`overlap`](@ref) and [`could_contact`](@ref) are both written
-`overlap(spcs1 => pose1, spcs2 => pose2)`.
+A species paired with a placement, `species => pose`.
+
+Use this type when writing methods for [`overlap`](@ref) and [`could_contact`](@ref).
 """
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
 
 """
     _tilingcell(ps::ParticleSpecies)
 
-Identify the tiling `ps` sits on, or `nothing` if it does not tile. Default `nothing`; a species
-opts in when it tiles space and every bond it can make carries a cell onto another cell.
+Identify the tiling `ps` sits on, or `nothing` if it does not tile.
 
-The identifier must pin down shape as well as size, since equal cells are what
-[`_onlattice`](@ref) tests for. Matching size alone is not enough: unit squares and unit
-triangles can tile the plane together.
+This function is currently considered internal and it is not recommended to define custom methods.
 """
 _tilingcell(::ParticleSpecies) = nothing
 
@@ -45,11 +40,11 @@ posetype(::ParticleSpecies{D,B}) where {D,B} = posetype(B)
 posetype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = posetype(B)
 
 """
-    bindingsites(p::ParticleSpecies, i::Integer)
+    bindingsite(p::ParticleSpecies, i::Integer)
 
 Return the `i`th binding site of particle species `p`.
 """
-function bindingsites end
+function bindingsite end
 
 """
     bindingsites(p::ParticleSpecies)
@@ -57,7 +52,7 @@ function bindingsites end
 Return an iterator over all binding sites of a particle of species `p`.
 """
 function bindingsites(p::ParticleSpecies)
-    return (bindingsites(p, i) for i in 1:nsites(p))
+    return (bindingsite(p, i) for i in 1:nsites(p))
 end
 
 """
@@ -139,7 +134,7 @@ of `graphrep(p)`.
 """
 function symmetrynumber(p::ParticleSpecies)
     # DO NOT `canonize` here: a species' graph must stay in construction order, since
-    # `BindingSite.vertices` indexes it directly and `bindingsites(::Particle, ...)` reaches those
+    # `BindingSite.vertices` indexes it directly and `bindingsite(::Particle, ...)` reaches those
     # vertices by shifting the range by a leading vertex. Reordering here would silently
     # decouple the two.
     _, autg = nauty(graphrep(p))

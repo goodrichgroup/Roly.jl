@@ -2,15 +2,15 @@ using Roly
 using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron,
             UnitDodecahedron, UnitIcosahedron, UnitPyramid, UnitPrism, UnitAntiprism,
             Polyhedron, Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron,
-            Pyramid, Prism, Antiprism, shape, corners, nfaces, facedegree, facecentroid,
-            geometriclabels, rotationgroup, inradius, edgemidpoint,
+            Pyramid, Prism, Antiprism, polyhedron, corners, nfaces, facedegree, facecentroid,
+            faceorbits, rotationgroup, inradius, edgemidpoint,
             nsites, dimension, isconvex, numtype, bindingsites, graphrep, setcolors!, color,
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
-            collect_compatible_pairs, tocanon, toorig, BindingRules, Polyform, nbonds,
-            site_symmetry, PatchySphere
+            collect_attachments, tocanon, toorig, BindingRules, Polyform, nbonds,
+            permutationgroup, PatchySphere
 
 using Roly: PolyhedronParticleSpecies, Prism, Tetrahedron, BindingRules, Polyform,
-            raise!, collect_compatible_pairs, symmetrynumber, graphrep, nfaces
+            raise!, collect_attachments, symmetrynumber, graphrep, nfaces
 using Rotations: RotMatrix3, rotation_angle
 using LinearAlgebra: inv
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
@@ -32,7 +32,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test numtype(ps) === Float64
         @test isconvex(ps)
         @test nsites(ps) == nf
-        @test shape(ps) === shp || nfaces(shape(ps)) == nf
+        @test polyhedron(ps) === shp || nfaces(polyhedron(ps)) == nf
 
         # Default labels are all distinct, so the sparse encoding is used.
         @test nv(graphrep(ps)) == nf
@@ -40,11 +40,11 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
         # One site per face, sitting at the face centroid.
         for i in 1:nf
-            @test isapprox(bindingsites(ps, i).pose.x, facecentroid(shp, i); atol=1e-10)
-            @test length(bindingsites(ps, i).vertices) == 1
+            @test isapprox(bindingsite(ps, i).pose.x, facecentroid(shp, i); atol=1e-10)
+            @test length(bindingsite(ps, i).vertices) == 1
         end
         # The closest site is at the inradius, and everything is inside the bound.
-        @test isapprox(minimum(norm(bindingsites(ps, i).pose.x) for i in 1:nf), inradius(shp))
+        @test isapprox(minimum(norm(bindingsite(ps, i).pose.x) for i in 1:nf), inradius(shp))
         @test all(norm(c) <= Roly.bounding_radius(ps) + 1e-10 for c in corners(shp))
 
         @test occursin("PolyhedronParticleSpecies", sprint(show, ps))
@@ -55,7 +55,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # at the midpoint of the face's first edge
     for (name, ps, shp, nf, _) in solids
         for i in 1:nf
-            psi = bindingsites(ps, i).pose.psi
+            psi = bindingsite(ps, i).pose.psi
             @test isapprox(psi[:, 1], Roly.facenormal(shp, i); atol=1e-10)
             v = edgemidpoint(shp, i, 1) - facecentroid(shp, i)
             @test isapprox(psi[:, 3], normalize(v); atol=1e-10)
@@ -65,7 +65,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     # The twist references have to agree up to `stab` under every label-preserving rotation:
     # that is what `_propagate_faces` establishes, and what makes bonds between symmetry-related
-    # faces equivalent. `_canonical_faces` on its own only gets them to agree up to `gauge`,
+    # faces equivalent. `_canonical_faces` on its own only gets them to agree up to `sitesym`,
     # which is strictly weaker wherever a face is more symmetric than the body around it.
     # Tetrahedron and octahedron are here for the cases with no translation-mated faces at all:
     # a tetrahedron has no antiparallel pair, and an octahedron's are related by inversion,
@@ -75,9 +75,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
                         ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3)),
                         ("Antiprism(4)", Antiprism(4)), ("Dodecahedron", Dodecahedron()),
                         ("Tetrahedron", Tetrahedron()), ("Octahedron", Octahedron())]
-        ps = PolyhedronParticleSpecies(shp; colors=geometriclabels(shp))
-        labs = Roly.labels(graphrep(ps))
-        sitelabel(i) = labs[first(Roly.bindingsites(ps, i).vertices)]
+        ps = PolyhedronParticleSpecies(shp; colors=faceorbits(shp))
+        sitelabel(i) = Roly.sitelabel(ps, i)
         centroids = [facecentroid(shp, i) - sum(corners(shp)) / length(corners(shp))
                      for i in 1:nfaces(shp)]
         faceat(x) = findfirst(i -> isapprox(centroids[i], x; atol=1e-8), 1:nfaces(shp))
@@ -90,10 +89,10 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
         for Q in group, i in 1:nfaces(shp)
             j = faceat(Q * centroids[i])
-            bi, bj = Roly.bindingsites(ps, i), Roly.bindingsites(ps, j)
+            bi, bj = Roly.bindingsite(ps, i), Roly.bindingsite(ps, j)
             @test bj.stab == bi.stab
             # Q carries site i's frame onto site j's, up to a turn about j's normal lying in
-            # j's stabilizer -- not merely in its gauge.
+            # j's stabilizer -- not merely in its sitesym.
             @test any(0:(bj.stab - 1)) do m
                 isapprox(Q * bi.pose.psi, bj.pose.psi * RotX(2π * m / bj.stab); atol=1e-8)
             end
@@ -105,11 +104,11 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     for (name, shp) in [("Cube", Cube()), ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3))]
         sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
         ps = PolyhedronParticleSpecies(shp; colors=[i in sides ? 1 : 2 for i in 1:nfaces(shp)])
-        sys = BindingRules([1 first(sides) 1 first(sides)], ps)
+        rules = BindingRules([1 first(sides) 1 first(sides)], ps)
         step = 2 * norm(facecentroid(shp, first(sides)))
-        poly = Polyform(sys, 1)
+        poly = Polyform(rules, 1)
         grown = 0
-        for (site, loc, r) in collect_compatible_pairs(poly)
+        for (site, loc, r) in collect_attachments(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
             a, b = trial.particles
@@ -125,7 +124,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     for (name, _, shp, nf, order) in solids
         # Faces grouped by geometric orbit recover the solid's rotation group.
-        geo = PolyhedronParticleSpecies(shp; colors=geometriclabels(shp))
+        geo = PolyhedronParticleSpecies(shp; colors=faceorbits(shp))
         @test symmetrynumber(geo) == order == length(rotationgroup(shp))
         # Distinct labels give 1, regardless of encoding.
         @test symmetrynumber(PolyhedronParticleSpecies(shp)) == 1
@@ -141,60 +140,60 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         # Distinct labels: both encodings describe the arrangement, and both give 1.
         for build in (PolyhedronParticleSpecies, dartspecies, cyclespecies)
             distinct = build(shp)
-            @test symmetrynumber(distinct) == site_symmetry(distinct) == 1
+            @test symmetrynumber(distinct) == length(permutationgroup(distinct)) == 1
         end
         # Repeated labels: only the dart encoding carries the rotation group, and forcing the
         # sparse one is rejected rather than silently reporting the cyclic order.
-        geo = dartspecies(shp; colors=geometriclabels(shp))
-        @test symmetrynumber(geo) == site_symmetry(geo) == order
+        geo = dartspecies(shp; colors=faceorbits(shp))
+        @test symmetrynumber(geo) == length(permutationgroup(geo)) == order
         order == nfaces(shp) ||
-            @test_throws ArgumentError cyclespecies(shp; colors=geometriclabels(shp))
+            @test_throws ArgumentError cyclespecies(shp; colors=faceorbits(shp))
     end
     for (shp, order) in [(Tetrahedron(), 12), (Cube(), 24), (Dodecahedron(), 60), (Prism(5), 10)]
-        sphere = PatchySphere(shp, 1.0; colors=geometriclabels(shp))
-        @test symmetrynumber(sphere) == site_symmetry(sphere) == order
+        sphere = PatchySphere(shp, 1.0; colors=faceorbits(shp))
+        @test symmetrynumber(sphere) == length(permutationgroup(sphere)) == order
     end
 
     # Site stabilizers
-    # How much of a site's own symmetry the whole particle keeps. At most its gauge, and the
+    # How much of a site's own symmetry the whole particle keeps. At most its sitesym, and the
     # ratio is how many distinct ways a partner can attach there: turns in the stabilizer put
     # the same body in the same place with only its sites permuted.
-    gauges(ps) = [bindingsites(ps, i).gauge for i in 1:nsites(ps)]
-    phases(ps) = gauges(ps) .÷ Roly.sitestabilizers(ps)
+    sitesyms(ps) = [bindingsite(ps, i).sitesym for i in 1:nsites(ps)]
+    ntwists(ps) = sitesyms(ps) .÷ Roly.stabilizerorders(ps)
 
     # A cube keeps all four turns about a face normal, so a face-to-face bond has one
-    # phase and nothing changes for polycubes.
+    # twist and nothing changes for polycubes.
     cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
-    @test gauges(cube) == fill(4, 6)
-    @test Roly.sitestabilizers(cube) == fill(4, 6)
-    @test phases(cube) == fill(1, 6)
+    @test sitesyms(cube) == fill(4, 6)
+    @test Roly.stabilizerorders(cube) == fill(4, 6)
+    @test ntwists(cube) == fill(1, 6)
 
     # Distinguishing the caps costs the side faces two of those turns, since a quarter turn
     # about a side normal carries the other sides onto caps.
     caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in Roly.facenormals(Cube())]
     capped = PolyhedronParticleSpecies(Cube(); colors=caps)
-    @test Roly.sitestabilizers(capped) == [c == 2 ? 4 : 2 for c in caps]
-    @test phases(capped) == [c == 2 ? 1 : 2 for c in caps]
+    @test Roly.stabilizerorders(capped) == [c == 2 ? 4 : 2 for c in caps]
+    @test ntwists(capped) == [c == 2 ? 1 : 2 for c in caps]
 
     # A triangular prism's side faces are squares
-    # when h == a (gauge 4) but the prism is only 2-fold about them, so a partner can attach
+    # when h == a (sitesym 4) but the prism is only 2-fold about them, so a partner can attach
     # two ways: in the plane, or tipped out of it.
-    tri = PolyhedronParticleSpecies(Prism(3); colors=geometriclabels(Prism(3)))
-    @test gauges(tri) == [3, 4, 4, 4, 3]
-    @test Roly.sitestabilizers(tri) == [3, 2, 2, 2, 3]
-    @test phases(tri) == [1, 2, 2, 2, 1]
+    tri = PolyhedronParticleSpecies(Prism(3); colors=faceorbits(Prism(3)))
+    @test sitesyms(tri) == [3, 4, 4, 4, 3]
+    @test Roly.stabilizerorders(tri) == [3, 2, 2, 2, 3]
+    @test ntwists(tri) == [1, 2, 2, 2, 1]
 
-    # Make the prism taller, so that faces become rectangles: gauge and stabilizer agree at 2,
-    # leaving a single phase.
+    # Make the prism taller, so that faces become rectangles: sitesym and stabilizer agree at 2,
+    # leaving a single twist.
     tall = Prism(3, 1.0; h=2.0)
-    tallps = PolyhedronParticleSpecies(tall; colors=geometriclabels(tall))
-    @test gauges(tallps) == [3, 2, 2, 2, 3]
-    @test phases(tallps) == fill(1, 5)
+    tallps = PolyhedronParticleSpecies(tall; colors=faceorbits(tall))
+    @test sitesyms(tallps) == [3, 2, 2, 2, 3]
+    @test ntwists(tallps) == fill(1, 5)
 
-    # A stabilizer always divides the gauge, and always divides the symmetry number.
+    # A stabilizer always divides the sitesym, and always divides the symmetry number.
     for ps in (cube, capped, tri, tallps, UnitDodecahedron, UnitAntiprism(4))
-        stabs = Roly.sitestabilizers(ps)
-        @test all(gauges(ps) .% stabs .== 0)
+        stabs = Roly.stabilizerorders(ps)
+        @test all(sitesyms(ps) .% stabs .== 0)
         @test all(symmetrynumber(ps) .% stabs .== 0)
     end
 
@@ -204,7 +203,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # 12.
     pyramid = PolyhedronParticleSpecies(Pyramid(3); colors=fill(1, 4))
     @test length(unique(Roly.labels(graphrep(pyramid)))) == 2
-    @test symmetrynumber(pyramid) == site_symmetry(pyramid) == 3
+    @test symmetrynumber(pyramid) == length(permutationgroup(pyramid)) == 3
     # The sparse encoding imposes a cyclic order, which is not the symmetry of a tetrahedral
     # or octahedral patch arrangement: it claims n where the truth is |G|. This is the failure
     # that using `cycleencoding`/`dartencoding` does not rule out on its own.
@@ -227,19 +226,19 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test nv(graphrep(PolyhedronParticleSpecies(shp; colors=fill(1, 6)))) == 24
     @test nv(graphrep(dartspecies(shp))) == 24
     @test nv(graphrep(cyclespecies(shp))) == 6
-    @test all(length(bindingsites(dartspecies(shp), i).vertices) == 4 for i in 1:6)
+    @test all(length(bindingsite(dartspecies(shp), i).vertices) == 4 for i in 1:6)
 
     @test_throws ArgumentError PolyhedronParticleSpecies(shp; colors=1:5)
 
     ps = PolyhedronParticleSpecies(Cube(); colors=[3, 1, 4, 1, 5, 9])
-    @test color(bindingsites(ps, 1)) == 3
-    @test color(bindingsites(ps, 5)) == 5
+    @test color(bindingsite(ps, 1)) == 3
+    @test color(bindingsite(ps, 5)) == 5
 
     cp = copy(ps)
     # A recoloring that groups the sites the same way needs no new graph, so it applies in place.
     setcolors!(cp, [30, 10, 40, 10, 50, 90])
-    @test color(bindingsites(cp, 1)) == 30
-    @test color(bindingsites(ps, 1)) == 3          # the copy is independent
+    @test color(bindingsite(cp, 1)) == 30
+    @test color(bindingsite(ps, 1)) == 3          # the copy is independent
     @test_throws ArgumentError setcolors!(cp, [1, 2])
 
     # A recoloring that groups sites differently does need a new graph. This cube's colors are nearly all
@@ -248,7 +247,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test symmetrynumber(cp) == symmetrynumber(ps) == 1
     @test_throws ArgumentError setcolors!(cp, fill(10, 6))
     @test symmetrynumber(cp) == 1                  # and the failed call leaves it untouched
-    @test [color(bindingsites(cp, i)) for i in 1:6] == [30, 10, 40, 10, 50, 90]
+    @test [color(bindingsite(cp, i)) for i in 1:6] == [30, 10, 40, 10, 50, 90]
     # Built with those colors from the start, it is the dart encoding and the symmetry is there.
     @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(10, 6))) == 24
 
@@ -257,15 +256,15 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # encoding, asked for explicitly -- a prism whose faces all start out distinct can be
     # recolored into its full D_3 and the derived quantities follow.
     prism = dartspecies(Prism(3, 1.0; h=2.0); colors=1:5)
-    @test symmetrynumber(prism) == site_symmetry(prism) == 1
-    @test Roly.sitestabilizers(prism) == fill(1, 5)
+    @test symmetrynumber(prism) == length(permutationgroup(prism)) == 1
+    @test Roly.stabilizerorders(prism) == fill(1, 5)
 
     caps = [i for i in 1:5 if abs(Roly.facenormal(Prism(3, 1.0; h=2.0), i)[3]) > 1e-8]
     setcolors!(prism, [i in caps ? 7 : 8 for i in 1:5])
-    @test symmetrynumber(prism) == site_symmetry(prism) == 6
+    @test symmetrynumber(prism) == length(permutationgroup(prism)) == 6
     # Caps are 3-fold about their normals and the prism is 3-fold about them; the rectangular
     # sides are 2-fold and so is the prism about those.
-    @test [Roly.bindingsites(prism, i).stab for i in 1:5] == [i in caps ? 3 : 2 for i in 1:5]
+    @test [Roly.bindingsite(prism, i).stab for i in 1:5] == [i in caps ? 3 : 2 for i in 1:5]
     @test length(unique(Roly.labels(graphrep(prism)))) == 2
 
     id = Pose{3,Float64,RotMatrix3{Float64}}(SVector(0.0, 0.0, 0.0), one(RotMatrix3{Float64}))
@@ -359,8 +358,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     for (name, shp, bonds, maxn) in systems
         results = map((cyclespecies, dartspecies)) do build
-            sys = BindingRules(bonds, build(shp))
-            polys = polygen(sys; maxsize=maxn)
+            rules = BindingRules(bonds, build(shp))
+            polys = polygen(rules; maxsize=maxn)
             (counts=[count(p -> nparticles(p) == k, polys) for k in 1:maxn],
              sigmas=sort([(nparticles(p), symmetrynumber(p)) for p in polys]),
              polys=polys)
@@ -383,8 +382,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         end
     end
 
-    sys = BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube)
-    polys = polygen(sys; maxsize=4)
+    rules = BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube)
+    polys = polygen(rules; maxsize=4)
 
     for p in polys
         nparticles(p) < 2 && continue
@@ -394,7 +393,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         end
         # Particle vertex blocks cover the graph exactly; a stale leading vertex after a
         # removal would leave a block hanging off the end.
-        blocks = sort(reduce(vcat, [collect(Roly.graphvertices(pt, sys)) for pt in p.particles]))
+        blocks = sort(reduce(vcat, [collect(Roly.graphvertices(pt, rules)) for pt in p.particles]))
         @test blocks == 1:nv(graphrep(p))
         # Each bond joins the vertices of one pair of faces.
         @test nbonds(p) == 4 * (nparticles(p) - 1) ÷ 1 || nbonds(p) >= nparticles(p) - 1
@@ -405,7 +404,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     rebuilt = copy(big)
     lower!(rebuilt)
     @test nparticles(rebuilt) == nparticles(big) - 1
-    for (site, loc) in collect_compatible_pairs(rebuilt)
+    for (site, loc) in collect_attachments(rebuilt)
         trial = copy(rebuilt)
         ismissing(raise!(trial, site, loc)) && continue
         trial == big && (@test trial.canon2orig == big.canon2orig; break)
@@ -431,7 +430,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     shp = Prism(3)
     sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
     colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
-    counts(sys) = [polyenum(sys; maxsize=i)[1] for i in 1:5]
+    counts(rules) = [polyenum(rules; maxsize=i)[1] for i in 1:5]
 
     # Turning a whole orbit by the same amount turns the partner by twice that, since the offset
     # lands on both sides of the face-to-face flip. Here that is 2*90 = 180 degrees, which is a
@@ -449,17 +448,17 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # is folded into the key `siteorbits` groups by, so the orbit splits.
     split = PolyhedronParticleSpecies(shp; colors,
                                       twists=[i == first(sides) ? π/2 : 0.0 for i in 1:nfaces(shp)])
-    @test symmetrynumber(split) == site_symmetry(split) == 2
+    @test symmetrynumber(split) == length(permutationgroup(split)) == 2
     @test length(unique(Roly.labels(graphrep(split)))) == 3
     @test symmetrynumber(PolyhedronParticleSpecies(shp; colors)) == 6
 
-    # On a particle with no symmetry to hide behind, the twist is the bond phase outright.
+    # On a particle with no symmetry to hide behind, the twist angle is the bond twist outright.
     # Turning only the mate's face turns the partner by exactly one dart step, not two.
     function dimer(t)
         ps = dartspecies(Tetrahedron(); twists=[0.0, t, 0.0, 0.0])
         @test symmetrynumber(ps) == 1
         poly = Polyform(BindingRules([1 1 1 2], ps), 1)
-        for (site, loc, r) in collect_compatible_pairs(poly)
+        for (site, loc, r) in collect_attachments(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
             return trial
@@ -487,9 +486,9 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # A twist shared across an orbit leaves the symmetry alone, since turns about a site's own
     # normal commute with its stabilizer; turning one face differently splits the orbit.
     uniform = PolyhedronParticleSpecies(shp; colors, twists=[i in sides ? 0.37 : 0.0 for i in 1:nfaces(shp)])
-    @test symmetrynumber(uniform) == site_symmetry(uniform) == 6
+    @test symmetrynumber(uniform) == length(permutationgroup(uniform)) == 6
     partial = PolyhedronParticleSpecies(shp; colors, twists=[i == first(sides) ? 0.37 : 0.0 for i in 1:nfaces(shp)])
-    @test symmetrynumber(partial) == site_symmetry(partial) == 2
+    @test symmetrynumber(partial) == length(permutationgroup(partial)) == 2
 
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0.0, 1.0])
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); locking=[true, false])

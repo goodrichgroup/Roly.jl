@@ -12,14 +12,14 @@ using Roly:
     could_contact,
     overlap,
     symmetrynumber,
-    site_symmetry
+    permutationgroup
 
 
 using Roly: PatchySphere, Polyhedron, Tetrahedron, Cube, Dodecahedron, Prism,
-            nfaces, facecentroid, geometriclabels, rotationgroup, symmetrynumber,
+            nfaces, facecentroid, faceorbits, rotationgroup, symmetrynumber,
             graphrep, edgemidpoint
 
-using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_compatible_pairs,
+using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_attachments,
             nparticles
 
 using Rotations: RotMatrix3, rotation_angle
@@ -37,7 +37,7 @@ using LinearAlgebra: normalize, dot, det, norm
         @test numtype(ps) == Float64
         @test nv(graphrep(ps)) == n
         for i in 1:n
-            @test norm(bindingsites(ps, i).pose.x) ≈ 1.0 atol = 1e-10
+            @test norm(bindingsite(ps, i).pose.x) ≈ 1.0 atol = 1e-10
         end
     end
 
@@ -49,35 +49,35 @@ using LinearAlgebra: normalize, dot, det, norm
     @test nsites(ps1) == 1
     @test dimension(ps1) == 2
     @test nv(graphrep(ps1)) == 1
-    @test norm(bindingsites(ps1, 1).pose.x) ≈ 1.0 atol = 1e-10
+    @test norm(bindingsite(ps1, 1).pose.x) ≈ 1.0 atol = 1e-10
 
     # n=2: uses a 4-vertex graph to encode orientation
     ps2 = PatchyDisk([0.0, π])
     @test nsites(ps2) == 2
     @test dimension(ps2) == 2
     @test nv(graphrep(ps2)) == 2
-    @test bindingsites(ps2, 1).vertices == 1:1
-    @test bindingsites(ps2, 2).vertices == 2:2
+    @test bindingsite(ps2, 1).vertices == 1:1
+    @test bindingsite(ps2, 2).vertices == 2:2
 
     # Two equivalent patches give a symmetry number of 2.
     @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
-    @test bindingsites(ps2, 1).pose.x ≈ SVector(1.0, 0.0) atol = 1e-10
-    @test bindingsites(ps2, 2).pose.x ≈ SVector(-1.0, 0.0) atol = 1e-10
+    @test bindingsite(ps2, 1).pose.x ≈ SVector(1.0, 0.0) atol = 1e-10
+    @test bindingsite(ps2, 2).pose.x ≈ SVector(-1.0, 0.0) atol = 1e-10
 
     # custom radius
     r = 2.5
     psr = PatchyDisk([0.0, π / 2, π, 3π / 2], r)
     @test nsites(psr) == 4
     for i in 1:4
-        @test norm(bindingsites(psr, i).pose.x) ≈ r atol = 1e-10
+        @test norm(bindingsite(psr, i).pose.x) ≈ r atol = 1e-10
     end
 
     # colors
     ps_col = PatchyDisk([0.0, π / 2, π, 3π / 2]; colors=[1, 2, 1, 2])
-    @test color(bindingsites(ps_col, 1)) == 1
-    @test color(bindingsites(ps_col, 2)) == 2
-    @test color(bindingsites(ps_col, 3)) == 1
-    @test color(bindingsites(ps_col, 4)) == 2
+    @test color(bindingsite(ps_col, 1)) == 1
+    @test color(bindingsite(ps_col, 2)) == 2
+    @test color(bindingsite(ps_col, 3)) == 1
+    @test color(bindingsite(ps_col, 4)) == 2
 
     # symmetrynumber: all distinct -> 1, all equal -> n
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3])) == 1
@@ -89,8 +89,8 @@ using LinearAlgebra: normalize, dot, det, norm
     ps_c = copy(ps)
     @test nsites(ps_c) == nsites(ps)
     setcolors!(ps_c, [10, 20, 30])
-    @test color(bindingsites(ps_c, 1)) == 10
-    @test color(bindingsites(ps, 1)) != 10
+    @test color(bindingsite(ps_c, 1)) == 10
+    @test color(bindingsite(ps, 1)) != 10
     @test_throws ArgumentError setcolors!(ps, [1, 2])
 
     io = IOBuffer()
@@ -122,7 +122,7 @@ using LinearAlgebra: normalize, dot, det, norm
 
         # Patches sit on the sphere, along the face centroid directions.
         for i in 1:np
-            b = bindingsites(ps, i)
+            b = bindingsite(ps, i)
             @test isapprox(norm(b.pose.x), 2.0)
             @test isapprox(normalize(b.pose.x), normalize(facecentroid(shp, i)); atol=1e-10)
             # On a sphere the patch normal is radial, and local z is the tangential part
@@ -134,7 +134,7 @@ using LinearAlgebra: normalize, dot, det, norm
 
         # Same labeling rules and the same graph as the polyhedron species.
         @test symmetrynumber(ps) == 1
-        @test symmetrynumber(PatchySphere(shp, 2.0; colors=geometriclabels(shp))) == order
+        @test symmetrynumber(PatchySphere(shp, 2.0; colors=faceorbits(shp))) == order
         @test order == length(rotationgroup(shp))
         @test nv(graphrep(ps)) == np
         @test nv(graphrep(dartsphere(shp, 2.0))) == 2 * Roly.nedges(shp)
@@ -163,9 +163,9 @@ using LinearAlgebra: normalize, dot, det, norm
 
     # Evenly spaced identical patches really do have that symmetry
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
-    @test site_symmetry(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
+    @test length(permutationgroup(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1]))) == 3
     @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
-    @test site_symmetry(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
+    @test length(permutationgroup(PatchyDisk([0.0, π]; colors=[1, 1]))) == 2
 
     # Unevenly spaced ones do not, no matter what colors
     @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0]; colors=[1, 1, 1])) == 1
@@ -178,13 +178,34 @@ using LinearAlgebra: normalize, dot, det, norm
     uneven = [SVector(cos(t), sin(t)) for t in (0.0, 0.5, 3.0)]
     for labs in (Cint[1, 1, 1], Cint[1, 2, 3])
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3); vertex_labels=labs), 1.0, uneven)
-        @test symmetrynumber(ps) == site_symmetry(ps) == 1
+        @test symmetrynumber(ps) == length(permutationgroup(ps)) == 1
         @test labels(graphrep(ps)) == Cint[1, 2, 3]
     end
     # Evenly spaced patches of one color are equivalent
     even = [SVector(cos(t), sin(t)) for t in (0.0, 2π / 3, 4π / 3)]
     ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3))
-    @test symmetrynumber(ps) == site_symmetry(ps) == 3
+    @test symmetrynumber(ps) == length(permutationgroup(ps)) == 3
+
+    ### a labeling that is not the symmetry orbits
+    # `labels` lets one be supplied, and `check_encoding` has to reject it. Comparing symmetry
+    # *numbers* would not: a directed 3-cycle labeled 1,1,2 admits no automorphism, and neither
+    # does the uneven arrangement, so both sides report 1 while sites 1 and 2 share a label that
+    # no rotation justifies. Everything reading a shared label as "interchangeable" then breaks.
+    @test_throws ArgumentError PatchyParticleSpecies(
+        NautyDiGraph(cycle_digraph(3)), 1.0, uneven; colors=[1, 1, 2], labels=[1, 1, 2])
+    # Same labeling on a symmetric arrangement is no better: the 120 degree turn does not
+    # preserve it, so the orbits are still three singletons.
+    @test_throws ArgumentError PatchyParticleSpecies(
+        NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3), labels=[1, 1, 2])
+    # The orbits themselves go through, and give back what deriving them would have.
+    kept = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even;
+                                 colors=fill(1, 3), labels=[1, 1, 1])
+    @test labels(graphrep(kept)) == Cint[1, 1, 1]
+    @test symmetrynumber(kept) == 3
+    # A labeling finer than the coloring is still allowed, since that is how a twist declares
+    # two same-colored faces to be non-interchangeable.
+    @test symmetrynumber(PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even;
+                                               colors=fill(1, 3), labels=[1, 2, 3])) == 1
 
 
     # twists
@@ -196,13 +217,13 @@ using LinearAlgebra: normalize, dot, det, norm
     function dimer(twists)
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(4)), 1.0, pos, twists;
                                    colors=[1, 2, 3, 4])
-        @test all(i -> Roly.bindingsites(ps, i).gauge == 1, 1:4)
-        sys = BindingRules([1 1 1 2], ps)
-        poly = Polyform(sys, 1)
-        for (site, loc, r) in collect_compatible_pairs(poly)
+        @test all(i -> Roly.bindingsite(ps, i).sitesym == 1, 1:4)
+        rules = BindingRules([1 1 1 2], ps)
+        poly = Polyform(rules, 1)
+        for (site, loc, r) in collect_attachments(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
-            @test r == 0                      # gauge 1 on both sides, so one phase
+            @test r == 0                      # sitesym 1 on both sides, so one twist
             return trial.particles[2].pose
         end
         return nothing

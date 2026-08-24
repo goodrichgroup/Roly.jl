@@ -1,24 +1,24 @@
 using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimension,
             bonds, bondindex, composition, interior_edges, exterior_edges, tocanon, toorig,
             BindingRules, UnitSquare, nbonds, raise!, lower!, bindingsites, graphrep,
-            collect_open_bindingsites, collect_compatible_pairs, particle_from_leadingvertex,
+            collect_open_bindingsites, collect_attachments, particle_from_leadingvertex,
             PolygonParticleSpecies, species, polygen
 
 @testset "polyform" begin
-    sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
+    rules = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
-    empty_poly = Polyform(sys)
+    empty_poly = Polyform(rules)
     @test nparticles(empty_poly) == 0
     @test nsites(empty_poly) == 0
 
-    mono = Polyform(sys, 1)
+    mono = Polyform(rules, 1)
     @test nparticles(mono) == 1
     @test nsites(mono) == 4
     @test dimension(mono) == 2
-    @test bindingrules(mono) === sys
+    @test bindingrules(mono) === rules
     @test symmetrynumber(mono) == 1
 
-    @test mono == Polyform(sys, 1)
+    @test mono == Polyform(rules, 1)
     @test mono != empty_poly
 
     mono2 = copy(mono)
@@ -48,7 +48,7 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     end
 
     di = copy(mono)
-    site, siteloc = first(collect_compatible_pairs(di))
+    site, siteloc = first(collect_attachments(di))
     @test !isnothing(raise!(di, site, siteloc))
     @test nparticles(di) == 2
     @test nsites(di) == 8
@@ -59,7 +59,7 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     for e in exterior_edges(di)
         idx = bondindex(di, e.src, e.dst)
         @test !isnothing(idx)
-        @test 1 <= idx <= nbonds(sys)
+        @test 1 <= idx <= nbonds(rules)
     end
 
     comp_di = composition(di)
@@ -73,18 +73,18 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     @test isnothing(lower!(di))
 
     ### Check raise / remove equality
-    sys = BindingRules([1 1 1 4; 1 4 2 2; 1 1 3 2; 1 1 3 4; 2 1 3 3; 2 1 3 1], UnitSquare)
-    poly = polygen(sys)[end]
+    rules = BindingRules([1 1 1 4; 1 4 2 2; 1 1 3 2; 1 1 3 4; 2 1 3 3; 2 1 3 1], UnitSquare)
+    poly = polygen(rules)[end]
 
     poly_raise = copy(poly)
     lower!(poly_raise)
 
-    compatible_pairs = collect_compatible_pairs(poly_raise)
-    site, siteloc = first(compatible_pairs)
+    attachments = collect_attachments(poly_raise)
+    site, siteloc = first(attachments)
     i = 1
-    while ismissing(raise!(poly_raise, compatible_pairs[i]...))
+    while ismissing(raise!(poly_raise, attachments[i]...))
         i += 1
-        site_siteloc = compatible_pairs[i]
+        site_siteloc = attachments[i]
     end
 
     @test poly == poly_raise

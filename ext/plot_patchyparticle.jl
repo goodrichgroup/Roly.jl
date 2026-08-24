@@ -10,9 +10,9 @@ function plot_particlespecies!(
     ax,
     spcs::PatchyParticleSpecies{2,F},
     pose::Pose=Pose{2,F}();
-    site_color=nothing,
-    species_index=nothing,
-    sys=nothing,
+    sitecolor=nothing,
+    speciesindex=nothing,
+    rules=nothing,
     site_radius=0.25spcs.r,
     strokewidth=2,
     kwargs...,
@@ -20,7 +20,7 @@ function plot_particlespecies!(
     n = nsites(spcs)
     r = spcs.r
 
-    si, _, colors, _ = _resolve_colors(spcs, species_index, sys, site_color)
+    si, _, colors, _ = _resolve_colors(spcs, speciesindex, rules, sitecolor)
     cx, cy = pose.x[1], pose.x[2]
 
     # The body is a much fainter wash of the species color, so the patches read on top of it.
@@ -29,8 +29,8 @@ function plot_particlespecies!(
              color=_tint(species_basecolor(si), PATCHY_BODY_TINT),
              strokecolor=:black, strokewidth, kwargs...)
 
-    xs = [(pose * bindingsites(spcs, i).pose.x)[1] for i in 1:n]
-    ys = [(pose * bindingsites(spcs, i).pose.x)[2] for i in 1:n]
+    xs = [(pose * bindingsite(spcs, i).pose.x)[1] for i in 1:n]
+    ys = [(pose * bindingsite(spcs, i).pose.x)[2] for i in 1:n]
     scatter!(ax, xs, ys;
              marker=_disk_marker(site_radius), markersize=1, markerspace=:data,
              color=colors, strokecolor=:black, strokewidth=1, alpha=0.8)
@@ -65,13 +65,13 @@ end
 function particlemesh(
     spcs::PatchyParticleSpecies{3,F},
     pose::Pose=Pose{3,F}();
-    site_color=nothing,
-    species_index=nothing,
-    sys=nothing,
+    sitecolor=nothing,
+    speciesindex=nothing,
+    rules=nothing,
     site_radius=0.25spcs.r,
     patch_alpha=0.85,
 ) where {F}
-    si, _, colors, _ = _resolve_colors(spcs, species_index, sys, site_color)
+    si, _, colors, _ = _resolve_colors(spcs, speciesindex, rules, sitecolor)
     pts, tris, cols = Point3f[], NTuple{3,Int}[], RGBAf[]
 
     # The body stays opaque — it is a solid particle, and a see-through sphere shows its own
@@ -80,7 +80,7 @@ function particlemesh(
     body = RGBAf(_tint(species_basecolor(si), PATCHY_BODY_TINT), 1)
     _spheremesh!(pts, tris, cols, Point3f(pose.x), Float32(spcs.r), body)
     for i in 1:nsites(spcs)
-        x = Point3f(pose * bindingsites(spcs, i).pose.x)
+        x = Point3f(pose * bindingsite(spcs, i).pose.x)
         _spheremesh!(
             pts, tris, cols, x, Float32(site_radius), RGBAf(colors[i], patch_alpha);
             nlat=12, nlon=18,

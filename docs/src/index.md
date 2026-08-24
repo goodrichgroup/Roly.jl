@@ -27,7 +27,7 @@ Roly.jl currently does not support Windows.
 
 - [Workflow](workflow.md) covers the basics: defining binding rules, coloring a species' sites, then enumerating, generating, counting and visualizing polyforms.
 - [Custom particle species](custom_species.md) explains how to define your own shapes.
-- [Orientation and phases](orientation.md) covers what a bond fixes about relative orientation and how to control it.
+- [Orientation and twists](orientation.md) covers what a bond fixes about relative orientation and how to control it.
   Read it if a species does not enumerate what you expected.
 - [API reference](api.md) lists every exported name.
 

@@ -14,37 +14,34 @@ mutable struct Polyform{D,P<:Particle,S<:BindingRules,G<:AbstractNautyGraph}
 end
 
 """
-    Polyform(sys::BindingRules{D}) where {D}
+    Polyform(rules::BindingRules{D}) where {D}
 
 Create an empty polyform containing no particles.
 """
-function Polyform(sys::BindingRules{D}) where {D}
-    P = posetype(sys)
+function Polyform(rules::BindingRules{D}) where {D}
+    P = posetype(rules)
     g = NautyDiGraph(0)
-    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(g, 1, Int[], Int[], Particle{P}[], sys)
+    return Polyform{D,Particle{P},typeof(rules),typeof(g)}(g, 1, Int[], Int[], Particle{P}[], rules)
 end
 
 """
-    Polyform(sys::BindingRules{D}, i::Integer) where {D}
+    Polyform(rules::BindingRules{D}, i::Integer) where {D}
 
-Create a single-particle polyform, consisting of species `i` of `sys`.
+Create a single-particle polyform, consisting of species `i` of `rules`.
 """
-function Polyform(sys::BindingRules{D}, i::Integer) where {D}
-    P = posetype(sys)
-    ps = species(sys, i)
+function Polyform(rules::BindingRules{D}, i::Integer) where {D}
+    P = posetype(rules)
+    ps = species(rules, i)
     g = copy(graphrep(ps))
-    part = Particle(sys, i; leading_vertex=1)
+    part = Particle(rules, i; leadingvertex=1)
     perm = first(nauty(g; canonize=true))
     cvs = convert(Vector{Int}, perm)
-    return Polyform{D,Particle{P},typeof(sys),typeof(g)}(
-        g, symmetrynumber(ps), cvs, invperm(cvs), [part], sys
-    )
+    return Polyform{D,Particle{P},typeof(rules),typeof(g)}(g, symmetrynumber(ps), cvs, invperm(cvs), [part], rules)
 end
 
 function Base.copy(p::Polyform)
     return typeof(p)(
-        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon),
-        copy(p.particles), p.bindingrules
+        copy(p.graphrep), p.sigma, copy(p.canon2orig), copy(p.orig2canon), copy(p.particles), p.bindingrules
     )
 end
 function Base.copy!(dst::Polyform, src::Polyform)
@@ -99,7 +96,7 @@ Return the symmetry number of `p`, i.e. the size of its automorphism group.
 """
     tocanon(p::Polyform, v::Integer)
 
-Convert an original vertex index `v` (as stored in `Particle.leading_vertex` or
+Convert an original vertex index `v` (as stored in `Particle.leadingvertex` or
 `BindingSite.vertices`) to the corresponding canonical graph vertex index in `graphrep(p)`.
 """
 @inline tocanon(p::Polyform, v::Integer) = p.orig2canon[v]
@@ -125,16 +122,16 @@ function _apply_perm!(poly::Polyform, perm)
     @inbounds for i in eachindex(poly.canon2orig)
         poly.orig2canon[poly.canon2orig[i]] = i
     end
-    return
+    return nothing
 end
 
-@inline is_leadingvertex(p::Polyform, v::Integer) = any(pt -> pt.leading_vertex == v, p.particles)
+@inline is_leadingvertex(p::Polyform, v::Integer) = any(pt -> pt.leadingvertex == v, p.particles)
 
 @inline particles(p::Polyform, i::Integer) = p.particles[i]
 
-# Look up the particle whose leading_vertex equals the original vertex v (O(n) scan).
+# Look up the particle whose leadingvertex equals the original vertex v (O(n) scan).
 @inline function particle_from_leadingvertex(p::Polyform, v::Integer)
-    i = findfirst(pt -> pt.leading_vertex == v, p.particles)
+    i = findfirst(pt -> pt.leadingvertex == v, p.particles)
     return isnothing(i) ? nothing : p.particles[i]
 end
 
@@ -153,38 +150,40 @@ Return a lazy iterator over the external edges of `graphrep(p)`, corresponding t
 @inline exterior_edges(p::Polyform) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
 
 """
-    _same_particle(p::Polyform, u::Integer, v::Integer)
+    _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs=true)
 
-Return `true` if the original graph vertices `u` and `v` belong to the same particle.
+Return `true` if the graph vertices `u` and `v` belong to the same particle.
 
-Each particle owns a contiguous block of original vertices starting at its leading vertex, so
-`u` and `v` are split apart exactly when some leading vertex falls between them.
+`canonidxs` says which numbering `u` and `v` are in.
 """
-@inline function _same_particle(p::Polyform, u::Integer, v::Integer)
+@inline function _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs::Bool=true)
+    # Each particle owns a contiguous block of original vertices starting at its leading vertex, so
+    # `u` and `v` are split apart exactly when some leading vertex falls between them.
+    canonidxs && ((u, v) = (toorig(p, u), toorig(p, v)))
     lo, hi = minmax(u, v)
-    return !any(pt -> lo < leading_vertex(pt) <= hi, p.particles)
+    return !any(pt -> lo < leadingvertex(pt) <= hi, p.particles)
 end
 
 # An edge is a bond exactly when its endpoints belong to different particles
 function _filter_edges(p::Polyform, ::Val{exterior}) where {exterior}
     return Iterators.filter(edges(graphrep(p))) do (; src, dst)
-        same = _same_particle(p, toorig(p, src), toorig(p, dst))
+        same = _same_particle(p, src, dst)
         return exterior ? !same : same
     end
 end
 
 """
-    _isbound_vertex(p::Polyform, part::Particle, v::Integer)
+    _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs=true)
 
-Return `true` if the original graph vertex `v` of particle `part` is bonded to another
-particle, i.e. if it has a neighbor outside `part`'s own block of vertices.
+Return `true` if the graph vertex `v` of particle `part` is bonded to another particle, i.e. if
+it has a neighbor outside `part`'s own block of vertices.
 
-Internal: `part` has to be passed in because the caller already has it, and looking it up
-again from `v` would be the expensive half of the check.
+`canonidxs` says which numbering `v` is in, the same way it does for [`bondindex`](@ref) and
+[`_same_particle`](@ref).
 """
-function _isbound_vertex(p::Polyform, part::Particle, v::Integer)
+function _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs::Bool=true)
     own = graphvertices(part, bindingrules(p))
-    neighs = NautyGraphs.adjrow(graphrep(p), tocanon(p, v))
+    neighs = NautyGraphs.adjrow(graphrep(p), canonidxs ? v : tocanon(p, v))
     for w in eachindex(neighs)
         neighs[w] || continue
         toorig(p, w) in own || return true
@@ -193,49 +192,53 @@ function _isbound_vertex(p::Polyform, part::Particle, v::Integer)
 end
 
 """
-    bondindex(poly::Polyform, src::Integer, dst::Integer)
+    bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs=true)
 
-Return the index into `bonded_colors(bindingrules(poly))` for the bond between
-canonical graph vertices `src` and `dst`, or `nothing` if they don't form a valid
-bond type.
+Return the index into `bonded_colors(bindingrules(poly))` for the bond between the graph
+vertices `src` and `dst`, or `nothing` if they don't form a valid bond type.
+
+`canonidxs` says which numbering `src` and `dst` are in: `true`, the default, for the canonical
+one that `graphrep(poly)` and its `edges` are in, and `false` for the stable original one that
+`BindingSite.vertices` and `Particle.leadingvertex` are in.
 """
-function bondindex(poly::Polyform, src::Integer, dst::Integer)
-    sys = bindingrules(poly)
-    p1, b1 = _vertex_to_particle_site(poly, src)
-    p2, b2 = _vertex_to_particle_site(poly, dst)
-    c1 = color(bindingsites(particles(poly, p1), sys, b1))
-    c2 = color(bindingsites(particles(poly, p2), sys, b2))
-    return findfirst(==(minmax(c1, c2)), bonded_colors(sys))
+function bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs::Bool=true)
+    rules = bindingrules(poly)
+    p1, b1 = _vertex_to_particle_site(poly, src; canonidxs)
+    p2, b2 = _vertex_to_particle_site(poly, dst; canonidxs)
+    c1 = color(bindingsite(particles(poly, p1), rules, b1))
+    c2 = color(bindingsite(particles(poly, p2), rules, b2))
+    return findfirst(==(minmax(c1, c2)), bonded_colors(rules))
 end
 
-# Map a canonical graph vertex back to (particle_index, site_index).
-function _vertex_to_particle_site(p::Polyform, v::Integer)
-    sys = bindingrules(p)
-    orig_v = toorig(p, v)
+# Map a graph vertex back to (particleindex, siteindex).
+function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool=true)
+    rules = bindingrules(p)
+    orig_v = canonidxs ? toorig(p, v) : v
     for (i, part) in enumerate(p.particles)
-        orig_v in graphvertices(part, sys) || continue
-        for j in 1:nsites(part, sys)
-            orig_v in bindingsites(part, sys, j).vertices && return (i, j)
+        orig_v in graphvertices(part, rules) || continue
+        for j in 1:nsites(part, rules)
+            orig_v in bindingsite(part, rules, j).vertices && return (i, j)
         end
     end
     return nothing
 end
 
 """
-    bindingsites(p::Polyform, i::Integer)
+    bindingsite(p::Polyform, i::Integer)
 
-Return the `i`-th binding site of `p`. The ordering is determined by the canonical
-graph labeling and is therefore deterministic across equivalent polyforms.
+Return the `i`-th binding site of `p`, counting through `p`'s particles in the order they are
+stored and through each particle's own sites, exactly as on a [`ParticleSpecies`](@ref).
+
+The ordering depends on how `p` was assembled. Use [`canonbindingsite`](@ref) for iterating through
+binding sites in canonical order.
 """
-function bindingsites(p::Polyform, i::Integer)
-    sys = bindingrules(p)
+function bindingsite(p::Polyform, i::Integer)
+    rules = bindingrules(p)
     k = 0
-    for v in p.canon2orig
-        prtcl = particle_from_leadingvertex(p, v)
-        isnothing(prtcl) && continue
-        for j in 1:nsites(prtcl, sys)
+    for prtcl in p.particles
+        for j in 1:nsites(prtcl, rules)
             k += 1
-            k == i && return bindingsites(prtcl, sys, j)
+            k == i && return bindingsite(prtcl, rules, j)
         end
     end
     return nothing
@@ -244,9 +247,142 @@ end
 """
     bindingsites(p::Polyform)
 
+Return a lazy iterator over all binding sites of `p`, counting through `p`'s particles in the order they are
+stored and through each particle's own sites, exactly as on a [`ParticleSpecies`](@ref).
+
+The ordering depends on how `p` was assembled. Use [`canonbindingsite`](@ref) for iterating through
+binding sites in canonical order.
+"""
+bindingsites(p::Polyform) = (bindingsite(p, i) for i in 1:nsites(p))
+
+"""
+    canonbindingsite(p::Polyform, i::Integer)
+
+Return the `i`-th binding site of `p` in canonical order, which follows the canonical graph
+labeling and is therefore the same for any two isomorphic polyforms.
+"""
+function canonbindingsite(p::Polyform, i::Integer)
+    rules = bindingrules(p)
+    k = 0
+    for v in p.canon2orig
+        prtcl = particle_from_leadingvertex(p, v)
+        isnothing(prtcl) && continue
+        for j in 1:nsites(prtcl, rules)
+            k += 1
+            k == i && return bindingsite(prtcl, rules, j)
+        end
+    end
+    return nothing
+end
+
+"""
+    canonbindingsites(p::Polyform)
+
 Return a lazy iterator over all binding sites of `p` in canonical order.
 """
-bindingsites(p::Polyform) = (bindingsites(p, i) for i in 1:nsites(p))
+canonbindingsites(p::Polyform) = (canonbindingsite(p, i) for i in 1:nsites(p))
+
+"""
+    permutationgroup(p::Polyform)
+
+Return the rotational symmetry group of `p` as particle permutations: one permutation per
+rotation about the centroid of `p`'s particle positions that carries every particle onto a
+particle of the same species, matching position and orientation.
+
+The counterpart of [`rotationgroup(::Polyform)`](@ref), which returns the same group as
+rotations, and the assembled analogue of [`permutationgroup(::ParticleSpecies)`](@ref), which
+permutes a single particle's sites.
+
+`length(permutationgroup(p))` should equal [`symmetrynumber`](@ref)`(p)`, which reads the same
+order off the graph encoding. Use it to check an encoding rather than to compute the symmetry
+number, which nauty gives far more cheaply.
+
+The list holds one entry per rotation, so it may repeat: the action on particles is not
+faithful. A straight chain of cubes turned about the chain axis leaves every particle where it
+was and still moves the graph. Call `unique` on the result for the quotient group.
+"""
+function permutationgroup(p::Polyform)
+    perms = Vector{Int}[]
+    _eachpolyformsymmetry((_, perm) -> push!(perms, perm), p)
+    return perms
+end
+
+"""
+    rotationgroup(p::Polyform)
+
+Return the rotational symmetry group of `p` as rotations about the centroid of `p`'s particle
+positions: those carrying every particle onto a particle of the same species, matching position
+and orientation.
+
+The counterpart of [`permutationgroup(::Polyform)`](@ref), which returns the same group as
+particle permutations.
+"""
+function rotationgroup(p::Polyform)
+    rots = _rotationtype(posetype(p))[]
+    _eachpolyformsymmetry((Q, _) -> push!(rots, Q), p)
+    return rots
+end
+
+"""
+    _eachpolyformsymmetry(f, p::Polyform)
+
+Call `f(Q, perm)` on every rotation `Q` about the centroid of `p`'s particle positions that
+carries each particle onto one of the same species, matching position and orientation, together
+with the particle permutation `perm` it induces. Return how many there were.
+
+A particle's frame need only match up to its species' own
+[`rotationgroup`](@ref rotationgroup(::ParticleSpecies)), so the candidates are `Q = Rₐ S R₁⁻¹`
+for each particle `a` of particle 1's species and each `S` in that group. Every element of the
+group appears exactly once.
+"""
+function _eachpolyformsymmetry(f, p::Polyform)
+    F = numtype(p)
+    n = nparticles(p)
+    # An empty polyform constrains nothing; report the identity, so the count still matches the
+    # symmetry number its graph carries.
+    n == 0 && (f(one(_rotationtype(posetype(p))), Int[]); return 1)
+
+    rules = bindingrules(p)
+    poses = [pt.pose for pt in p.particles]
+    spcs = [speciesindex(pt) for pt in p.particles]
+    own = Dict(s => rotationgroup(species(rules, s)) for s in unique(spcs))
+
+    centroid = sum(q.x for q in poses) / n
+    xs = [q.x - centroid for q in poses]
+    tol = sqrt(eps(F))
+    atol = tol * max(one(F), maximum(norm, xs))
+
+    function permutation(Q)
+        perm = zeros(Int, n)
+        for i in 1:n
+            j = findfirst(1:n) do j
+                spcs[j] == spcs[i] &&
+                    isapprox(Q * xs[i], xs[j]; atol) &&
+                    any(S -> isapprox(Q * poses[i].psi, poses[j].psi * S; atol=tol), own[spcs[j]])
+            end
+            isnothing(j) && return nothing
+            perm[i] = j
+        end
+        return perm
+    end
+
+    nfound = 0
+    for a in 1:n
+        spcs[a] == spcs[1] || continue
+        for S in own[spcs[1]]
+            Q = poses[a].psi * S * inv(poses[1].psi)
+            perm = permutation(Q)
+            isnothing(perm) && continue
+            # A candidate is built from frames alone, and two particles of one species often
+            # carry the same frame, so the same `Q` is reached once per such particle. Keeping
+            # only the `a` that `Q` really sends particle 1 to picks each element out once.
+            perm[1] == a || continue
+            f(Q, perm)
+            nfound += 1
+        end
+    end
+    return nfound
+end
 
 """
     bonds(p::Polyform)
@@ -281,17 +417,17 @@ nbonds(p::Polyform) = count(Returns(true), exterior_edges(p))
     composition(p::Polyform)
 
 Return the composition vector of `p`: counts of each particle species (indices
-`1:nspecies(sys)`) followed by counts of each bond type (indices `nspecies+1:end`).
+`1:nspecies(rules)`) followed by counts of each bond type (indices `nspecies+1:end`).
 Bond types are ordered as in `bonded_colors(bindingrules(p))`.
 """
 function composition(p::Polyform)
-    sys = bindingrules(p)
-    ns = nspecies(sys)
-    nb = nbonds(sys)
+    rules = bindingrules(p)
+    ns = nspecies(rules)
+    nb = nbonds(rules)
     comp = zeros(Int, ns + nb)
 
     for part in p.particles
-        comp[part.species_index] += 1
+        comp[part.speciesindex] += 1
     end
 
     for (; src, dst) in exterior_edges(p)
@@ -303,21 +439,21 @@ function composition(p::Polyform)
 end
 
 """
-    raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r=0)
+    raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t=0)
 
 Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`,
-in phase `r` of the bond (see [`standard_offset`](@ref)).
+in twist `t` of the bond (see [`standard_twist`](@ref)).
 
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
-function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::Integer=0; kwargs...)
-    sys = bindingrules(poly)
-    species_index, site_index = siteloc
-    particle_species = species(sys, species_index)
-    leading_vertex = nv(graphrep(poly)) + 1
-    mate = bindingsites(particle_species, site_index)
-    particle_pose = standard_offset(site, r, bondperiod(site, mate)) * inv(mate.pose)
-    attached_particle = Particle(particle_pose, leading_vertex, species_index)
+function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t::Integer=0; kwargs...)
+    rules = bindingrules(poly)
+    speciesindex, siteindex = siteloc
+    particle_species = species(rules, speciesindex)
+    leadingvertex = nv(graphrep(poly)) + 1
+    mate = bindingsite(particle_species, siteindex)
+    particle_pose = standard_twist(site, t, twistfreedom(site, mate)) * inv(mate.pose)
+    attached_particle = Particle(particle_pose, leadingvertex, speciesindex)
 
     has_overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
     has_overlap && return missing
@@ -327,23 +463,21 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, r::I
     g_attach = graphrep(particle_species)
     add_vertices!(graphrep(poly); vertex_labels=labels(g_attach))
     for (; src, dst) in edges(g_attach)
-        add_edge!(graphrep(poly), src + leading_vertex - 1, dst + leading_vertex - 1)
+        add_edge!(graphrep(poly), src + leadingvertex - 1, dst + leadingvertex - 1)
     end
 
-    # Every contact is paired in the phase it was *found* in, not the one this call
-    # placed the particle in: a ring closure brings sites together that raise! never chose.
-    for (vs1, vs2, reg, L) in contacting_vertices
-        for (v1, v2) in contact_pairing(vs1, vs2, reg, L)
+    # Every contact is paired in the twist it was found in, not the one this call
+    for (vs1, vs2, twst, ntwists) in contacting_vertices
+        for (v1, v2) in contact_pairing(vs1, vs2, twst, ntwists)
             add_edge!(graphrep(poly), tocanon(poly, v1), v2)
             add_edge!(graphrep(poly), v2, tocanon(poly, v1))
         end
     end
 
-    append!(poly.canon2orig, graphvertices(attached_particle, sys))
+    append!(poly.canon2orig, graphvertices(attached_particle, rules))
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
-
     return poly
 end
 
@@ -366,14 +500,14 @@ function lower!(poly::Polyform)
         return poly
     end
 
-    sys = bindingrules(poly)
+    rules = bindingrules(poly)
     nv_g = nv(graphrep(poly))
     target = zeros(Bool, nv_g)
     visited = zeros(Bool, nv_g)
     queue = zeros(Cint, nv_g)
 
-    # A particle owns one vertex per site, so the scan revisits it. The list stays short: the
-    # scan stops at the first removable particle.
+    # A particle owns >=1 vertex per site, so the scan will revisit vertices many times.
+    # -> store for performance.
     tested = Int[]
     part = nothing
     for v in Iterators.reverse(poly.canon2orig)
@@ -387,7 +521,7 @@ function lower!(poly::Polyform)
         push!(tested, v)
 
         part = particle_from_leadingvertex(poly, v)
-        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]); target, visited, queue) || break
+        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, rules)]); target, visited, queue) || break
         part = nothing
     end
     isnothing(part) && error("Internal error: no removable particle found in connected polyform. Please file an issue.")
@@ -400,12 +534,12 @@ end
 Remove particle `part` from `poly`. Does not check for connectedness before.
 """
 function _remove_particle!(poly::Polyform, part::Particle)
-    sys = bindingrules(poly)
-    vs0 = graphvertices(part, sys)
+    rules = bindingrules(poly)
+    vs0 = graphvertices(part, rules)
     vs = sort!(poly.orig2canon[vs0])
 
-    lv = leading_vertex(part)
-    idx = findfirst(pt -> pt.leading_vertex == lv, poly.particles)
+    lv = leadingvertex(part)
+    idx = findfirst(pt -> pt.leadingvertex == lv, poly.particles)
     last_idx = lastindex(poly.particles)
     idx < last_idx && (poly.particles[idx] = poly.particles[last_idx])
     pop!(poly.particles)
@@ -418,7 +552,7 @@ function _remove_particle!(poly::Polyform, part::Particle)
         poly.canon2orig[i] > last(vs0) && (poly.canon2orig[i] -= length(vs0))
     end
     for i in eachindex(poly.particles)
-        leading_vertex(poly.particles[i]) > last(vs0) || continue
+        leadingvertex(poly.particles[i]) > last(vs0) || continue
         poly.particles[i] = shift_leadingvertex(poly.particles[i], -length(vs0))
     end
 
@@ -431,25 +565,25 @@ end
 function _overlap_and_contacts(
     polyparticles::AbstractVector{<:Particle},
     part::Particle,
-    sys::BindingRules;
+    rules::BindingRules;
     allow_noninteracting=false,
     allow_misaligned=false,
     kwargs...,
 )
-    intmat = interactionmatrix(sys)
+    intmat = interactionmatrix(rules)
     contacts = Tuple{UnitRange{Int},UnitRange{Int},Int,Int}[]
 
     for polypart in polyparticles
-        could_contact(polypart, part, sys) || continue
-        overlap(polypart, part, sys) && return true, nothing
+        could_contact(polypart, part, rules) || continue
+        overlap(polypart, part, rules) && return true, nothing
 
-        for b1 in bindingsites(polypart, sys), b2 in bindingsites(part, sys)
+        for b1 in bindingsites(polypart, rules), b2 in bindingsites(part, rules)
             istouching(b1, b2) || continue
             interacting = intmat[color(b1), color(b2)]
             !allow_noninteracting && !interacting && return true, nothing
-            reg = phase(b1, b2)
-            !allow_misaligned && isnothing(reg) && return true, nothing
-            push!(contacts, (b1.vertices, b2.vertices, something(reg, 0), bondperiod(b1, b2)))
+            twst = twist(b1, b2)
+            !allow_misaligned && isnothing(twst) && return true, nothing
+            push!(contacts, (b1.vertices, b2.vertices, something(twst, 0), twistfreedom(b1, b2)))
         end
     end
     return false, contacts
@@ -460,15 +594,15 @@ function overlap_and_contacts(poly::Polyform, part::Particle; kwargs...)
 end
 
 function collect_open_bindingsites!(sites, poly::Polyform)
-    sys = bindingrules(poly)
+    rules = bindingrules(poly)
     empty!(sites)
     for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
-        for k in 1:nsites(part, sys)
-            site = bindingsites(part, sys, k)
-            _isbound_vertex(poly, part, first(site.vertices)) && continue
-            isinert(sys, color(site)) && continue
+        for k in 1:nsites(part, rules)
+            site = bindingsite(part, rules, k)
+            _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
+            isinert(rules, color(site)) && continue
             push!(sites, site)
         end
     end
@@ -476,16 +610,16 @@ function collect_open_bindingsites!(sites, poly::Polyform)
 end
 
 function collect_open_bindingsites(poly::Polyform)
-    sys = bindingrules(poly)
-    sites = BindingSite{posetype(sys),numtype(sys)}[]
+    rules = bindingrules(poly)
+    sites = BindingSite{posetype(rules),numtype(rules)}[]
     return collect_open_bindingsites!(sites, poly)
 end
 
 """
-    _deletable_species(poly, target, visited, queue)
+    _deletable_species(poly; target, visited, queue)
 
-Return `(best, second, leading)`: the two largest species indices among the particles `lower!`
-could delete, and the leading vertex of the particle achieving `best`.
+Return `(top, runnerup, top_lv)`: the two largest species indices among the particles `lower!`
+could delete from `poly`, and the top leading vertex of the particle achieving `top`.
 
 `lower!` deletes from the highest label class holding a removable particle. Canonical position
 runs with vertex label (nauty orders classes by color, `vertexlabels2labptn` by label), and
@@ -493,63 +627,86 @@ runs with vertex label (nauty orders classes by color, `vertexlabels2labptn` by 
 order is label order. Removability is read off `poly` rather than the child: attaching a
 particle cannot disconnect what removing a different one leaves behind.
 
-The runner-up lets a host exclude itself in O(1); see [`collect_compatible_pairs!`](@ref).
+The runner-up lets the anchor particle exclude itself in O(1); see
+[`collect_attachments!`](@ref).
 """
-function _deletable_species(poly::Polyform, target, visited, queue)
-    sys = bindingrules(poly)
+function _deletable_species(poly::Polyform; target, visited, queue)
+    rules = bindingrules(poly)
     n = nparticles(poly)
-    best, second, bestleading = 0, 0, 0
+    top, runnerup, top_lv = 0, 0, 0
     for part in poly.particles
-        n > 1 && is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, sys)]);
-                           target, visited, queue) && continue
-        s = species_index(part)
-        if s > best
-            best, second, bestleading = s, best, leading_vertex(part)
-        elseif s > second
-            second = s
+        n > 1 &&
+            is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, rules)]); target, visited, queue) &&
+            continue
+        s = speciesindex(part)
+        if s > top
+            top, runnerup, top_lv = s, top, leadingvertex(part)
+        elseif s > runnerup
+            runnerup = s
         end
     end
-    return best, second, bestleading
+    return top, runnerup, top_lv
 end
 
-function collect_compatible_pairs!(pairs, poly::Polyform)
-    sys = bindingrules(poly)
-    empty!(pairs)
+"""
+    collect_attachments!(attachments, poly::Polyform)
+
+Fill `attachments` with every way of growing `poly` by one particle, as triples
+`(site, siteloc, t)`: an open binding site of `poly`, the species and site index of the
+particle to attach, and which of the bond's distinct twists to attach it in.
+
+Two filters keep the list down to what reverse search can use. Only one partner site per
+symmetry orbit is kept, since the others give the same child. And a candidate is dropped when
+`lower!` would not undo it, i.e. when the child holds a removable particle from a species
+index above the one being attached: the child's parent would then be a different polyform and
+reverse search would reject the pair anyway.
+
+The second filter is conservative about the anchor particle, the one carrying `site`. The
+anchor is excluded from the removable set, because a new particle bonded to it alone leaves it
+a cut vertex of the child. When the attachment also closes a ring the anchor does stay
+removable, and excluding it then only lets a few extra candidates through, which reverse search
+rejects.
+"""
+function collect_attachments!(attachments, poly::Polyform)
+    rules = bindingrules(poly)
+    empty!(attachments)
     nv_g = nv(graphrep(poly))
     target, visited, queue = zeros(Bool, nv_g), zeros(Bool, nv_g), zeros(Cint, nv_g)
 
-    best, second, bestleading = _deletable_species(poly, target, visited, queue)
+    top, runnerup, top_lv = _deletable_species(poly; target, visited, queue)
     for orig_v in poly.canon2orig
-        part = particle_from_leadingvertex(poly, orig_v)
-        isnothing(part) && continue
+        anchor = particle_from_leadingvertex(poly, orig_v)
+        isnothing(anchor) && continue
 
-        # The host is excluded, so it takes the runner-up when it is itself the top scorer.
-        deletable = leading_vertex(part) == bestleading ? second : best
-        for k in 1:nsites(part, sys)
-            site = bindingsites(part, sys, k)
-            _isbound_vertex(poly, part, first(site.vertices)) && continue
-            isinert(sys, color(site)) && continue
+        # The anchor is excluded, so it takes the runner-up when it is itself the top scorer.
+        deletable = leadingvertex(anchor) == top_lv ? runnerup : top
+        for k in 1:nsites(anchor, rules)
+            site = bindingsite(anchor, rules, k)
+            _isbound_vertex(poly, anchor, first(site.vertices); canonidxs=false) && continue
+            isinert(rules, color(site)) && continue
 
-
-            # only keep one partner site per orbit
-            for siteloc in attachment_reps(sys, color(site))
+            for siteloc in distinct_attachments(rules, color(site))
                 # The new particle is always removable, so `lower!` stops at its label class
-                # unless a higher one survives. If one does, the child's deletion is some other
-                # particle and the parent test would reject it.
+                # unless a higher one survives.
                 siteloc[1] < deletable && continue
-                mate = bindingsites(species(sys, siteloc[1]), siteloc[2])
-                for r in 0:(nphases(site, mate) - 1)
-                    push!(pairs, (site, siteloc, r))
+                mate = bindingsite(species(rules, siteloc[1]), siteloc[2])
+                for t in 0:(_ndistincttwists(site, mate) - 1)
+                    push!(attachments, (site, siteloc, t))
                 end
             end
         end
     end
-    return pairs
+    return attachments
 end
 
-function collect_compatible_pairs(poly::Polyform)
-    sys = bindingrules(poly)
-    BS = BindingSite{posetype(sys),numtype(sys)}
-    pairs = Tuple{BS,BindingSiteLoc,Int}[]
-    return collect_compatible_pairs!(pairs, poly)
+"""
+    collect_attachments(poly::Polyform)
+
+Return every way of growing `poly` by one particle, allocating the vector.
+See [`collect_attachments!`](@ref).
+"""
+function collect_attachments(poly::Polyform)
+    rules = bindingrules(poly)
+    BS = BindingSite{posetype(rules),numtype(rules)}
+    return collect_attachments!(Tuple{BS,BindingSiteLoc,Int}[], poly)
 end

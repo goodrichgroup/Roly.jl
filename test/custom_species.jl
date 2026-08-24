@@ -1,8 +1,8 @@
 # The species interface as `docs/src/custom_species.md` documents it.
 using Roly
-using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color, siteorbits,
-            cycleencoding, sitestabilizers, sat_overlap, edgenormals
-import Roly: graphrep, nsites, bindingsites, bounding_radius, isconvex
+using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, permutationgroup, setcolors!, color, siteorbits,
+            cycleencoding, stabilizerorders, sat_overlap, edgenormals
+import Roly: graphrep, nsites, bindingsite, bounding_radius, isconvex
 using NautyGraphs, StaticArrays, LinearAlgebra, Rotations
 
 struct Rectangle{F,B<:BindingSite} <: ParticleSpecies{2,B}
@@ -35,7 +35,7 @@ end
 
 graphrep(ps::Rectangle) = ps.g
 nsites(ps::Rectangle) = length(ps.sites)
-bindingsites(ps::Rectangle, i::Integer) = ps.sites[i]
+bindingsite(ps::Rectangle, i::Integer) = ps.sites[i]
 isconvex(::Rectangle) = true
 bounding_radius(ps::Rectangle) = sqrt(ps.width^2 + ps.height^2) / 2
 # Required: `BindingRules` copies each species before shifting its colors.
@@ -55,7 +55,7 @@ end
     @test dimension(r) == 2
 
     # check automatic symmetry encoding
-    @test symmetrynumber(r) == site_symmetry(r) == 2
+    @test symmetrynumber(r) == length(permutationgroup(r)) == 2
     @test Roly.check_encoding(r) === r
     for cols in ([1, 1, 1, 1], [1, 2, 1, 2], [9, 9, 9, 9])
         @test symmetrynumber(Rectangle(2.0, 1.0; colors=cols)) == 2
@@ -69,17 +69,17 @@ end
     # `setcolors!` needs no definition: the generic method finds the sites in the `sites` field
     # and re-derives the labeling and the stabilizers
     setcolors!(r, [5, 6, 5, 6])
-    @test [color(bindingsites(r, i)) for i in 1:4] == [5, 6, 5, 6]
-    @test symmetrynumber(r) == site_symmetry(r) == 2
+    @test [color(bindingsite(r, i)) for i in 1:4] == [5, 6, 5, 6]
+    @test symmetrynumber(r) == length(permutationgroup(r)) == 2
     # Coloring every edge alike cannot make a rectangle 4-fold symmetric
     setcolors!(r, fill(7, 4))
-    @test symmetrynumber(r) == site_symmetry(r) == 2
+    @test symmetrynumber(r) == length(permutationgroup(r)) == 2
     @test length(unique(Roly.labels(graphrep(r)))) == 2
-    @test sitestabilizers(r) == fill(1, 4)
+    @test stabilizerorders(r) == fill(1, 4)
 
     # Check enumeration. `BindingRules` recolors its species itself; this only replaces the
     # all-alike coloring left above.
     setcolors!(r, [1, 2, 1, 2])
-    sys = BindingRules([1 1 1 1; 1 2 1 2], r)
-    @test [polyenum(sys; maxsize=i)[1] for i in 1:5] == cumsum([1, 2, 4, 13, 35])
+    rules = BindingRules([1 1 1 1; 1 2 1 2], r)
+    @test [polyenum(rules; maxsize=i)[1] for i in 1:5] == cumsum([1, 2, 4, 13, 35])
 end

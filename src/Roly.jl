@@ -19,7 +19,7 @@ export RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral, Icosahedral, gr
 
 # Particle species
 export ParticleSpecies, SpeciesAndPose
-export nsites, bindingsites, graphrep, symmetrynumber
+export nsites, bindingsite, bindingsites, graphrep, symmetrynumber
 
 # Assembly system
 export BindingRules, interactionmatrix
@@ -28,6 +28,7 @@ export ncolors, nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, i
 # Polyforms
 export Polyform, nparticles, bindingrules, composition
 export bonds, bondindex, interior_edges, exterior_edges
+public canonbindingsite, canonbindingsites
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
@@ -35,7 +36,7 @@ export RSStatus, Finished, MaxVerticesReached, MaxDepthReached, BreakTriggered
 export polyenum, polygen, countpolyforms, PolyformCount
 
 # Species
-export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
+export PolygonParticleSpecies, UnitNgon, UnitTriangle, UnitSquare, UnitHexagon
 export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
@@ -52,15 +53,15 @@ public inradius, minedgelength
 
 # Graph encodings and the symmetry they record
 public dartencoding, cycleencoding
-public rotationgroup, geometriclabels, facegauge, siteorbits, sitestabilizers
-public site_symmetry, check_encoding
+public rotationgroup, faceorbits, facesym, siteorbits, stabilizerorders, sitelabel
+public permutationgroup, check_encoding
 
 # What a bond fixes about relative orientation
-public contact_pairing, standard_offset, twistfreedom, bondperiod, nphases, phase
+public contact_pairing, standard_twist, twistfreedom, twist
 
 # The `ParticleSpecies` interface, implemented rather than called
 public isconvex, bounding_radius, could_contact, overlap
-public sat_overlap, edgenormals, shape
+public sat_overlap, edgenormals, polyhedron
 
 
 include("utils.jl")
@@ -78,6 +79,7 @@ include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 
 include("ruleeditor.jl")
+using .RuleEditor: ruleeditor
 export ruleeditor
 
 export render, polyformplot, polyformplot!
@@ -91,7 +93,7 @@ axis to match its dimension. Provided by the Makie extension, so it needs a back
 3D output needs a backend with a depth buffer, GLMakie or WGLMakie. CairoMakie sorts
 primitives instead of depth-testing them, so 3D polyforms show artifacts where faces meet.
 
-`bindingrules=sys` draws sites no bond can use as inert, which works for a bare species too.
+`bindingrules=rules` draws sites no bond can use as inert, which works for a bare species too.
 """
 function render end
 

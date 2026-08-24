@@ -20,8 +20,8 @@
         j -> isapprox(dot(facenormal(p, i), facenormal(p, j)), -1; atol=1e-8), 1:nfaces(p)
     )
     pairs = unique([minmax(i, opposite(Cube(), i)) for i in 1:6])
-    sys = BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in pairs]), cube)
-    polys = polygen(sys; maxsize=3)
+    rules = BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in pairs]), cube)
+    polys = polygen(rules; maxsize=3)
     @test render(polys[end]) isa Figure
 
     # A 2D polyform, so the shared color resolution is covered in both dimensions.
@@ -29,7 +29,7 @@
     polys2d = polygen(sys2d; maxsize=3)
     @test render(polys2d[end]) isa Figure
 
-    # An explicitly passed `species_index` picks the palette instead of being overridden by
+    # An explicitly passed `speciesindex` picks the palette instead of being overridden by
     # the default of 1.
     _, _, colors1, bonding1 = ext._resolve_colors(cube, 1, nothing, nothing)
     _, _, colors2, _ = ext._resolve_colors(cube, 2, nothing, nothing)
@@ -53,7 +53,7 @@
         want = ext._tint(pal[i], bonding[i] ? ext.FACE_TINT : ext.BODY_TINT)
         @test colors[i] == want
     end
-    # Tinting is skipped entirely when a `site_color` callback is given.
+    # Tinting is skipped entirely when a `sitecolor` callback is given.
     _, _, colors, _ = ext._resolve_colors(cube, 1, rules, (_, i) -> ext.INERT_COLOR)
     @test all(==(ext.INERT_COLOR), colors)
 end

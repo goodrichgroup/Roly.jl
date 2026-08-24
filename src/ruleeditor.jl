@@ -1,8 +1,23 @@
-# `ruleeditor`: a terminal-based geometric editor for constructing `BindingRules` from
-# particle placements.
+"""
+    RuleEditor
+
+A terminal-based geometric editor for constructing [`BindingRules`](@ref) by placing particles
+on a lattice.
+
+Everything here is internal to the editor except its entry point [`ruleeditor`](@ref), which
+`Roly` re-exports, so `Roly.ruleeditor(species)` is the way to reach it.
+This submodule was written by Claude Opus 5.
+"""
+module RuleEditor
 
 using REPL
 using REPL.Terminals: TTYTerminal, raw!
+using StaticArrays: SVector
+using Rotations: Angle2d
+using ..Roly: BindingRules, ParticleSpecies, Pose, bindingsites, color, interactionmatrix, isaligned,
+              istouching, nsites
+
+export ruleeditor
 
 const CSI = "\e["
 const CLR_EOL = "\e[K"
@@ -700,3 +715,5 @@ function _handle_key!(state::EditorState, key::Key)
     end
     return false
 end
+
+end # module

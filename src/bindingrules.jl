@@ -1,14 +1,14 @@
 """
     BindingSiteLoc
 
-Indicates the location of a binding site in the format `(species_index, site_index)`.
+Indicates the location of a binding site in the format `(speciesindex, siteindex)`.
 """
 const BindingSiteLoc = NTuple{2,Int}
 
 """
     BindingRules(bonds, particlespecies)
 
-An `BindingRules` consists of a list of particle species and their allowed bonds. 
+`BindingRules` consists of a list of particle species and their allowed bonds. 
 
 The binding rules are specified by the matrix `bonds`, where every row of the matrix defines a valid bond between particle species.
 A bonds is specified in the format `[species1 site1 species2 site2]`. For example, if binding site 3 of particle species 1 binds to site 4 of
@@ -25,8 +25,8 @@ struct BindingRules{D,PS<:ParticleSpecies}
     _bondlist::Vector{NTuple{2,Int}}
     _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
-    _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
-    _attachment_reps::Vector{Vector{BindingSiteLoc}}
+    _possible_attachments::Vector{Vector{BindingSiteLoc}}
+    _distinct_attachments::Vector{Vector{BindingSiteLoc}}
     _isinert::BitVector
     _onlattice::Bool
 end
@@ -50,6 +50,7 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
         bond[1] <= bond[2]
     end
     sort!(bondlist)
+
     bondedsites = map(bondlist) do bond
         a, b, = bond[1], bond[2]
         sort((color2siteloc[a], color2siteloc[b]))
@@ -61,22 +62,31 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
 
-    compatible_sitelocs_cache = [Vector{BindingSiteLoc}() for _ in 1:ncolors]
+    possible = [Vector{BindingSiteLoc}() for _ in 1:ncolors]
     for c in 1:ncolors
         for c2 in 1:ncolors
-            intmat[c2, c] || continue
-            append!(compatible_sitelocs_cache[c], color2siteloc[c2])
+            intmat[c2, c] && append!(possible[c], color2siteloc[c2])
         end
     end
-    attachment_reps = [_orbit_representatives(particlespecies, ls)
-                       for ls in compatible_sitelocs_cache]
+    distinct = [_first_per_orbit(particlespecies, ls) for ls in possible]
     isinert_cache = BitVector(!any(intmat[:, c]) for c in 1:ncolors)
 
-    return BindingRules{D,PS}(intmat, particlespecies, nbonds, nsites, ncolors,
-                                color2siteloc, siteloc2color,
-                                bondlist, bondedsites, bondedspecies,
-                                compatible_sitelocs_cache, attachment_reps, isinert_cache,
-                                _onlattice(particlespecies))
+    return BindingRules{D,PS}(
+        intmat,
+        particlespecies,
+        nbonds,
+        nsites,
+        ncolors,
+        color2siteloc,
+        siteloc2color,
+        bondlist,
+        bondedsites,
+        bondedspecies,
+        possible,
+        distinct,
+        isinert_cache,
+        _onlattice(particlespecies),
+    )
 end
 function BindingRules(bonds, particlespecies::ParticleSpecies)
     nspcs = _extract_nspecies(bonds)
@@ -84,82 +94,101 @@ function BindingRules(bonds, particlespecies::ParticleSpecies)
     return BindingRules(bonds, particlespecies)
 end
 
+# A `Bool` matrix is an interaction matrix, never a bond list, so the species count has to come
+# from its size rather than from the largest species index a bond names.
+function BindingRules(intmat::AbstractMatrix{Bool}, particlespecies::ParticleSpecies)
+    _checkshape(intmat)
+    n, k = size(intmat, 1), _colorspan(particlespecies)
+    n % k == 0 || throw(
+        ArgumentError(
+            "an interaction matrix of size $n cannot be split among copies of a species " *
+            "spanning $k colors; give one species per block instead",
+        ),
+    )
+    return BindingRules(intmat, [particlespecies for _ in 1:(n ÷ k)])
+end
+
+# How many columns of the interaction matrix one copy of `ps` claims, matching the contiguous
+# range `_adjust_labels_and_colors` gives it.
+function _colorspan(ps::ParticleSpecies)
+    cols = [color(bindingsite(ps, si)) for si in 1:nsites(ps)]
+    return maximum(cols) - minimum(cols) + 1
+end
+
 """
     _onlattice(pss)
 
-Whether every species in `pss` tiles, all with the same cell. Licenses the coincident-centers
+Whether every species in `pss` tiles, all with the same cell. Allows the coincident-centers
 shortcut in `overlap(::Particle, ::Particle, ::BindingRules)`. See [`_tilingcell`](@ref).
 """
 function _onlattice(pss::AbstractVector{<:ParticleSpecies})
     cells = map(_tilingcell, pss)
     any(isnothing, cells) && return false
     sides, edge = first(cells)
-    return all(c -> c[1] == sides && isapprox(c[2], edge; rtol=sqrt(eps(float(typeof(edge))))),
-               cells)
+    return all(c -> c[1] == sides && isapprox(c[2], edge; rtol=sqrt(eps(float(typeof(edge))))), cells)
 end
 
-
 """
-    interactionmatrix(sys::BindingRules)
+    interactionmatrix(rules::BindingRules)
 
-Return the interaction matrix of the assembly system `sys`.
+Return the interaction matrix of the assembly system `rules`.
 
 The interaction matrix is indexed by the colors of binding sites.
 If two binding sites have colors `c1` and `c2`, then the truth value of 
-`interactionmatrix(sys)[c1, c2]` determines whether the two sites are able
+`interactionmatrix(rules)[c1, c2]` determines whether the two sites are able
 to bind to each other.
 """
-@inline interactionmatrix(sys::BindingRules) = sys.intmat
+@inline interactionmatrix(rules::BindingRules) = rules.intmat
 
 """
-    species(sys::BindingRules)
+    species(rules::BindingRules)
 
-Return the list of particle species of the assembly system `sys`.
+Return the list of particle species of the assembly system `rules`.
 """
-@inline species(sys::BindingRules) = sys.particlespecies
-
-"""
-    species(sys::BindingRules, i::Integer)
-
-Return the `i`th particle species of the assembly system `sys`.
-"""
-@inline species(sys::BindingRules, i::Integer) = sys.particlespecies[i]
+@inline species(rules::BindingRules) = rules.particlespecies
 
 """
-    nspecies(sys::BindingRules)
+    species(rules::BindingRules, i::Integer)
 
-Return the number of particle species of the assembly system `sys`.
+Return the `i`th particle species of the assembly system `rules`.
 """
-@inline nspecies(sys::BindingRules) = length(sys.particlespecies)
-
-"""
-    nbonds(sys::BindingRules)
-
-Return the total number of possible bonds between binding sites of the assembly system `sys`.
-"""
-@inline nbonds(sys::BindingRules) = sys.nbonds
+@inline species(rules::BindingRules, i::Integer) = rules.particlespecies[i]
 
 """
-    nsites(sys::BindingRules)
+    nspecies(rules::BindingRules)
 
-Return the total number of binding sites across all particle species of the assembly system `sys`.
+Return the number of particle species of the assembly system `rules`.
 """
-@inline nsites(sys::BindingRules) = sys.nsites
+@inline nspecies(rules::BindingRules) = length(rules.particlespecies)
 
 """
-    ncolors(sys::BindingRules)
+    nbonds(rules::BindingRules)
 
-Return the total number of binding sites colors across all particle species of the assembly system `sys`.
+Return the total number of possible bonds between binding sites of the assembly system `rules`.
+"""
+@inline nbonds(rules::BindingRules) = rules.nbonds
 
-`ncolors(sys)` is not necessarily the equal to `nsites(sys)`. 
+"""
+    nsites(rules::BindingRules)
+
+Return the total number of binding sites across all particle species of the assembly system `rules`.
+"""
+@inline nsites(rules::BindingRules) = rules.nsites
+
+"""
+    ncolors(rules::BindingRules)
+
+Return the total number of binding sites colors across all particle species of the assembly system `rules`.
+
+`ncolors(rules)` is not necessarily the equal to `nsites(rules)`. 
 If particle species have symmetry, some binding sites may carry the same color.
 """
-@inline ncolors(sys::BindingRules) = sys.ncolors
+@inline ncolors(rules::BindingRules) = rules.ncolors
 
 """
     dimension(::BindingRules)
 
-Return the spatial dimension of the particles of the assembly system `sys`.
+Return the spatial dimension of the particles of the assembly system `rules`.
 """
 @inline dimension(::BindingRules{D}) where {D} = D
 @inline dimension(::Type{<:BindingRules{D}}) where {D} = D
@@ -169,126 +198,121 @@ Return the spatial dimension of the particles of the assembly system `sys`.
 @inline speciestype(::BindingRules{D,PS}) where {D,PS} = PS
 
 """
-    bonded_colors(sys::BindingRules)
+    bonded_colors(rules::BindingRules)
 
 Return all pairs of binding site colors that may bind according to the binding rules
-of the assembly system `sys`.
+of the assembly system `rules`.
 """
-@inline function bonded_colors(sys::BindingRules)
-    return sys._bondlist
+@inline function bonded_colors(rules::BindingRules)
+    return rules._bondlist
 end
 
 """
-    bonded_sites(sys::BindingRules)
+    bonded_sites(rules::BindingRules)
 
 Return all pairs of binding site locations that may bind according to the binding rules
-of the assembly system `sys`.
+of the assembly system `rules`.
 """
-@inline function bonded_sites(sys::BindingRules)
-    return sys._bonded_sites
+@inline function bonded_sites(rules::BindingRules)
+    return rules._bonded_sites
 end
 
 """
-    bonded_species(sys::BindingRules)
+    bonded_species(rules::BindingRules)
 
 Return all pairs of particle species that may bind according to the binding rules
-of the assembly system `sys`.
+of the assembly system `rules`.
 """
-@inline function bonded_species(sys::BindingRules)
-    return sys._bonded_species
+@inline function bonded_species(rules::BindingRules)
+    return rules._bonded_species
 end
 
 """
-    siteloc2color(sys::BindingRules, siteloc::BindingSiteLoc)
+    siteloc2color(rules::BindingRules, siteloc::BindingSiteLoc)
 
 Return the binding site color associated with the binding site location `siteloc`.
 """
-@inline function siteloc2color(sys::BindingRules, siteloc::BindingSiteLoc)
-    return sys._siteloc2color[siteloc]
+@inline function siteloc2color(rules::BindingRules, siteloc::BindingSiteLoc)
+    return rules._siteloc2color[siteloc]
 end
 
 """
-    color2siteloc(sys::BindingRules, color::Integer)
+    color2siteloc(rules::BindingRules, color::Integer)
 
 Return the (possible multiple) binding site locations associated with the binding site color `color`.
 """
-@inline function color2siteloc(sys::BindingRules, color::Integer)
-    return sys._color2siteloc[color]
+@inline function color2siteloc(rules::BindingRules, color::Integer)
+    return rules._color2siteloc[color]
 end
 
 """
-    color2species(sys::BindingRules, color::Integer)
+    color2species(rules::BindingRules, color::Integer)
 
 Return the particle species that contains the binding site with color `color`.
 """
-@inline function color2species(sys::BindingRules, color::Integer)
-    return color2siteloc(sys, color)[1][1]
+@inline function color2species(rules::BindingRules, color::Integer)
+    return color2siteloc(rules, color)[1][1]
 end
 
 """
-    _orbit_representatives(particlespecies, sitelocs)
+    _first_per_orbit(particlespecies, sitelocs)
 
-Return one site per symmetry orbit: of any two entries of `sitelocs` on the same species carrying
-the same graph label, only the first survives.
+Return one site per symmetry orbit of the particle species. Of the entries of `sitelocs` that
+sit on the same species and carry the same graph label, only the first survives.
 
-This is what makes attaching a particle cost one candidate per distinguishable way of doing
-it rather than one per site. Two sites of a free particle with the same label are, by
-construction, in one orbit of the rotations preserving its coloring. That is what
-[`siteorbits`](@ref) computes and what `check_encoding` confirms the graph agrees with.
-Attaching through either therefore produces the same structure.
+This rests on a shared label meaning the sites really are interchangeable, which is what
+[`_check_labeling`](@ref) enforces: a labeling has to be exactly the symmetry orbits.
 """
-function _orbit_representatives(particlespecies::AbstractVector{<:ParticleSpecies},
-                                sitelocs::AbstractVector{BindingSiteLoc})
+function _first_per_orbit(particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{BindingSiteLoc})
     reps = BindingSiteLoc[]
     seen = Set{Tuple{Int,Int}}()
     for (spc, k) in sitelocs
-        labs = labels(graphrep(particlespecies[spc]))
-        key = (spc, Int(labs[first(bindingsites(particlespecies[spc], k).vertices)]))
-        key in seen && continue
-        push!(seen, key)
+        orbit = (spc, sitelabel(particlespecies[spc], k))
+        orbit in seen && continue
+        push!(seen, orbit)
         push!(reps, (spc, k))
     end
     return reps
 end
 
 """
-    attachment_reps(sys::BindingRules, color::Integer)
+    distinct_attachments(rules::BindingRules, color::Integer)
 
 The sites a particle may be attached through to a site of `color`, one per symmetry orbit.
 
-[`compatible_sitelocs`](@ref) lists every site the interaction matrix permits; this lists the
-ones that lead to distinguishable structures. See [`_orbit_representatives`](@ref).
+[`possible_attachments`](@ref) contains every site the interaction matrix permits, this only lists the
+ones that lead to distinguishable structures.
 """
-@inline attachment_reps(sys::BindingRules, color::Integer) = sys._attachment_reps[color]
+@inline distinct_attachments(rules::BindingRules, color::Integer) = rules._distinct_attachments[color]
 
 """
-    isinert(sys::BindingRules, siteloc::BindingSiteLoc)
+    isinert(rules::BindingRules, siteloc::BindingSiteLoc)
 
 Return `true` if the binding site at `siteloc` does not bind to any binding sites.
 """
-@inline function isinert(sys::BindingRules, siteloc::BindingSiteLoc)
-    color = siteloc2color(sys, siteloc)
-    return isinert(sys, color)
+@inline function isinert(rules::BindingRules, siteloc::BindingSiteLoc)
+    color = siteloc2color(rules, siteloc)
+    return isinert(rules, color)
 end
 
 """
-    isinert(sys::BindingRules, color::Integer)
+    isinert(rules::BindingRules, color::Integer)
 
 Return `true` if the binding site with color `color` does not bind to any binding sites.
 """
-@inline function isinert(sys::BindingRules, color::Integer)
-    return sys._isinert[color]
+@inline function isinert(rules::BindingRules, color::Integer)
+    return rules._isinert[color]
 end
 
 """
-    graphrep(sys::BindingRules)
+    graphrep(rules::BindingRules)
 
-Construct the graph representation of the assembly system `sys`.
+Construct the graph representation of the ass embly system `rules`.
 """
-function graphrep(sys::BindingRules)
-    imat = interactionmatrix(sys)
-    ns = nsites(sys)
-    nb = nbonds(sys)
+function graphrep(rules::BindingRules)
+    imat = interactionmatrix(rules)
+    ns = nsites(rules)
+    nb = nbonds(rules)
 
     A = zeros(Int, ns + nb, ns + nb)
     edge_counter = 1
@@ -297,18 +321,18 @@ function graphrep(sys::BindingRules)
             continue
         end
 
-        A[i, ns+edge_counter] = 1
-        A[j, ns+edge_counter] = 1
-        A[ns+edge_counter, i] = 1
-        A[ns+edge_counter, j] = 1
+        A[i, ns + edge_counter] = 1
+        A[j, ns + edge_counter] = 1
+        A[ns + edge_counter, i] = 1
+        A[ns + edge_counter, j] = 1
         edge_counter += 1
     end
 
     i = 1
-    for bb in species(sys)
+    for bb in species(rules)
         a = adjacency_matrix(graphrep(bb))
         n = size(a, 1)
-        A[i:i+n-1, i:i+n-1] .+= a
+        A[i:(i + n - 1), i:(i + n - 1)] .+= a
         i += n
     end
 
@@ -317,18 +341,25 @@ function graphrep(sys::BindingRules)
     return g
 end
 
-function compatible_sitelocs(sys::BindingRules, color::Integer)
-    return sys._compatible_sitelocs[color]
+"""
+    possible_attachments(rules::BindingRules, color::Integer)
+
+The sites a particle may be attached through to a site of `color`, every one the interaction
+matrix permits. See [`distinct_attachments`](@ref).
+"""
+@inline function possible_attachments(rules::BindingRules, color::Integer)
+    return rules._possible_attachments[color]
 end
 
-Base.show(io::Core.IO, sys::BindingRules) = print(io, "$(dimension(sys))d BindingRules[n=$(nspecies(sys)), k=$(nbonds(sys))]")
-
+function Base.show(io::Core.IO, rules::BindingRules)
+    print(io, "$(dimension(rules))d BindingRules[n=$(nspecies(rules)), k=$(nbonds(rules))]")
+end
 
 function _extract_nspecies(bonds::AbstractMatrix{<:Integer})
     _checkshape(bonds)
-    nspcs = maximum(@view bonds[:, [1, 3]]; init=0)
-    nspcs < 1 && throw(ArgumentError("binding rules do not not contain any bonds and cannot be used to determine species count"))
-    return nspcs
+    length(bonds) == 0 &&
+        throw(ArgumentError("binding rules do not not contain any bonds and cannot be used to determine species count"))
+    return maximum(@view bonds[:, [1, 3]]; init=0)
 end
 
 """
@@ -343,13 +374,15 @@ function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {P
     c = 1
     l = 1
     for ps in particlespecies
-        cols = [color(bindingsites(ps, si)) for si in 1:nsites(ps)]
+        cols = [color(bindingsite(ps, si)) for si in 1:nsites(ps)]
         setcolors!(ps, cols .- minimum(cols) .+ c)
         c = maximum(cols) - minimum(cols) + c + 1
 
         g = graphrep(ps)
-        labs = labels(g)
-        setlabels!(g, labs .- minimum(labs) .+ l)
+        offset = l - minimum(labels(g))
+        for v in vertices(g)
+            setlabel!(g, v, label(g, v) + offset)
+        end
         l = maximum(labels(g)) + 1
     end
     return particlespecies
@@ -361,7 +394,7 @@ function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:Partic
 
     for (spcs, ps) in enumerate(particlespecies)
         for si in 1:nsites(ps)
-            site = bindingsites(ps, si)
+            site = bindingsite(ps, si)
             c = color(site)
             spcssite = (spcs, si)
             push!(get!(color2siteloc, c, BindingSiteLoc[]), spcssite)
@@ -378,17 +411,15 @@ function _parse_intmat(bonds::AbstractMatrix{<:Integer}, siteloc2color, ncolors)
     _checkshape(bonds)
     return _intmat_from_bonds(eachrow(bonds), siteloc2color, ncolors)
 end
-# Already an interaction matrix, as `ruleeditor(...; output=:matrix)` returns.
+
 function _parse_intmat(intmat::AbstractMatrix{Bool}, siteloc2color, ncolors)
+    _checkshape(intmat)
     n = size(intmat, 1)
-    n == size(intmat, 2) || throw(ArgumentError("interaction matrix must be square"))
-    n == ncolors ||
-        throw(ArgumentError("interaction matrix size ($n) does not match the number of colors ($ncolors)"))
-    intmat == intmat' || throw(ArgumentError("interaction matrix must be symmetric"))
+    n == ncolors || throw(ArgumentError("interaction matrix size ($n) does not match the number of colors ($ncolors)"))
     return Symmetric(Matrix{Bool}(intmat))
 end
 function _intmat_from_bonds(bonds, siteloc2color, ncolors)
-    intmat = falses(ncolors, ncolors)
+    intmat = zeros(Bool, ncolors, ncolors)
     for bond in bonds
         spcs1, site1, spcs2, site2 = bond
         c1 = siteloc2color[(spcs1, site1)]
@@ -398,13 +429,19 @@ function _intmat_from_bonds(bonds, siteloc2color, ncolors)
     return Symmetric(intmat)
 end
 
+# `Bool` is an `Integer`, so this is what keeps an interaction matrix out of the bond-list check.
+function _checkshape(intmat::AbstractMatrix{Bool})
+    size(intmat, 1) == size(intmat, 2) || throw(ArgumentError("interaction matrix must be square"))
+    intmat == intmat' || throw(ArgumentError("interaction matrix must be symmetric"))
+    return nothing
+end
 function _checkshape(bonds::AbstractMatrix{<:Integer})
     mustbe4 = size(bonds, 2)
     mustbe4 != 4 && throw(ArgumentError("bonds must be defined in the form [spcs1 site1 spcs2 site2]"))
-    return
+    return nothing
 end
 function _checkshape(bonds::AbstractVector{AbstractVector{<:Integer}})
     mustbe4 = length(bonds[1])
     mustbe4 != 4 && throw(ArgumentError("bonds must be defined in the form [spcs1 site1 spcs2 site2]"))
-    return
+    return nothing
 end
