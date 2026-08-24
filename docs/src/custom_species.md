@@ -51,6 +51,23 @@ Each `BindingSite` records its vertices in the `vertices` field, so `BindingSite
 A site may instead span a contiguous range of vertices, which is how 3D species record the twist of a face: [`dartencoding`](@ref) gives each face its own directed cycle.
 A graph built that way must keep each site's vertices together, so that no automorphism can carry part of one site onto part of another.
 
+### Every finite rotation group has a dart encoding
+
+Whatever your species looks like, if its rotation group is finite you can encode it as the dart encoding of one of Roly's bodies.
+Three facts chain together.
+
+1. The finite subgroups of `SO(3)` are exactly `C_n`, `D_n`, `T`, `O` and `I` (the classification of finite rotation groups).
+   [`RotationGroup`](@ref) names these five families and nothing else.
+2. Each is realized as the proper rotation group of a convex polyhedron Roly can build: `C_n` by [`Pyramid`](@ref), `D_n` by [`Prism`](@ref) and [`Antiprism`](@ref), and `T`, `O`, `I` by the Platonic solids.
+3. The automorphism group of a body's dart encoding is that body's rotation group.
+   A rotation is determined by the image of a single dart, and no rotation other than the identity fixes a dart, so the group acts freely on the darts and the graph can record it exactly.
+
+Labeling then carves out any subgroup you need: [`dartencoding`](@ref) inherits one label per face, and the automorphisms that survive are those preserving the labeling.
+Taking all labels distinct leaves the trivial group, taking them all equal leaves the full rotation group, and [`faceorbits`](@ref) gives the labeling for anything in between.
+So picking an encoding for a custom species is a matter of finding the body with your species' rotation group, not of inventing a graph.
+
+In 2D the question does not arise: the finite subgroups of `SO(2)` are the `C_n`, and [`cycleencoding`](@ref) covers them all.
+
 ## What a binding site records
 
 Besides its pose and color, a [`BindingSite`](@ref) carries three numbers that decide how a partner attaches:
