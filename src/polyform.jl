@@ -503,8 +503,8 @@ function lower!(poly::Polyform)
     rules = bindingrules(poly)
     nv_g = nv(graphrep(poly))
     target = zeros(Bool, nv_g)
-    visited = zeros(Bool, nv_g)
-    queue = zeros(Cint, nv_g)
+    dist = zeros(Int, nv_g)
+    queue = zeros(Int, nv_g)
 
     # A particle owns >=1 vertex per site, so the scan will revisit vertices many times.
     # -> store for performance.
@@ -521,7 +521,7 @@ function lower!(poly::Polyform)
         push!(tested, v)
 
         part = particle_from_leadingvertex(poly, v)
-        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, rules)]); target, visited, queue) || break
+        is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, rules)]); target, dist, queue) || break
         part = nothing
     end
     isnothing(part) && error("Internal error: no removable particle found in connected polyform. Please file an issue.")
@@ -560,6 +560,34 @@ function _remove_particle!(poly::Polyform, part::Particle)
     _apply_perm!(poly, perm)
     poly.sigma = convert(Int, autg.n)
     return poly
+end
+
+"""
+    subpolyform(poly::Polyform, particleids)
+
+Return the sub-polyform induced by the particles `particleids`, renumbered in the given order.
+
+The particle subset is expected to be connected; bonds to removed particles are dropped and their
+sites become unbound.
+"""
+function subpolyform(poly::Polyform, particleids)
+    rules = bindingrules(poly)
+    newparticles = eltype(poly.particles)[]
+    verts = Int[]
+    lv = 1
+    for p in particleids
+        part = particles(poly, p)
+        for ov in graphvertices(part, rules)
+            push!(verts, tocanon(poly, ov))
+        end
+        push!(newparticles, typeof(part)(part.pose, lv, part.speciesindex))
+        lv += nv(graphrep(species(rules, part.speciesindex)))
+    end
+
+    g = graphrep(poly)[verts]
+    # `g` starts out in new-original vertex order, so the canon maps are the permutation itself.
+    perm, autg = nauty(g; canonize=true)
+    return typeof(poly)(g, convert(Int, autg.n), collect(Int, perm), invperm(perm), newparticles, rules)
 end
 
 function _overlap_and_contacts(
@@ -616,7 +644,7 @@ function collect_open_bindingsites(poly::Polyform)
 end
 
 """
-    _deletable_species(poly; target, visited, queue)
+    _deletable_species(poly; target, dist, queue)
 
 Return `(top, runnerup, top_lv)`: the two largest species indices among the particles `lower!`
 could delete from `poly`, and the top leading vertex of the particle achieving `top`.
@@ -630,13 +658,13 @@ particle cannot disconnect what removing a different one leaves behind.
 The runner-up lets the anchor particle exclude itself in O(1); see
 [`collect_attachments!`](@ref).
 """
-function _deletable_species(poly::Polyform; target, visited, queue)
+function _deletable_species(poly::Polyform; target, dist, queue)
     rules = bindingrules(poly)
     n = nparticles(poly)
     top, runnerup, top_lv = 0, 0, 0
     for part in poly.particles
         n > 1 &&
-            is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, rules)]); target, visited, queue) &&
+            is_cutset(graphrep(poly), @view(poly.orig2canon[graphvertices(part, rules)]); target, dist, queue) &&
             continue
         s = speciesindex(part)
         if s > top
@@ -671,9 +699,10 @@ function collect_attachments!(attachments, poly::Polyform)
     rules = bindingrules(poly)
     empty!(attachments)
     nv_g = nv(graphrep(poly))
-    target, visited, queue = zeros(Bool, nv_g), zeros(Bool, nv_g), zeros(Cint, nv_g)
+    # `dist` carries distances and the -1/-2 markers `is_cutset` needs, so it cannot be a Bool
+    target, dist, queue = zeros(Bool, nv_g), zeros(Int, nv_g), zeros(Int, nv_g)
 
-    top, runnerup, top_lv = _deletable_species(poly; target, visited, queue)
+    top, runnerup, top_lv = _deletable_species(poly; target, dist, queue)
     for orig_v in poly.canon2orig
         anchor = particle_from_leadingvertex(poly, orig_v)
         isnothing(anchor) && continue
