@@ -150,14 +150,18 @@ Return a lazy iterator over the external edges of `graphrep(p)`, corresponding t
 @inline exterior_edges(p::Polyform) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
 
 """
-    _same_particle(p::Polyform, u::Integer, v::Integer)
+    _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs=false)
 
-Return `true` if the original graph vertices `u` and `v` belong to the same particle.
+Return `true` if the graph vertices `u` and `v` belong to the same particle.
+
+`canonidxs` says which numbering `u` and `v` are in: `false` for the stable original one,
+`true` for the canonical one that `graphrep(p)` is in, which is converted first.
 
 Each particle owns a contiguous block of original vertices starting at its leading vertex, so
 `u` and `v` are split apart exactly when some leading vertex falls between them.
 """
-@inline function _same_particle(p::Polyform, u::Integer, v::Integer)
+@inline function _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs::Bool=false)
+    canonidxs && ((u, v) = (toorig(p, u), toorig(p, v)))
     lo, hi = minmax(u, v)
     return !any(pt -> lo < leadingvertex(pt) <= hi, p.particles)
 end
@@ -165,7 +169,7 @@ end
 # An edge is a bond exactly when its endpoints belong to different particles
 function _filter_edges(p::Polyform, ::Val{exterior}) where {exterior}
     return Iterators.filter(edges(graphrep(p))) do (; src, dst)
-        same = _same_particle(p, toorig(p, src), toorig(p, dst))
+        same = _same_particle(p, src, dst; canonidxs=true)
         return exterior ? !same : same
     end
 end
