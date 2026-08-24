@@ -637,25 +637,32 @@ end
 """
     _facesites(p, poseof, colors, locking, twists, usecycle, touching_tol, alignment_tol)
 
-Build the graph and binding sites of a species carrying one site per face of polyhedron `p`.
+Return `(g, sites)`, the graph encoding and the binding sites of a species carrying one site
+per face of the polyhedron `p`.
 
-`poseof` maps face corner lists to the poses of the corresponding sites.
+  - `poseof(fs)` gives the site poses implied by the face corner lists `fs`. It is a function
+    rather than a vector of poses because `_facesites` re-winds the faces itself, and a site's
+    frame is read off its face's *first* corner, so the poses have to be taken again afterwards.
+  - `colors`, `locking` and `twists` hold one entry per face. `twists` is an angle in radians,
+    turning that face's site about its own normal.
+  - `usecycle` forces an encoding; `nothing` picks [`cycleencoding`](@ref) whenever it is
+    equivalent to [`dartencoding`](@ref), see [`_cycle_suffices`](@ref).
+  - `touching_tol` and `alignment_tol` become the sites' tolerances.
 
-`usecycle` picks the graph encoding: `nothing` takes the cheap one whenever it is equivalent.
+## Why the order of the steps is forced
 
-The order is forced. A face's first corner is its site's twist reference, and settling it takes
-three steps:
+A face's first corner is its site's twist reference, and settling it takes three steps:
 
-1. The body arrives with each face already started at an intrinsically chosen corner
-   which pins the references up to each face's `sitesym`.
-2. That is enough to derive the labeling, since [`siteorbits`](@ref) compares frames only up
-   to `sitesym`. Knowing the labeling gives the symmetry group.
-3. [`_propagate_faces`](@ref) then re-winds along that group, pinning the references up to
-   `stab`.
+ 1. `p` arrives from the [`Polyhedron`](@ref) constructor with each face already started at an
+    intrinsically chosen corner, which pins the references up to each face's `sitesym`.
+ 2. That is enough to derive the labeling, since [`siteorbits`](@ref) compares frames only up
+    to `sitesym`. Knowing the labeling gives the symmetry group.
+ 3. [`_propagate_faces`](@ref) re-winds along that group, pinning the references up to `stab`.
 
-`twists` is applied last, as a per-face angle about the site's own normal. It is folded into
-the key `siteorbits` groups by, alongside the color, so that twisting one face of an orbit
-differently from its fellows splits that orbit.
+`twists` is applied last, once the references are fixed. It is folded into the key
+[`siteorbits`](@ref) groups by, alongside the color, so that giving two faces of one orbit
+different twists splits the orbit instead of going unrecorded; [`check_encoding`](@ref) then
+confirms the graph can express the result.
 """
 function _facesites(
     p::Polyhedron{F},
