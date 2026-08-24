@@ -986,6 +986,41 @@ function _site_symmetries(poses, sitesyms, sitelabels)
 end
 
 """
+    _canonicalpartition(xs)
+
+Renumber the classes of `xs` to `1:k` in the order their first member appears, so that two
+partitions of the same sites compare equal with `==` exactly when they are the same partition.
+[`siteorbits`](@ref) already returns this form.
+"""
+function _canonicalpartition(xs)
+    seen = Dict{eltype(xs),Int}()
+    return [get!(seen, x, length(seen) + 1) for x in xs]
+end
+
+"""
+    _graphsiteorbits(ps::ParticleSpecies, vertexorbits)
+
+Return one orbit index per site of `ps`, collapsed from the graph vertex orbits `vertexorbits`
+that nauty reports for `graphrep(ps)`.
+
+Sites are joined whenever they share a vertex orbit, which is what an automorphism carrying one
+site onto another forces. A site's own vertices need *not* share an orbit: a square side face of
+a triangular prism owns four darts, and the prism's six rotations split them into two orbits, so
+reading the orbit of a site's first vertex would be wrong.
+"""
+function _graphsiteorbits(ps::ParticleSpecies, vertexorbits)
+    n = nsites(ps)
+    orbit = collect(1:n)
+    firstsite = Dict{eltype(vertexorbits),Int}()
+    for i in 1:n, v in bindingsite(ps, i).vertices
+        j = get!(firstsite, vertexorbits[v], i)
+        lo, hi = minmax(orbit[i], orbit[j])
+        hi == lo || replace!(orbit, hi => lo)
+    end
+    return _canonicalpartition(orbit)
+end
+
+"""
     siteorbits(poses, sitesyms, colors)
 
 Group the sites into the orbits of the rotations that preserve the *colored* arrangement, and
@@ -1087,8 +1122,15 @@ end
 """
     _check_labeling(ps::ParticleSpecies)
 
-Throw unless `ps`'s labeling is at least as fine as its coloring: sites sharing a label must
-share a color.
+Throw unless `ps`'s labeling is at least as fine as its coloring, and is exactly its symmetry
+orbits: two sites carry the same label if and only if a rotation of the particle carries one
+onto the other.
+
+"Only if" is the direction that is easy to get wrong, and comparing symmetry *numbers* does not
+catch it. Three sites on a directed cycle labeled `1, 1, 2` admit no automorphism, and if their
+geometry admits no rotation either then [`check_encoding`](@ref)'s count agrees at 1 while sites
+1 and 2 share a label that no rotation justifies. Everything downstream that reads a shared
+label as "these sites are interchangeable" would then be wrong; see [`_first_per_orbit`](@ref).
 """
 function _check_labeling(ps::ParticleSpecies)
     seen = Dict{Int,Int}()
@@ -1103,6 +1145,22 @@ function _check_labeling(ps::ParticleSpecies)
             ),
         )
     end
+
+    labeling = _canonicalpartition([sitelabel(ps, i) for i in 1:nsites(ps)])
+    orbits = siteorbits(_sitegeometry(ps)...)
+    labeling == orbits || throw(
+        ArgumentError(
+            "This labeling groups the sites as $labeling, but the rotations preserving it group " *
+            "them as $orbits. A labeling has to be exactly the symmetry orbits: " *
+            (
+                if length(unique(labeling)) < length(unique(orbits))
+                    "here it declares sites equivalent that no rotation maps onto each other. "
+                else
+                    "here it splits sites that a rotation does map onto each other. "
+                end
+            ) * "Derive it with `siteorbits` rather than writing it out.",
+        ),
+    )
     return ps
 end
 
@@ -1110,7 +1168,13 @@ end
     check_encoding(ps::ParticleSpecies)
 
 Throw if `ps`'s graph claims a different symmetry from its geometry and colors, or if its
-labeling is coarser than its coloring. Return `ps`.
+labeling is not exactly its symmetry orbits. Return `ps`.
+
+Three things have to line up, and each catches what the one before it misses:
+
+ 1. the labeling is at least as fine as the coloring, and is exactly the symmetry orbits;
+ 2. the graph's automorphism group and the geometry's rotation group have the same *order*;
+ 3. and they have the same *orbits*, since two groups of equal order can act differently.
 
 Every built-in species runs this in its constructor. Call it in your own if you write graph
 labels by hand instead of deriving them with [`siteorbits`](@ref).
@@ -1118,7 +1182,9 @@ labels by hand instead of deriving them with [`siteorbits`](@ref).
 function check_encoding(ps::ParticleSpecies)
     _check_labeling(ps)
     geometric = _eachsitesymmetry(Returns(nothing), _sitegeometry(ps)...)
-    graph = symmetrynumber(ps)
+    # Not `canonize`: a species' graph must stay in construction order, see `symmetrynumber`.
+    _, autg = nauty(graphrep(ps))
+    graph = convert(Int, autg.n)
     graph == geometric || throw(
         ArgumentError(
             "Graph encoding claims a symmetry number of $graph, but the geometry of this " *
@@ -1131,6 +1197,17 @@ function check_encoding(ps::ParticleSpecies)
                     "encoding does not describe this site arrangement."
                 end
             ),
+        ),
+    )
+
+    orbits = siteorbits(_sitegeometry(ps)...)
+    fromgraph = _graphsiteorbits(ps, autg.orbits)
+    orbits == fromgraph || throw(
+        ArgumentError(
+            "Graph encoding and geometry agree that this $(dimension(ps))d species has a " *
+            "rotational symmetry of $graph, but not on which sites it relates: the geometry " *
+            "groups them as $orbits and the graph as $fromgraph. Two groups of the same order " *
+            "can act differently, and the enumeration reads the graph's action.",
         ),
     )
     return ps

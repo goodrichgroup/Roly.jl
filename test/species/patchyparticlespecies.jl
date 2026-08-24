@@ -186,6 +186,27 @@ using LinearAlgebra: normalize, dot, det, norm
     ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3))
     @test symmetrynumber(ps) == length(permutationgroup(ps)) == 3
 
+    ### a labeling that is not the symmetry orbits
+    # `labels` lets one be supplied, and `check_encoding` has to reject it. Comparing symmetry
+    # *numbers* would not: a directed 3-cycle labeled 1,1,2 admits no automorphism, and neither
+    # does the uneven arrangement, so both sides report 1 while sites 1 and 2 share a label that
+    # no rotation justifies. Everything reading a shared label as "interchangeable" then breaks.
+    @test_throws ArgumentError PatchyParticleSpecies(
+        NautyDiGraph(cycle_digraph(3)), 1.0, uneven; colors=[1, 1, 2], labels=[1, 1, 2])
+    # Same labeling on a symmetric arrangement is no better: the 120 degree turn does not
+    # preserve it, so the orbits are still three singletons.
+    @test_throws ArgumentError PatchyParticleSpecies(
+        NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3), labels=[1, 1, 2])
+    # The orbits themselves go through, and give back what deriving them would have.
+    kept = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even;
+                                 colors=fill(1, 3), labels=[1, 1, 1])
+    @test labels(graphrep(kept)) == Cint[1, 1, 1]
+    @test symmetrynumber(kept) == 3
+    # A labeling finer than the coloring is still allowed, since that is how a twist declares
+    # two same-colored faces to be non-interchangeable.
+    @test symmetrynumber(PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even;
+                                               colors=fill(1, 3), labels=[1, 2, 3])) == 1
+
 
     # twists
 

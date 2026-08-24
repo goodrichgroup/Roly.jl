@@ -68,8 +68,7 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
             intmat[c2, c] && append!(compatible_sitelocs_cache[c], color2siteloc[c2])
         end
     end
-    orbits = [_colororbits(ps) for ps in particlespecies]
-    distinct_attachments = [_first_per_orbit(particlespecies, orbits, ls) for ls in compatible_sitelocs_cache]
+    distinct_attachments = [_first_per_orbit(particlespecies, ls) for ls in compatible_sitelocs_cache]
     isinert_cache = BitVector(!any(intmat[:, c]) for c in 1:ncolors)
 
     return BindingRules{D,PS}(
@@ -257,36 +256,23 @@ Return the particle species that contains the binding site with color `color`.
 end
 
 """
-    _colororbits(ps::ParticleSpecies)
-
-Return the orbit index of each site of `ps` under the rotations preserving its coloring.
-"""
-function _colororbits(ps::ParticleSpecies)
-    sites = [bindingsite(ps, i) for i in 1:nsites(ps)]
-    return siteorbits([s.pose for s in sites], [s.sitesym for s in sites], [color(s) for s in sites])
-end
-
-"""
-    _first_per_orbit(particlespecies, orbits, sitelocs)
+    _first_per_orbit(particlespecies, sitelocs)
 
 Return one site per symmetry orbit of the particle species. Of the entries of `sitelocs` that
-sit on the same species, carry the same graph label, and share a geometric orbit in `orbits`,
-only the first survives.
+sit on the same species and carry the same graph label, only the first survives.
 
-Both conditions are needed. A labeling derived by [`siteorbits`](@ref) makes them the same
-condition, but a hand-written one may be coarser than the true orbits without changing the
-graph's symmetry number, which [`check_encoding`](@ref) is all that compares. Dropping a site
-that no rotation of the particle reaches would lose every structure attached through it.
+This rests on a shared label meaning the sites really are interchangeable, which is what
+[`_check_labeling`](@ref) enforces: a labeling has to be exactly the symmetry orbits, not merely
+fine enough to give the right symmetry number. Without that, dropping a site no rotation of the
+particle reaches would lose every structure attached through it.
 """
 function _first_per_orbit(
-    particlespecies::AbstractVector{<:ParticleSpecies},
-    orbits::AbstractVector{<:AbstractVector{<:Integer}},
-    sitelocs::AbstractVector{BindingSiteLoc},
+    particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{BindingSiteLoc}
 )
     reps = BindingSiteLoc[]
-    seen = Set{NTuple{3,Int}}()
+    seen = Set{Tuple{Int,Int}}()
     for (spc, k) in sitelocs
-        orbit = (spc, sitelabel(particlespecies[spc], k), Int(orbits[spc][k]))
+        orbit = (spc, sitelabel(particlespecies[spc], k))
         orbit in seen && continue
         push!(seen, orbit)
         push!(reps, (spc, k))

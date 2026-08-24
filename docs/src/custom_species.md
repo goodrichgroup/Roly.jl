@@ -160,6 +160,7 @@ For this rectangle it returns `[1, 2, 1, 2]` even when all four colors are equal
 The same call on a square with one color returns `[1, 1, 1, 1]`.
 
 If you do write labels by hand, call [`check_encoding`](@ref) in your constructor to confirm they match the shape.
+It requires the labeling to be *exactly* the symmetry orbits, not merely fine enough to give the right symmetry number, because everything downstream reads a shared label as "a rotation carries one of these sites onto the other".
 
 ### Interface methods
 
