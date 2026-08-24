@@ -54,16 +54,27 @@ function _markoffset(rules::BindingRules)
     return m
 end
 
+"""
+    _orig2canon!(h)
+
+Canonize `h` in place and return its `orig2canon` map, the direction [`Polyform`](@ref) stores
+under that name: `orig2canon[v]` is where the vertex that was `v` ended up.
+
+NautyGraphs runs the other way. `canonize!` hands back `canon2orig`, so this inverts once, here,
+rather than at each call site -- every caller in this file wants to follow a vertex it already
+holds into the canonical graph.
+"""
+_orig2canon!(h::AbstractNautyGraph) = invperm(collect(Int, canonize!(h)))
+
 # Mark and canonize: bump the labels of the i-th group of vertices by i*offset. Marking every vertex
 # of a root particle (rather than a single one) preserves the particle's internal symmetry.
+# Returns the marked graph and its `orig2canon`, see `_orig2canon!`.
 function _canonmarked(g::AbstractNautyGraph, groups, offset)
     h = copy(g)
     for (i, vs) in enumerate(groups), v in vs
         setlabel!(h, v, labels(h)[v] + i * offset)
     end
-    # `canonize!` returns the new -> old permutation (`newlabels[i] == oldlabels[perm[i]]`).
-    # downstream callers need opposite; invert here
-    return h, invperm(collect(Int, canonize!(h)))
+    return h, _orig2canon!(h)
 end
 
 # Buffers for the particle-hop search, reusable across calls and polyforms.
@@ -126,10 +137,10 @@ function _envgraph(poly::Polyform, dist::AbstractVector{<:Integer}, depth::Integ
 
     h = graphrep(poly)[verts]
     groups = map(p -> offsets[p]:(offsets[p]+nsites(particles(poly, p), rules)-1), roots)
-    hm, old2new = _canonmarked(h, groups, _markoffset(rules))
+    hm, orig2canon = _canonmarked(h, groups, _markoffset(rules))
 
     canonrootvertices = map(roots, rootvertices) do p, ov
-        old2new[offsets[p]+ov-leadingvertex(particles(poly, p))]
+        orig2canon[offsets[p]+ov-leadingvertex(particles(poly, p))]
     end
     return hm, canonrootvertices
 end
@@ -192,8 +203,8 @@ function Base.reverse(env::BondEnvironment)
             setlabel!(h, v, l + offset)
         end
     end
-    old2new = invperm(collect(Int, canonize!(h)))
-    return PolyformEnvironment(h, (old2new[env.rootvertices[2]], old2new[env.rootvertices[1]]), env.depth,
+    orig2canon = _orig2canon!(h)
+    return PolyformEnvironment(h, (orig2canon[env.rootvertices[2]], orig2canon[env.rootvertices[1]]), env.depth,
         env.rules)
 end
 
@@ -223,9 +234,9 @@ _rootgroup(poly::Polyform) =
 # Recompute the root-marked canonical key of a state; the whole polyform is its own ball.
 function _rekey!(s::EnvironmentState)
     poly = s.poly
-    hm, old2new = _canonmarked(graphrep(poly), (_rootgroup(poly),), _markoffset(bindingrules(poly)))
+    hm, orig2canon = _canonmarked(graphrep(poly), (_rootgroup(poly),), _markoffset(bindingrules(poly)))
     s.key = hm
-    s.rootvertex = old2new[tocanon(poly, first(graphvertices(particles(poly, 1), bindingrules(poly))))]
+    s.rootvertex = orig2canon[tocanon(poly, first(graphvertices(particles(poly, 1), bindingrules(poly))))]
     return s
 end
 
@@ -295,8 +306,8 @@ function _lsenv!(w::EnvironmentState, v::EnvironmentState, bufs::EnvironmentBuff
 
     dist = _particledists!(bufs, v.poly, (1,); maxdepth=typemax(Int))
     D = maximum(dist)
-    _, old2new = _canonmarked(graphrep(v.poly), (_rootgroup(v.poly),), _markoffset(rules))
-    canonpos(p) = minimum(old2new[tocanon(v.poly, ov)]
+    _, orig2canon = _canonmarked(graphrep(v.poly), (_rootgroup(v.poly),), _markoffset(rules))
+    canonpos(p) = minimum(orig2canon[tocanon(v.poly, ov)]
                           for ov in graphvertices(particles(v.poly, p), rules))
     drop = argmax(canonpos, (p for p in 1:n if dist[p] == D))
 
@@ -427,8 +438,8 @@ function bondenvironments(env::ParticleEnvironment)
             l += comp[v] == rootcomp ? offset : comp[v] == partner ? 2offset : 0
             setlabel!(h, k, l)
         end
-        old2new = invperm(collect(Int, canonize!(h)))
-        push!(out, PolyformEnvironment(h, (old2new[pos[u]], old2new[pos[w]]), env.depth - 1, env.rules))
+        orig2canon = _orig2canon!(h)
+        push!(out, PolyformEnvironment(h, (orig2canon[pos[u]], orig2canon[pos[w]]), env.depth - 1, env.rules))
     end
     return out
 end
@@ -471,8 +482,8 @@ function crop(env::ParticleEnvironment, depth::Integer)
 
     # the root's mark survives the crop unchanged, so no relabeling is needed
     h = g[verts]
-    old2new = invperm(collect(Int, canonize!(h)))
-    return PolyformEnvironment(h, (old2new[pos[env.rootvertices[1]]],), Int(depth), env.rules)
+    orig2canon = _orig2canon!(h)
+    return PolyformEnvironment(h, (orig2canon[pos[env.rootvertices[1]]],), Int(depth), env.rules)
 end
 
 """
@@ -495,8 +506,8 @@ function crop(env::BondEnvironment, depth::Integer)
     verts, pos = _keptvertices(compverts, dist, nv(g))
     # both roots keep their marks, so the labels carry over unchanged
     h = g[verts]
-    old2new = invperm(collect(Int, canonize!(h)))
-    return PolyformEnvironment(h, (old2new[pos[env.rootvertices[1]]], old2new[pos[env.rootvertices[2]]]),
+    orig2canon = _orig2canon!(h)
+    return PolyformEnvironment(h, (orig2canon[pos[env.rootvertices[1]]], orig2canon[pos[env.rootvertices[2]]]),
         Int(depth), env.rules)
 end
 
@@ -528,8 +539,8 @@ function rootenvironment(env::PolyformEnvironment{N}, i::Integer, depth::Integer
         l = mod1(labels(h)[k], offset)
         setlabel!(h, k, l + (comp[v] == rootcomp ? offset : 0))
     end
-    old2new = invperm(collect(Int, canonize!(h)))
-    return PolyformEnvironment(h, (old2new[pos[env.rootvertices[i]]],), Int(depth), env.rules)
+    orig2canon = _orig2canon!(h)
+    return PolyformEnvironment(h, (orig2canon[pos[env.rootvertices[i]]],), Int(depth), env.rules)
 end
 
 # Particle-level adjacency of an environment graph (bond edges are bidirectional).
