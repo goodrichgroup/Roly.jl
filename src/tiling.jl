@@ -28,75 +28,115 @@ function Base.show(io::Core.IO, t::Tiling)
 end
 
 """
-    tilings(poly::Polyform; nreps=2, maxblock=1)
+    tilings(poly::Polyform; nreps=2, maxorder=1)
 
 Enumerate the periodic closures of `poly`: choices of up to `dimension` translation vectors
 under which copies of a cell form valid bonds with each other and never overlap, each vector
 contributing at least one bond.
 
   - `nreps`: neighbor shells placed and checked per vector.
-  - `maxblock`: construct meta-polyforms up to size `maxblock`, which are then checked for translation tilings.
-    `maxblock > 1` makes it possible to find tilings where `poly` appears in rotated configurations.
+  - `maxorder`: let a cell hold up to `maxorder` copies of `poly`, grown as a meta-polyform and
+    then checked for translation tilings. Above 1 this reaches tilings in which `poly` appears
+    turned as well as translated.
   - returns a vector of [`Tiling`](@ref)
 
 Candidate vectors connect interacting, aligned pairs of open sites, so a closure that needs a
-turn is found only through the block it makes: growing blocks with [`MetaParticleSpecies`](@ref)
+turn is found only through the cell it makes: growing cells with [`MetaParticleSpecies`](@ref)
 puts the turn inside the cell, leaving a lattice that is a pure translation again.
 """
-function tilings(poly::Polyform; nreps::Integer=2, maxblock::Integer=1)
+function tilings(poly::Polyform; nreps::Integer=2, maxorder::Integer=1)
     rules = bindingrules(poly)
     out = Tiling{SVector{dimension(rules),numtype(rules)}}[]
-    for (parts, opensites, prebonds, order) in _tilecells(poly, maxblock)
-        _addtilings!(out, parts, opensites, prebonds, order, rules, nreps)
+    for cell in _tilecells(poly, maxorder)
+        _addtilings!(out, cell, rules, nreps)
     end
     return out
 end
 
-# `sites` are every site the block exposes, `prebonds` those of them already joined to each other
-# inside the block. Both are needed: the bonds count towards the cell's composition, and their
-# endpoints are spent, so only the rest can carry the lattice.
-function _addtilings!(out, parts, sites, prebonds, order, rules, nreps)
+"""
+    TileCell{P,S}
+
+One candidate cell of a lattice: the meta-polyform a translate carries, laid out as plain
+particles.
+
+  - `particles`: every particle of every copy, in one numbering
+  - `sites`: every site those copies expose, spent ones included
+  - `metabonds`: the sites already joined to each other inside the cell
+  - `order`: how many copies of the polyform the cell holds
+
+Both site lists are needed. The bonds count towards the cell's composition, and their endpoints
+are spent, so only the remaining sites can carry the lattice.
+"""
+struct TileCell{P,S}
+    particles::Vector{P}
+    sites::Vector{S}
+    metabonds::Vector{NTuple{2,UnitRange{Int}}}
+    order::Int
+end
+
+# Everything the shell search threads around: the cell being translated, what it is searched
+# against, and the state of the current branch of the search.
+struct _ShellSearch{P,S,R,V}
+    cell::TileCell{P,S}
+    rules::R
+    vectors::Vector{V}
+    siteof::Dict{UnitRange{Int},S}
+    nreps::Int
+    consumed::Set{UnitRange{Int}}                 # site ranges a bond has already closed
+    contacts::Vector{NTuple{2,UnitRange{Int}}}    # bonds the placed shells have formed
+    placed::Vector{Vector{P}}                     # one shell of copies per chosen vector
+    chosen::Vector{Int}                           # indices into `vectors`
+end
+
+function _addtilings!(out, cell::TileCell, rules, nreps::Integer)
     consumed = Set{UnitRange{Int}}()
-    for (r1, r2) in prebonds
+    for (r1, r2) in cell.metabonds
         push!(consumed, r1)
         push!(consumed, r2)
     end
-    free = [s for s in sites if s.vertices ∉ consumed]
+    free = [s for s in cell.sites if s.vertices ∉ consumed]
     isempty(free) && return out
-    vecs = _candidatelatticevectors(free, rules)
-    isempty(vecs) && return out
+    vectors = _candidatelatticevectors(free, rules)
+    isempty(vectors) && return out
 
-    siteof = Dict(s.vertices => s for s in sites)
-    pretypes = [_bondtype(rules, siteof, c) for c in prebonds]
-    state = (consumed=consumed, contacts=NTuple{2,UnitRange{Int}}[],
-        placed=Vector{eltype(parts)}[], chosen=Int[])
+    siteof = Dict(s.vertices => s for s in cell.sites)
+    search = _ShellSearch(
+        cell,
+        rules,
+        vectors,
+        siteof,
+        Int(nreps),
+        consumed,
+        NTuple{2,UnitRange{Int}}[],
+        Vector{eltype(cell.particles)}[],
+        Int[],
+    )
+    spent = [_bondtype(rules, siteof, c) for c in cell.metabonds]
     record!() = push!(
         out,
         Tiling(
-            vecs[state.chosen],
-            vcat(pretypes, [_bondtype(rules, siteof, c) for c in state.contacts]),
-            length(state.consumed) == length(siteof),
-            order,
+            vectors[search.chosen],
+            vcat(spent, [_bondtype(rules, siteof, c) for c in search.contacts]),
+            length(search.consumed) == length(siteof),
+            cell.order,
         ),
     )
-    _tilings!(record!, state, parts, rules, vecs, siteof, nreps, dimension(rules), 1)
+    _tilings!(record!, search, dimension(rules), 1)
     return out
 end
 
-# The cells to try: every meta-polyform of up to `maxblock` copies of `poly` that the assembly
-# machinery can build, laid back out as plain particles. `maxblock == 1` needs no special case,
+# The cells to try: every meta-polyform of up to `maxorder` copies of `poly` that the assembly
+# machinery can build, laid back out as plain particles. `maxorder == 1` needs no special case,
 # since the meta-monomer is `poly` itself.
-function _tilecells(poly::Polyform, maxblock::Integer)
+function _tilecells(poly::Polyform, maxorder::Integer)
     inner = collect_open_bindingsites(poly)
-    S = eltype(inner)
-    P = eltype(poly.particles)
-    cells = Tuple{Vector{P},Vector{S},Vector{NTuple{2,UnitRange{Int}}},Int}[]
+    cells = TileCell{eltype(poly.particles),eltype(inner)}[]
     # With no open site there is nothing for a translate to bond to, and no meta-species to build.
     isempty(inner) && return cells
 
-    for meta in polygen(metarules(MetaParticleSpecies(poly)); maxsize=maxblock)
+    for meta in polygen(metarules(MetaParticleSpecies(poly)); maxsize=maxorder)
         parts, _, sites = _unwrapparts(meta)
-        push!(cells, (parts, sites, metabonds(meta), nparticles(meta)))
+        push!(cells, TileCell(parts, sites, metabonds(meta), nparticles(meta)))
     end
     return cells
 end
@@ -158,7 +198,7 @@ leaves only the translation, which is a periodic chain.
 
 **In 3D** it does not: the motion can be a screw, whose translation along the axis never
 collides. A screw by `2πp/q` closes into a translation over `q` copies and is found with
-`maxblock ≥ q`, but an irrational one never closes at all, and no periodicity test can see it.
+`maxorder ≥ q`, but an irrational one never closes at all, and no periodicity test can see it.
 See [`isunbounded`](@ref).
 """
 function canchain(rules::BindingRules;
@@ -394,23 +434,23 @@ end
 
 # Depth-first search over strictly growing vector index sets: place the newest vector's shells,
 # record every consistent configuration, recurse, undo.
-function _tilings!(record!::F, state, parts, rules, vecs, siteof, nreps, maxvecs, from) where {F}
-    length(state.chosen) == maxvecs && return
-    for idx in from:length(vecs)
-        push!(state.chosen, idx)
-        n0 = length(state.contacts)
-        added = _placeshell!(state, parts, rules, vecs, siteof, nreps)
+function _tilings!(record!::F, s::_ShellSearch, maxvecs::Integer, from::Integer) where {F}
+    length(s.chosen) == maxvecs && return
+    for idx in from:length(s.vectors)
+        push!(s.chosen, idx)
+        n0 = length(s.contacts)
+        added = _placeshell!(s)
         # a shell without a single bond only builds disconnected unions; skip it
-        if added !== nothing && length(state.contacts) > n0
+        if added !== nothing && length(s.contacts) > n0
             record!()
-            _tilings!(record!, state, parts, rules, vecs, siteof, nreps, maxvecs, idx + 1)
+            _tilings!(record!, s, maxvecs, idx + 1)
         end
         if added !== nothing
-            foreach(r -> delete!(state.consumed, r), added)
-            resize!(state.contacts, n0)
-            pop!(state.placed)
+            foreach(r -> delete!(s.consumed, r), added)
+            resize!(s.contacts, n0)
+            pop!(s.placed)
         end
-        pop!(state.chosen)
+        pop!(s.chosen)
     end
     return
 end
@@ -418,43 +458,44 @@ end
 # Place every copy whose coefficient on the newest vector is positive (earlier-vector shells were
 # placed by earlier stages). Returns the newly consumed site ranges, or `nothing` on an overlap,
 # an invalid or bound-site contact, or a doubly-consumed site — with all bookkeeping undone.
-function _placeshell!(state, parts, rules, vecs, siteof, nreps)
-    k = length(state.chosen)
-    n0 = length(state.contacts)
+function _placeshell!(s::_ShellSearch)
+    parts = s.cell.particles
+    k = length(s.chosen)
+    n0 = length(s.contacts)
     added = UnitRange{Int}[]
     shell = eltype(parts)[]
     function fail()
-        foreach(r -> delete!(state.consumed, r), added)
-        resize!(state.contacts, n0)
+        foreach(r -> delete!(s.consumed, r), added)
+        resize!(s.contacts, n0)
         return nothing
     end
 
-    for m in Iterators.product(ntuple(_ -> 0:nreps, k - 1)..., 1:nreps)
-        t = sum(m[i] * vecs[state.chosen[i]] for i in 1:k)
+    for m in Iterators.product(ntuple(_ -> 0:(s.nreps), k - 1)..., 1:(s.nreps))
+        t = sum(m[i] * s.vectors[s.chosen[i]] for i in 1:k)
         for part in parts
             sp = part + t
-            for prior in state.placed
-                first(_overlap_and_contacts(prior, sp, rules)) === true && return fail()
+            for prior in s.placed
+                first(_overlap_and_contacts(prior, sp, s.rules)) === true && return fail()
             end
-            first(_overlap_and_contacts(shell, sp, rules)) === true && return fail()
-            ov, cts = _overlap_and_contacts(parts, sp, rules)
+            first(_overlap_and_contacts(shell, sp, s.rules)) === true && return fail()
+            ov, cts = _overlap_and_contacts(parts, sp, s.rules)
             ov && return fail()
             for (r1, r2) in cts
                 # both endpoints must be open sites of the cell, each closed at most once
-                (haskey(siteof, r1) && haskey(siteof, r2)) || return fail()
-                r1 in state.consumed && return fail()
-                push!(state.consumed, r1)
+                (haskey(s.siteof, r1) && haskey(s.siteof, r2)) || return fail()
+                r1 in s.consumed && return fail()
+                push!(s.consumed, r1)
                 push!(added, r1)
                 if r2 != r1
-                    r2 in state.consumed && return fail()
-                    push!(state.consumed, r2)
+                    r2 in s.consumed && return fail()
+                    push!(s.consumed, r2)
                     push!(added, r2)
                 end
-                push!(state.contacts, (r1, r2))
+                push!(s.contacts, (r1, r2))
             end
             push!(shell, sp)
         end
     end
-    push!(state.placed, shell)
+    push!(s.placed, shell)
     return added
 end

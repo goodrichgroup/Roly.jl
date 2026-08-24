@@ -8,9 +8,9 @@ Chosen unbound sites of the cluster become the species' sites — by default eve
 inert, and otherwise exactly those named, see [`exposablesites`](@ref). Geometry is delegated: two
 meta-particles overlap exactly when any of their constituent particles do.
 
-Meta-species describe *meta*-assembly systems, whose `BindingRules` say how blocks attach to
-blocks. A meta-particle cannot bond to a plain particle; wrap the plain species as its own
-single-particle meta-species instead.
+Meta-species describe *meta*-assembly systems, whose `BindingRules` say how meta-particles
+attach to each other. A meta-particle cannot bond to a plain particle; wrap the plain species as
+its own single-particle meta-species instead.
 
 The encoding is the wrapped cluster's own graph, not a fresh graph over its open sites. A
 cluster's shape is not determined by its binding sites — two open sites can sit in symmetric
@@ -42,7 +42,7 @@ Every *unbound* binding site of `poly`, as rows of `(particle, site, color, iner
 
 These are the sites a [`MetaParticleSpecies`](@ref) can expose, in the order it exposes them by
 default. Bound sites are consumed by the bonds holding the cluster together and are never listed:
-exposing one would let two blocks bond through a bond that already exists.
+exposing one would let two meta-particles bond through a bond that already exists.
 
 `inert` marks a site whose color takes part in no rule of the cluster's own system. Those are
 skipped by default and are exactly the sites to name explicitly when a meta-assembly should use

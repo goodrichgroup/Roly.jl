@@ -55,7 +55,7 @@
         # and the derived default reaches it without being told
         @test isunbounded(turnrules)
         # and a cell of two copies reaches the same fact from a one-particle chain
-        @test nparticles(canchain(turnrules; maxlength=1, maxblock=2)) == 1
+        @test nparticles(canchain(turnrules; maxlength=1, maxorder=2)) == 1
     end
 
     @testset "unbounded rules via a repeating motion" begin
@@ -85,23 +85,23 @@
     @testset "cells of several copies" begin
         # every closure above is a cell of one copy, and says so
         @test all(t.order == 1 for t in tilings(chainmono))
-        @test all(t.order == 1 for t in tilings(sqmono; maxblock=1))
+        @test all(t.order == 1 for t in tilings(sqmono; maxorder=1))
 
         # site 1 binds site 2, a quarter turn, so no translation carries a single square onto a
-        # bonded copy -- the cell has to hold two of them, related by that turn, and only block
-        # growth can find it
+        # bonded copy -- the cell has to hold two of them, related by that turn, and only
+        # growing the cell as a meta-polyform can find it
         turn = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
         mono = first(polygen(turn; maxsize=1))
-        @test isempty(tilings(mono; maxblock=1))
-        blocked = tilings(mono; maxblock=2)
-        @test !isempty(blocked)
-        @test all(t.order == 2 for t in blocked)
+        @test isempty(tilings(mono; maxorder=1))
+        turned = tilings(mono; maxorder=2)
+        @test !isempty(turned)
+        @test all(t.order == 2 for t in turned)
         # the bond joining the two copies belongs to the cell, so it is counted there
-        @test all(!isempty(t.bondtypes) for t in blocked)
+        @test all(!isempty(t.bondtypes) for t in turned)
 
         # a supercell of a tiling is still a tiling, so raising the bound only adds cells
         for k in 1:3
-            ts = tilings(chainmono; maxblock=k)
+            ts = tilings(chainmono; maxorder=k)
             @test sort(unique(t.order for t in ts)) == collect(1:k)
             @test all(t.complete for t in ts)
             # a cell of k copies closes k bonds
