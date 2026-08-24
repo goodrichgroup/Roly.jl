@@ -931,9 +931,12 @@ function siteorbits(poses, sitesyms, colors)
             replace!(orbit, hi => lo)
         end
     end
-    # compact to 1:k so the result can be used as graph labels directly.
+    # compact to 1:k in place, so the result can be used as graph labels directly.
     ids = sort!(unique(orbit))
-    return [searchsortedfirst(ids, o) for o in orbit]
+    for i in eachindex(orbit)
+        orbit[i] = searchsortedfirst(ids, orbit[i])
+    end
+    return orbit
 end
 
 """
