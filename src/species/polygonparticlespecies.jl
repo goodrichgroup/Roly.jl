@@ -33,7 +33,7 @@ function PolygonParticleSpecies(n::Integer, a::F=1.0; colors=1:n) where {F<:Real
     # it the stabilizer: the only rotation fixing a site is the identity.
     sitesyms = ones(Int, n)
     labels = siteorbits(poses, sitesyms, collect(colors))
-    stabs = sitestabilizers(poses, sitesyms, labels)
+    stabs = stabilizerorders(poses, sitesyms, labels)
 
     g, ranges = cycleencoding(n; labels)
     sites = BindingSite{Pose{2,F,Angle2d{F}},F}[]

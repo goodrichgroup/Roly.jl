@@ -24,7 +24,7 @@ For a polyhedron face the twist reference is "local z points at the midpoint of 
 | `stab` | order of that site's stabilizer in the particle's symmetry group | 2 |
 
 Each divides the next, and all three are equal for a cube face.
-[`facesym`](@ref) computes `sitesym` from the face, [`sitestabilizers`](@ref) computes `stab` from the particle.
+[`facesym`](@ref) computes `sitesym` from the face, [`stabilizerorders`](@ref) computes `stab` from the particle.
 
 ## How many distinct twists a bond has
 

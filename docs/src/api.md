@@ -54,7 +54,8 @@ siteorbits
 sitelabel
 site_symmetry
 check_encoding
-sitestabilizers
+stabilizerorders(::ParticleSpecies)
+stabilizerorders(::Any, ::Any, ::Any)
 dartencoding
 cycleencoding
 ```

@@ -58,14 +58,14 @@ Besides its pose and color, a [`BindingSite`](@ref) carries three numbers that d
 | field | meaning |
 |---|---|
 | `sitesym` | order of the site's own rotational symmetry about its normal. Always 1 in 2D. [`facesym`](@ref) computes it for a polyhedron face. |
-| `stab` | order of the site's stabilizer in the particle's rotation group, from [`sitestabilizers`](@ref). |
+| `stab` | order of the site's stabilizer in the particle's rotation group, from [`stabilizerorders`](@ref). |
 | `locking` | whether the site holds its partner in the orientation its frame names (the default) or admits every orientation the shape permits. |
 
 Roly reads these to decide how many distinct bonds a pair of sites has.
 
 In 2D both `sitesym` and `stab` are 1, so the five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` is right.
 In 3D `sitesym` is still 1 for a site on a single vertex, but `stab` need not be, since a rotation about a patch's axis can carry the particle onto itself.
-Compute it with [`sitestabilizers`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, sitesym, stab)`.
+Compute it with [`stabilizerorders`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, sitesym, stab)`.
 See [Orientation and twists](orientation.md).
 
 ## A worked example: rectangle

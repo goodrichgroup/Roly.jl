@@ -1,7 +1,7 @@
 # The species interface as `docs/src/custom_species.md` documents it.
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color, siteorbits,
-            cycleencoding, sitestabilizers, sat_overlap, edgenormals
+            cycleencoding, stabilizerorders, sat_overlap, edgenormals
 import Roly: graphrep, nsites, bindingsites, bounding_radius, isconvex
 using NautyGraphs, StaticArrays, LinearAlgebra, Rotations
 
@@ -75,7 +75,7 @@ end
     setcolors!(r, fill(7, 4))
     @test symmetrynumber(r) == site_symmetry(r) == 2
     @test length(unique(Roly.labels(graphrep(r)))) == 2
-    @test sitestabilizers(r) == fill(1, 4)
+    @test stabilizerorders(r) == fill(1, 4)
 
     # Check enumeration. `BindingRules` recolors its species itself; this only replaces the
     # all-alike coloring left above.

@@ -160,20 +160,20 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # ratio is how many distinct ways a partner can attach there: turns in the stabilizer put
     # the same body in the same place with only its sites permuted.
     sitesyms(ps) = [bindingsites(ps, i).sitesym for i in 1:nsites(ps)]
-    ntwists(ps) = sitesyms(ps) .÷ Roly.sitestabilizers(ps)
+    ntwists(ps) = sitesyms(ps) .÷ Roly.stabilizerorders(ps)
 
     # A cube keeps all four turns about a face normal, so a face-to-face bond has one
     # twist and nothing changes for polycubes.
     cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
     @test sitesyms(cube) == fill(4, 6)
-    @test Roly.sitestabilizers(cube) == fill(4, 6)
+    @test Roly.stabilizerorders(cube) == fill(4, 6)
     @test ntwists(cube) == fill(1, 6)
 
     # Distinguishing the caps costs the side faces two of those turns, since a quarter turn
     # about a side normal carries the other sides onto caps.
     caps = [abs(n[3]) > 0.5 ? 2 : 1 for n in Roly.facenormals(Cube())]
     capped = PolyhedronParticleSpecies(Cube(); colors=caps)
-    @test Roly.sitestabilizers(capped) == [c == 2 ? 4 : 2 for c in caps]
+    @test Roly.stabilizerorders(capped) == [c == 2 ? 4 : 2 for c in caps]
     @test ntwists(capped) == [c == 2 ? 1 : 2 for c in caps]
 
     # A triangular prism's side faces are squares
@@ -181,7 +181,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # two ways: in the plane, or tipped out of it.
     tri = PolyhedronParticleSpecies(Prism(3); colors=faceorbits(Prism(3)))
     @test sitesyms(tri) == [3, 4, 4, 4, 3]
-    @test Roly.sitestabilizers(tri) == [3, 2, 2, 2, 3]
+    @test Roly.stabilizerorders(tri) == [3, 2, 2, 2, 3]
     @test ntwists(tri) == [1, 2, 2, 2, 1]
 
     # Make the prism taller, so that faces become rectangles: sitesym and stabilizer agree at 2,
@@ -193,7 +193,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     # A stabilizer always divides the sitesym, and always divides the symmetry number.
     for ps in (cube, capped, tri, tallps, UnitDodecahedron, UnitAntiprism(4))
-        stabs = Roly.sitestabilizers(ps)
+        stabs = Roly.stabilizerorders(ps)
         @test all(sitesyms(ps) .% stabs .== 0)
         @test all(symmetrynumber(ps) .% stabs .== 0)
     end
@@ -258,7 +258,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # recolored into its full D_3 and the derived quantities follow.
     prism = dartspecies(Prism(3, 1.0; h=2.0); colors=1:5)
     @test symmetrynumber(prism) == site_symmetry(prism) == 1
-    @test Roly.sitestabilizers(prism) == fill(1, 5)
+    @test Roly.stabilizerorders(prism) == fill(1, 5)
 
     caps = [i for i in 1:5 if abs(Roly.facenormal(Prism(3, 1.0; h=2.0), i)[3]) > 1e-8]
     setcolors!(prism, [i in caps ? 7 : 8 for i in 1:5])

@@ -680,7 +680,7 @@ function _facesites(
     steps = [round(Int, t * length(f) / (2F(π))) for (f, t) in zip(fs, twists)]
     fs = [circshift(f, -mod(m, length(f))) for (f, m) in zip(fs, steps)]
     poses = [pose * RotX(F(t) - 2F(π) * m / length(f)) for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
-    stabs = sitestabilizers(poses, sitesyms, labels)
+    stabs = stabilizerorders(poses, sitesyms, labels)
 
     freedoms = [l ? s : g for (g, s, l) in zip(sitesyms, stabs, locking)]
     cyclic = something(usecycle, _cycle_suffices(freedoms, labels))
@@ -937,14 +937,25 @@ function siteorbits(poses, sitesyms, colors)
 end
 
 """
-    sitestabilizers(ps::ParticleSpecies)
-    sitestabilizers(poses, sitesyms, sitelabels)
+    stabilizerorders(ps::ParticleSpecies)
 
-Return, per site, how many of the particle's own symmetries leave that site where it is.
+Return, per site, the order of that site's stabilizer: how many of the particle's own
+symmetries leave the site where it is. These are counts, not the subgroups themselves.
+
+Reads the orders `ps` already stores; use the three-argument method to derive them.
 """
-sitestabilizers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
+stabilizerorders(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
 
-function sitestabilizers(poses, sitesyms, sitelabels)
+"""
+    stabilizerorders(poses, sitesyms, sitelabels)
+
+Return, per site, the order of that site's stabilizer: how many of the particle's own
+symmetries leave the site where it is. These are counts, not the subgroups themselves.
+
+Derives the orders from the site geometry, which is what a species constructor needs before
+it can build its [`BindingSite`](@ref)s.
+"""
+function stabilizerorders(poses, sitesyms, sitelabels)
     perms = _site_symmetries(poses, sitesyms, sitelabels)
     return [count(perm -> perm[i] == i, perms) for i in eachindex(poses)]
 end
@@ -979,7 +990,7 @@ function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors
     poses = [s.pose for s in sites]
     sitesyms = [s.sitesym for s in sites]
     orbits = siteorbits(poses, sitesyms, collect(colors))
-    stabs = sitestabilizers(poses, sitesyms, orbits)
+    stabs = stabilizerorders(poses, sitesyms, orbits)
 
     labs = labels(g)
     for i in eachindex(sites)
