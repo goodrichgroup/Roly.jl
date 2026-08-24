@@ -151,6 +151,8 @@ bindingrules
 composition
 canonbindingsite
 canonbindingsites
+rotationgroup(::Polyform)
+permutationgroup(::Polyform)
 bonds
 bondindex
 interior_edges

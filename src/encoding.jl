@@ -962,6 +962,10 @@ function _eachsitesymmetry(f, poses, sitesyms, sitelabels)
             Q = psi * inv(poses[1].psi)
             perm = permutation(Q)
             isnothing(perm) && continue
+            # Keep only the `a` that `Q` really sends site 1 to, so an element cannot be reached
+            # twice. Two sites of one particle never share a frame, so this is a no-op here, but
+            # it is what makes the orbit-stabilizer count exact rather than incidental.
+            perm[1] == a || continue
             f(Q, perm)
             count += 1
         end

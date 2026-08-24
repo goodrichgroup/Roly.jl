@@ -275,6 +275,113 @@ Return a lazy iterator over all binding sites of `p` in canonical order.
 canonbindingsites(p::Polyform) = (canonbindingsite(p, i) for i in 1:nsites(p))
 
 """
+    permutationgroup(p::Polyform)
+
+Return the rotational symmetry group of `p` as particle permutations: one permutation per
+rotation about the centroid of `p`'s particle positions that carries every particle onto a
+particle of the same species, matching position and orientation.
+
+The counterpart of [`rotationgroup(::Polyform)`](@ref), which returns the same group as
+rotations, and the assembled analogue of [`permutationgroup(::ParticleSpecies)`](@ref), which
+permutes a single particle's sites.
+
+`length(permutationgroup(p))` should equal [`symmetrynumber`](@ref)`(p)`, which reads the same
+order off the graph encoding. Use it to check an encoding rather than to compute the symmetry
+number, which nauty gives far more cheaply.
+
+The list holds one entry per rotation, so it may repeat: the action on particles is not
+faithful. A straight chain of cubes turned about the chain axis leaves every particle where it
+was and still moves the graph. Call `unique` on the result for the quotient group.
+"""
+function permutationgroup(p::Polyform)
+    perms = Vector{Int}[]
+    _eachpolyformsymmetry((_, perm) -> push!(perms, perm), p)
+    return perms
+end
+
+"""
+    rotationgroup(p::Polyform)
+
+Return the rotational symmetry group of `p` as rotations about the centroid of `p`'s particle
+positions: those carrying every particle onto a particle of the same species, matching position
+and orientation.
+
+The counterpart of [`permutationgroup(::Polyform)`](@ref), which returns the same group as
+particle permutations.
+"""
+function rotationgroup(p::Polyform)
+    rots = _rotationtype(posetype(p))[]
+    _eachpolyformsymmetry((Q, _) -> push!(rots, Q), p)
+    return rots
+end
+
+"""
+    _eachpolyformsymmetry(f, p::Polyform)
+
+Call `f(Q, perm)` on every rotation `Q` about the centroid of `p`'s particle positions that
+carries each particle onto one of the same species, matching position and orientation, together
+with the particle permutation `perm` it induces. Return how many there were.
+
+A particle's frame need only match up to its species' own
+[`rotationgroup`](@ref rotationgroup(::ParticleSpecies)), so the candidates are `Q = Rₐ S R₁⁻¹`
+for each particle `a` of particle 1's species and each `S` in that group. Every element of the
+group appears exactly once, by orbit-stabilizer.
+
+Particles have *distinct positions*, since they may not overlap. That is what makes a rotation
+determined by where it sends particle 1 and makes the induced map injective for free, and it is
+why this reads particle poses rather than the site poses [`_eachsitesymmetry`](@ref) uses: the
+two sites of a bond sit at the same point.
+"""
+function _eachpolyformsymmetry(f, p::Polyform)
+    F = numtype(p)
+    n = nparticles(p)
+    # An empty polyform constrains nothing; report the identity, so the count still matches the
+    # symmetry number its graph carries.
+    n == 0 && (f(one(_rotationtype(posetype(p))), Int[]); return 1)
+
+    rules = bindingrules(p)
+    poses = [pt.pose for pt in p.particles]
+    spcs = [speciesindex(pt) for pt in p.particles]
+    own = Dict(s => rotationgroup(species(rules, s)) for s in unique(spcs))
+
+    centroid = sum(q.x for q in poses) / n
+    xs = [q.x - centroid for q in poses]
+    tol = sqrt(eps(F))
+    atol = tol * max(one(F), maximum(norm, xs))
+
+    function permutation(Q)
+        perm = zeros(Int, n)
+        for i in 1:n
+            j = findfirst(1:n) do j
+                spcs[j] == spcs[i] &&
+                    isapprox(Q * xs[i], xs[j]; atol) &&
+                    any(S -> isapprox(Q * poses[i].psi, poses[j].psi * S; atol=tol), own[spcs[j]])
+            end
+            isnothing(j) && return nothing
+            perm[i] = j
+        end
+        return perm
+    end
+
+    nfound = 0
+    for a in 1:n
+        spcs[a] == spcs[1] || continue
+        for S in own[spcs[1]]
+            Q = poses[a].psi * S * inv(poses[1].psi)
+            perm = permutation(Q)
+            isnothing(perm) && continue
+            # A candidate is built from frames alone, and two particles of one species often
+            # carry the same frame, so the same `Q` is reached once per such particle. Keeping
+            # only the `a` that `Q` really sends particle 1 to picks each element out once.
+            perm[1] == a || continue
+            f(Q, perm)
+            nfound += 1
+        end
+    end
+    return nfound
+end
+
+"""
     bonds(p::Polyform)
 
 Return a lazy iterator of bonds in `p`. Each element has the form

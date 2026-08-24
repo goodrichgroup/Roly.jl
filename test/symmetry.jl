@@ -1,5 +1,6 @@
 using Roly
-using Roly: bindingsites, nsites, color, _sitetwists, raise!, collect_attachments, Polyform
+using Roly: bindingsites, nsites, color, _sitetwists, raise!, collect_attachments, Polyform,
+            permutationgroup, rotationgroup
 using LinearAlgebra, StaticArrays, Rotations
 
 """
@@ -104,6 +105,11 @@ end
             # For a solid, every one of those really does map the body onto itself, so
             # the agreement is not two views sharing the graph's resolution.
             polyhedral && @test body_symmetry(poly, rules, rots) == length(rots)
+
+            # `rotationgroup` reads the same group off the particle poses rather than the site
+            # poses, so it is an independent route to the same count.
+            @test length(rotationgroup(poly)) == symmetrynumber(poly)
+            @test length(permutationgroup(poly)) == symmetrynumber(poly)
         end
     end
 
@@ -112,5 +118,25 @@ end
     multi = BindingRules(reduce(vcat, [[s 1 t 1] for s in 1:2 for t in 1:2]), disks)
     for poly in polygen(multi; maxsize=4)
         @test symmetrynumber(poly) == geometric_symmetry(poly)
+        @test length(rotationgroup(poly)) == symmetrynumber(poly)
     end
+
+    ### the particle permutations are a group, and they act the way the rotations do
+    rules = BindingRules([1 1 1 1], PolygonParticleSpecies(4, 1.0; colors=fill(1, 4)))
+    for poly in polygen(rules; maxsize=5)
+        perms = permutationgroup(poly)
+        n = nparticles(poly)
+        @test all(p -> sort(p) == 1:n, perms)          # every element really is a permutation
+        @test collect(1:n) in perms                    # the identity is there
+        # The action on particles is not faithful -- a rotation can fix every particle and still
+        # move the graph -- so the distinct permutations are the quotient, and it is that which
+        # has to be a group. Each one is hit equally often, by the rotations in a kernel coset.
+        distinct = unique(perms)
+        @test all(a[b] in distinct for a in distinct, b in distinct)
+        @test all(u -> count(==(u), perms) == length(perms) ÷ length(distinct), distinct)
+    end
+
+    # An empty polyform reports the identity, so the count still matches its symmetry number.
+    empty = Polyform(rules)
+    @test length(rotationgroup(empty)) == symmetrynumber(empty) == 1
 end
