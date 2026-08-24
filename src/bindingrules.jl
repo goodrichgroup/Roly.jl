@@ -236,8 +236,8 @@ end
 """
     _first_per_orbit(particlespecies, sitelocs)
 
-Return one site per symmetry orbit of the particle species. Any entries of `sitelocs` on the same species carrying
-the same graph label, only the first survives.
+Return one site per symmetry orbit of the particle species. Of the entries of `sitelocs` that
+sit on the same species and carry the same graph label, only the first survives.
 """
 function _first_per_orbit(
     particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{BindingSiteLoc}
@@ -245,10 +245,9 @@ function _first_per_orbit(
     reps = BindingSiteLoc[]
     seen = Set{Tuple{Int,Int}}()
     for (spc, k) in sitelocs
-        labs = labels(graphrep(particlespecies[spc]))
-        key = (spc, Int(labs[first(bindingsites(particlespecies[spc], k).vertices)]))
-        key in seen && continue
-        push!(seen, key)
+        orbit = (spc, sitelabel(particlespecies[spc], k))
+        orbit in seen && continue
+        push!(seen, orbit)
         push!(reps, (spc, k))
     end
     return reps

@@ -855,28 +855,37 @@ says 1, and a combination that should be rejected passes.
 """
 site_symmetry(ps::ParticleSpecies) = length(_site_symmetries(_sitedata(ps)...))
 
-# Poses, site symmetries and the key each site is matched by. `site_symmetry` keys on the graph's
-# labels, since it asks what the graph claims; `siteorbits` keys on colors, since it asks what
-# the arrangement is.
+"""
+    sitelabel(ps::ParticleSpecies, i::Integer)
+
+Return the symmetry label of site `i` of `ps`, the graph label all of that site's vertices carry.
+"""
+sitelabel(ps::ParticleSpecies, i::Integer) = Int(labels(graphrep(ps))[first(bindingsites(ps, i).vertices)])
+
+# Poses, site symmetries and the label each site is matched by. `site_symmetry` matches on the
+# graph's labels, since it asks what the graph claims; `siteorbits` matches on colors, since it
+# asks what the arrangement is.
 function _sitedata(ps::ParticleSpecies)
     n = nsites(ps)
     sites = [bindingsites(ps, i) for i in 1:n]
-    labs = labels(graphrep(ps))
-    return ([s.pose for s in sites], [s.sitesym for s in sites], [labs[first(s.vertices)] for s in sites])
+    return ([s.pose for s in sites], [s.sitesym for s in sites], [sitelabel(ps, i) for i in 1:n])
 end
 
 """
-    _site_symmetries(poses, sitesyms, keys)
+    _site_symmetries(poses, sitesyms, sitelabels)
 
 Return the site permutations induced by the rotations about the particle origin that carry
-every site onto one with the same `keys` entry, matching position and orientation.
+every site onto one with the same `sitelabels` entry, matching position and orientation.
+
+`sitelabels` is whatever a symmetry has to preserve: graph labels when asking what the graph
+claims, colors when asking what the arrangement is.
 
 !!! warning "Particles only"
     This rests on a particle's sites having *distinct positions*, which makes a rotation
     determined by where it sends site 1, and makes the site map injective for free. Neither
     holds for an assembled [`Polyform`](@ref).
 """
-function _site_symmetries(poses, sitesyms, keys)
+function _site_symmetries(poses, sitesyms, sitelabels)
     n = length(poses)
     tol = sqrt(eps(eltype(typeof(first(poses)))))
     atol = tol * maximum(norm(p.x) for p in poses)
@@ -885,7 +894,7 @@ function _site_symmetries(poses, sitesyms, keys)
         perm = zeros(Int, n)
         for i in 1:n
             j = findfirst(1:n) do j
-                keys[j] == keys[i] &&
+                sitelabels[j] == sitelabels[i] &&
                     isapprox(Q * poses[i].x, poses[j].x; atol) &&
                     any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _sitetwists(poses[j].psi, sitesyms[j]))
             end
@@ -897,7 +906,7 @@ function _site_symmetries(poses, sitesyms, keys)
 
     perms = Vector{Int}[]
     for a in 1:n
-        keys[a] == keys[1] || continue
+        sitelabels[a] == sitelabels[1] || continue
         for psi in _sitetwists(poses[a].psi, sitesyms[a])
             perm = permutation(psi * inv(poses[1].psi))
             isnothing(perm) || push!(perms, perm)
@@ -929,14 +938,14 @@ end
 
 """
     sitestabilizers(ps::ParticleSpecies)
-    sitestabilizers(poses, sitesyms, keys)
+    sitestabilizers(poses, sitesyms, sitelabels)
 
 Return, per site, how many of the particle's own symmetries leave that site where it is.
 """
 sitestabilizers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
 
-function sitestabilizers(poses, sitesyms, keys)
-    perms = _site_symmetries(poses, sitesyms, keys)
+function sitestabilizers(poses, sitesyms, sitelabels)
+    perms = _site_symmetries(poses, sitesyms, sitelabels)
     return [count(perm -> perm[i] == i, perms) for i in eachindex(poses)]
 end
 
@@ -990,11 +999,10 @@ Throw unless `ps`'s labeling is at least as fine as its coloring: sites sharing 
 share a color.
 """
 function _check_labeling(ps::ParticleSpecies)
-    labs = labels(graphrep(ps))
-    seen = Dict{eltype(labs),Int}()
+    seen = Dict{Int,Int}()
     for i in 1:nsites(ps)
         b = bindingsites(ps, i)
-        l = labs[first(b.vertices)]
+        l = sitelabel(ps, i)
         c = get!(seen, l, color(b))
         c == color(b) || throw(
             ArgumentError(

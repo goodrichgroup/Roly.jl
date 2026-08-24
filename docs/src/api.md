@@ -51,6 +51,7 @@ rotationgroup
 faceorbits
 facesym
 siteorbits
+sitelabel
 site_symmetry
 check_encoding
 sitestabilizers
