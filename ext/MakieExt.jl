@@ -36,11 +36,11 @@ end
 
 
 """
-    plot_particlespecies!(ax, spcs::ParticleSpecies, pose::Pose; site_color, kwargs...)
+    plot_particlespecies!(ax, spcs::ParticleSpecies, pose::Pose; sitecolor, kwargs...)
 
 Draw the particle species `spcs` at `pose` onto `ax`.
 
-`site_color` is an optional callback `(speciesindex, siteindex) -> color` that controls
+`sitecolor` is an optional callback `(speciesindex, siteindex) -> color` that controls
 per-site coloring. When omitted, the species' palette is used, with sites that no bond can
 use greyed out.
 """

@@ -53,7 +53,7 @@
         want = ext._tint(pal[i], bonding[i] ? ext.FACE_TINT : ext.BODY_TINT)
         @test colors[i] == want
     end
-    # Tinting is skipped entirely when a `site_color` callback is given.
+    # Tinting is skipped entirely when a `sitecolor` callback is given.
     _, _, colors, _ = ext._resolve_colors(cube, 1, rules, (_, i) -> ext.INERT_COLOR)
     @test all(==(ext.INERT_COLOR), colors)
 end

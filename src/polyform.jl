@@ -210,7 +210,7 @@ function bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs::Bool=t
     return findfirst(==(minmax(c1, c2)), bonded_colors(rules))
 end
 
-# Map a graph vertex back to (particle_index, site_index).
+# Map a graph vertex back to (particleindex, siteindex).
 function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool=true)
     rules = bindingrules(p)
     orig_v = canonidxs ? toorig(p, v) : v
@@ -448,10 +448,10 @@ Returns `poly` on success, or `missing` if the attachment is geometrically forbi
 """
 function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t::Integer=0; kwargs...)
     rules = bindingrules(poly)
-    speciesindex, site_index = siteloc
+    speciesindex, siteindex = siteloc
     particle_species = species(rules, speciesindex)
     leadingvertex = nv(graphrep(poly)) + 1
-    mate = bindingsite(particle_species, site_index)
+    mate = bindingsite(particle_species, siteindex)
     particle_pose = standard_twist(site, t, twistfreedom(site, mate)) * inv(mate.pose)
     attached_particle = Particle(particle_pose, leadingvertex, speciesindex)
 
