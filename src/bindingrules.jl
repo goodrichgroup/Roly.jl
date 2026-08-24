@@ -25,7 +25,7 @@ struct BindingRules{D,PS<:ParticleSpecies}
     _bondlist::Vector{NTuple{2,Int}}
     _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
-    _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
+    _possible_attachments::Vector{Vector{BindingSiteLoc}}
     _distinct_attachments::Vector{Vector{BindingSiteLoc}}
     _isinert::BitVector
     _onlattice::Bool
@@ -62,13 +62,13 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
 
-    compatible_sitelocs_cache = [Vector{BindingSiteLoc}() for _ in 1:ncolors]
+    possible = [Vector{BindingSiteLoc}() for _ in 1:ncolors]
     for c in 1:ncolors
         for c2 in 1:ncolors
-            intmat[c2, c] && append!(compatible_sitelocs_cache[c], color2siteloc[c2])
+            intmat[c2, c] && append!(possible[c], color2siteloc[c2])
         end
     end
-    distinct_attachments = [_first_per_orbit(particlespecies, ls) for ls in compatible_sitelocs_cache]
+    distinct = [_first_per_orbit(particlespecies, ls) for ls in possible]
     isinert_cache = BitVector(!any(intmat[:, c]) for c in 1:ncolors)
 
     return BindingRules{D,PS}(
@@ -82,8 +82,8 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
         bondlist,
         bondedsites,
         bondedspecies,
-        compatible_sitelocs_cache,
-        distinct_attachments,
+        possible,
+        distinct,
         isinert_cache,
         _onlattice(particlespecies),
     )
@@ -280,7 +280,7 @@ end
 
 The sites a particle may be attached through to a site of `color`, one per symmetry orbit.
 
-[`compatible_sitelocs`](@ref) contains every site the interaction matrix permits, this only lists the
+[`possible_attachments`](@ref) contains every site the interaction matrix permits, this only lists the
 ones that lead to distinguishable structures.
 """
 @inline distinct_attachments(rules::BindingRules, color::Integer) = rules._distinct_attachments[color]
@@ -341,8 +341,14 @@ function graphrep(rules::BindingRules)
     return g
 end
 
-function compatible_sitelocs(rules::BindingRules, color::Integer)
-    return rules._compatible_sitelocs[color]
+"""
+    possible_attachments(rules::BindingRules, color::Integer)
+
+The sites a particle may be attached through to a site of `color`, every one the interaction
+matrix permits. See [`distinct_attachments`](@ref).
+"""
+@inline function possible_attachments(rules::BindingRules, color::Integer)
+    return rules._possible_attachments[color]
 end
 
 function Base.show(io::Core.IO, rules::BindingRules)

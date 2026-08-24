@@ -1,11 +1,11 @@
 using Roly: nspecies, nbonds, nsites, dimension, species,
             interactionmatrix, bonded_colors, bonded_sites, bonded_species,
-            siteloc2color, color2siteloc, color2species, isinert, compatible_sitelocs
+            siteloc2color, color2siteloc, color2species, isinert, possible_attachments
 
 using Roly: PolygonParticleSpecies, PolyhedronParticleSpecies, PatchyDisk, Cube, Prism,
             Tetrahedron, Polyhedron, facenormal, nfaces
 
-using Roly: compatible_sitelocs, distinct_attachments, siteloc2color, collect_attachments,
+using Roly: possible_attachments, distinct_attachments, siteloc2color, collect_attachments,
             raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
             Cube, Prism, nfaces, color, bindingsites
 
@@ -46,8 +46,8 @@ using StaticArrays: SVector
     @test !isinert(rules, c1)
     @test !isinert(rules, (1, 1))
 
-    @test compatible_sitelocs(rules, c1) == [(1, 3)]
-    @test compatible_sitelocs(rules, c3) == [(1, 1)]
+    @test possible_attachments(rules, c1) == [(1, 3)]
+    @test possible_attachments(rules, c3) == [(1, 1)]
 
     sys1bond = BindingRules([1 1 1 3], UnitSquare)
     c2 = siteloc2color(sys1bond, (1, 2))
@@ -133,13 +133,13 @@ using StaticArrays: SVector
     # A cube with every face alike has one orbit of six sites, so six compatible mates collapse
     # to one representative. With every face distinct there is nothing to collapse.
     alike = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
-    @test length(compatible_sitelocs(alike, 1)) == 6
+    @test length(possible_attachments(alike, 1)) == 6
     @test length(distinct_attachments(alike, 1)) == 1
 
     distinct = BindingRules(reduce(vcat, [[1 i 1 j] for i in 1:6 for j in i:6]),
                             PolyhedronParticleSpecies(Cube()))
     for c in 1:Roly.ncolors(distinct)
-        @test length(distinct_attachments(distinct, c)) == length(compatible_sitelocs(distinct, c))
+        @test length(distinct_attachments(distinct, c)) == length(possible_attachments(distinct, c))
     end
 
     # check that representatives are enough, and everything else is just duplicates
@@ -178,7 +178,7 @@ using StaticArrays: SVector
     for (name, rules) in systems
         poly = Polyform(rules, 1)
         for _ in 1:3     # monomer, then grow, so the host is asymmetric in later rounds too
-            @test children(poly, compatible_sitelocs) == children(poly, distinct_attachments)
+            @test children(poly, possible_attachments) == children(poly, distinct_attachments)
             nxt = nothing
             for (site, loc, r) in collect_attachments(poly)
                 trial = copy(poly)
