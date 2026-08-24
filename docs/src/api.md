@@ -105,6 +105,7 @@ edgenormals
 
 ```@docs
 PolygonParticleSpecies
+UnitNgon
 UnitTriangle
 UnitSquare
 UnitHexagon

@@ -35,7 +35,7 @@ export RSStatus, Finished, MaxVerticesReached, MaxDepthReached, BreakTriggered
 export polyenum, polygen, countpolyforms, PolyformCount
 
 # Species
-export PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon
+export PolygonParticleSpecies, UnitNgon, UnitTriangle, UnitSquare, UnitHexagon
 export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism

@@ -104,6 +104,16 @@ end
 bounding_radius(ps::PolygonParticleSpecies) = ps.rmax
 
 """
+    UnitNgon(n, a=1.0; kwargs...)
+
+A regular `n`-gon with edge length `a`, with one binding site per edge. Rotation group `C_n`.
+
+Spelled to match [`UnitPrism`](@ref) and the other body constructors; it is
+[`PolygonParticleSpecies`](@ref) under a name that reads the same way.
+"""
+UnitNgon(n::Integer, a::Real=1.0; kwargs...) = PolygonParticleSpecies(n, a; kwargs...)
+
+"""
     UnitTriangle
 
 An equilateral triangle with unit-length edges and one binding site per edge.
