@@ -48,7 +48,7 @@ edgemidpoint
 minedgelength
 inradius
 rotationgroup
-geometriclabels
+faceorbits
 facesym
 siteorbits
 site_symmetry

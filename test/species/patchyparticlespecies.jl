@@ -16,7 +16,7 @@ using Roly:
 
 
 using Roly: PatchySphere, Polyhedron, Tetrahedron, Cube, Dodecahedron, Prism,
-            nfaces, facecentroid, geometriclabels, rotationgroup, symmetrynumber,
+            nfaces, facecentroid, faceorbits, rotationgroup, symmetrynumber,
             graphrep, edgemidpoint
 
 using Roly: PatchyParticleSpecies, BindingRules, Polyform, raise!, collect_compatible_pairs,
@@ -134,7 +134,7 @@ using LinearAlgebra: normalize, dot, det, norm
 
         # Same labeling rules and the same graph as the polyhedron species.
         @test symmetrynumber(ps) == 1
-        @test symmetrynumber(PatchySphere(shp, 2.0; colors=geometriclabels(shp))) == order
+        @test symmetrynumber(PatchySphere(shp, 2.0; colors=faceorbits(shp))) == order
         @test order == length(rotationgroup(shp))
         @test nv(graphrep(ps)) == np
         @test nv(graphrep(dartsphere(shp, 2.0))) == 2 * Roly.nedges(shp)

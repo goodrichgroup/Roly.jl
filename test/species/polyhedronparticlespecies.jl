@@ -3,7 +3,7 @@ using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron
             UnitDodecahedron, UnitIcosahedron, UnitPyramid, UnitPrism, UnitAntiprism,
             Polyhedron, Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron,
             Pyramid, Prism, Antiprism, polyhedron, corners, nfaces, facedegree, facecentroid,
-            geometriclabels, rotationgroup, inradius, edgemidpoint,
+            faceorbits, rotationgroup, inradius, edgemidpoint,
             nsites, dimension, isconvex, numtype, bindingsites, graphrep, setcolors!, color,
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
             collect_compatible_pairs, tocanon, toorig, BindingRules, Polyform, nbonds,
@@ -75,7 +75,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
                         ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3)),
                         ("Antiprism(4)", Antiprism(4)), ("Dodecahedron", Dodecahedron()),
                         ("Tetrahedron", Tetrahedron()), ("Octahedron", Octahedron())]
-        ps = PolyhedronParticleSpecies(shp; colors=geometriclabels(shp))
+        ps = PolyhedronParticleSpecies(shp; colors=faceorbits(shp))
         labs = Roly.labels(graphrep(ps))
         sitelabel(i) = labs[first(Roly.bindingsites(ps, i).vertices)]
         centroids = [facecentroid(shp, i) - sum(corners(shp)) / length(corners(shp))
@@ -125,7 +125,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     for (name, _, shp, nf, order) in solids
         # Faces grouped by geometric orbit recover the solid's rotation group.
-        geo = PolyhedronParticleSpecies(shp; colors=geometriclabels(shp))
+        geo = PolyhedronParticleSpecies(shp; colors=faceorbits(shp))
         @test symmetrynumber(geo) == order == length(rotationgroup(shp))
         # Distinct labels give 1, regardless of encoding.
         @test symmetrynumber(PolyhedronParticleSpecies(shp)) == 1
@@ -145,13 +145,13 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         end
         # Repeated labels: only the dart encoding carries the rotation group, and forcing the
         # sparse one is rejected rather than silently reporting the cyclic order.
-        geo = dartspecies(shp; colors=geometriclabels(shp))
+        geo = dartspecies(shp; colors=faceorbits(shp))
         @test symmetrynumber(geo) == site_symmetry(geo) == order
         order == nfaces(shp) ||
-            @test_throws ArgumentError cyclespecies(shp; colors=geometriclabels(shp))
+            @test_throws ArgumentError cyclespecies(shp; colors=faceorbits(shp))
     end
     for (shp, order) in [(Tetrahedron(), 12), (Cube(), 24), (Dodecahedron(), 60), (Prism(5), 10)]
-        sphere = PatchySphere(shp, 1.0; colors=geometriclabels(shp))
+        sphere = PatchySphere(shp, 1.0; colors=faceorbits(shp))
         @test symmetrynumber(sphere) == site_symmetry(sphere) == order
     end
 
@@ -179,7 +179,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # A triangular prism's side faces are squares
     # when h == a (sitesym 4) but the prism is only 2-fold about them, so a partner can attach
     # two ways: in the plane, or tipped out of it.
-    tri = PolyhedronParticleSpecies(Prism(3); colors=geometriclabels(Prism(3)))
+    tri = PolyhedronParticleSpecies(Prism(3); colors=faceorbits(Prism(3)))
     @test sitesyms(tri) == [3, 4, 4, 4, 3]
     @test Roly.sitestabilizers(tri) == [3, 2, 2, 2, 3]
     @test ntwists(tri) == [1, 2, 2, 2, 1]
@@ -187,7 +187,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # Make the prism taller, so that faces become rectangles: sitesym and stabilizer agree at 2,
     # leaving a single twist.
     tall = Prism(3, 1.0; h=2.0)
-    tallps = PolyhedronParticleSpecies(tall; colors=geometriclabels(tall))
+    tallps = PolyhedronParticleSpecies(tall; colors=faceorbits(tall))
     @test sitesyms(tallps) == [3, 2, 2, 2, 3]
     @test ntwists(tallps) == fill(1, 5)
 

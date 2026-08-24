@@ -473,16 +473,17 @@ function _facenormal(cs::Vector{SVector{3,F}}, f::Vector{Int}) where {F}
 end
 
 """
-    geometriclabels(p::Polyhedron)
+    faceorbits(p::Polyhedron)
 
-Return one label per face, grouping faces that are equivalent under [`rotationgroup`](@ref).
+Group the faces into the orbits of [`rotationgroup`](@ref), and return one orbit index per
+face. The counterpart of [`siteorbits`](@ref) for a bare body.
 
 Passing these to [`dartencoding`](@ref) yields the body's true rotation group, whereas
 `labels=fill(1, nfaces(p))` yields the *combinatorial* symmetry of the face lattice, which
 can be larger. For example, `Pyramid(3)` is combinatorially a tetrahedron and would report 12 instead of
 its actual 3.
 """
-function geometriclabels(p::Polyhedron)
+function faceorbits(p::Polyhedron)
     cents = facecentroids(p)
     atol = sqrt(eps(eltype(p))) * maximum(norm, cents)
 

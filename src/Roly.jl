@@ -52,7 +52,7 @@ public inradius, minedgelength
 
 # Graph encodings and the symmetry they record
 public dartencoding, cycleencoding
-public rotationgroup, geometriclabels, facesym, siteorbits, sitestabilizers
+public rotationgroup, faceorbits, facesym, siteorbits, sitestabilizers
 public site_symmetry, check_encoding
 
 # What a bond fixes about relative orientation
