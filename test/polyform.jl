@@ -5,20 +5,20 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
             PolygonParticleSpecies, species, polygen
 
 @testset "polyform" begin
-    sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
+    rules = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
-    empty_poly = Polyform(sys)
+    empty_poly = Polyform(rules)
     @test nparticles(empty_poly) == 0
     @test nsites(empty_poly) == 0
 
-    mono = Polyform(sys, 1)
+    mono = Polyform(rules, 1)
     @test nparticles(mono) == 1
     @test nsites(mono) == 4
     @test dimension(mono) == 2
-    @test bindingrules(mono) === sys
+    @test bindingrules(mono) === rules
     @test symmetrynumber(mono) == 1
 
-    @test mono == Polyform(sys, 1)
+    @test mono == Polyform(rules, 1)
     @test mono != empty_poly
 
     mono2 = copy(mono)
@@ -59,7 +59,7 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     for e in exterior_edges(di)
         idx = bondindex(di, e.src, e.dst)
         @test !isnothing(idx)
-        @test 1 <= idx <= nbonds(sys)
+        @test 1 <= idx <= nbonds(rules)
     end
 
     comp_di = composition(di)
@@ -73,8 +73,8 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     @test isnothing(lower!(di))
 
     ### Check raise / remove equality
-    sys = BindingRules([1 1 1 4; 1 4 2 2; 1 1 3 2; 1 1 3 4; 2 1 3 3; 2 1 3 1], UnitSquare)
-    poly = polygen(sys)[end]
+    rules = BindingRules([1 1 1 4; 1 4 2 2; 1 1 3 2; 1 1 3 4; 2 1 3 3; 2 1 3 1], UnitSquare)
+    poly = polygen(rules)[end]
 
     poly_raise = copy(poly)
     lower!(poly_raise)

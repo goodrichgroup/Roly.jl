@@ -188,7 +188,7 @@ It now works like any built-in one:
 rect = Rectangle(2.0, 1.0)
 bonds = [1 1 1 3;  # right edge binds to left edge
          1 2 1 4]  # bottom edge binds to top edge
-sys = BindingRules(bonds, rect)
+rules = BindingRules(bonds, rect)
 
-polys = polygen(sys; maxsize=6)
+polys = polygen(rules; maxsize=6)
 ```

@@ -105,9 +105,9 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     for (name, shp) in [("Cube", Cube()), ("Prism(6)", Prism(6)), ("Prism(3)", Prism(3))]
         sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
         ps = PolyhedronParticleSpecies(shp; colors=[i in sides ? 1 : 2 for i in 1:nfaces(shp)])
-        sys = BindingRules([1 first(sides) 1 first(sides)], ps)
+        rules = BindingRules([1 first(sides) 1 first(sides)], ps)
         step = 2 * norm(facecentroid(shp, first(sides)))
-        poly = Polyform(sys, 1)
+        poly = Polyform(rules, 1)
         grown = 0
         for (site, loc, r) in collect_compatible_pairs(poly)
             trial = copy(poly)
@@ -359,8 +359,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     for (name, shp, bonds, maxn) in systems
         results = map((cyclespecies, dartspecies)) do build
-            sys = BindingRules(bonds, build(shp))
-            polys = polygen(sys; maxsize=maxn)
+            rules = BindingRules(bonds, build(shp))
+            polys = polygen(rules; maxsize=maxn)
             (counts=[count(p -> nparticles(p) == k, polys) for k in 1:maxn],
              sigmas=sort([(nparticles(p), symmetrynumber(p)) for p in polys]),
              polys=polys)
@@ -383,8 +383,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         end
     end
 
-    sys = BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube)
-    polys = polygen(sys; maxsize=4)
+    rules = BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube)
+    polys = polygen(rules; maxsize=4)
 
     for p in polys
         nparticles(p) < 2 && continue
@@ -394,7 +394,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         end
         # Particle vertex blocks cover the graph exactly; a stale leading vertex after a
         # removal would leave a block hanging off the end.
-        blocks = sort(reduce(vcat, [collect(Roly.graphvertices(pt, sys)) for pt in p.particles]))
+        blocks = sort(reduce(vcat, [collect(Roly.graphvertices(pt, rules)) for pt in p.particles]))
         @test blocks == 1:nv(graphrep(p))
         # Each bond joins the vertices of one pair of faces.
         @test nbonds(p) == 4 * (nparticles(p) - 1) ÷ 1 || nbonds(p) >= nparticles(p) - 1
@@ -431,7 +431,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     shp = Prism(3)
     sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
     colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
-    counts(sys) = [polyenum(sys; maxsize=i)[1] for i in 1:5]
+    counts(rules) = [polyenum(rules; maxsize=i)[1] for i in 1:5]
 
     # Turning a whole orbit by the same amount turns the partner by twice that, since the offset
     # lands on both sides of the face-to-face flip. Here that is 2*90 = 180 degrees, which is a

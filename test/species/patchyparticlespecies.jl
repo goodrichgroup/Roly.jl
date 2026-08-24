@@ -197,8 +197,8 @@ using LinearAlgebra: normalize, dot, det, norm
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(4)), 1.0, pos, twists;
                                    colors=[1, 2, 3, 4])
         @test all(i -> Roly.bindingsites(ps, i).gauge == 1, 1:4)
-        sys = BindingRules([1 1 1 2], ps)
-        poly = Polyform(sys, 1)
+        rules = BindingRules([1 1 1 2], ps)
+        poly = Polyform(rules, 1)
         for (site, loc, r) in collect_compatible_pairs(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue

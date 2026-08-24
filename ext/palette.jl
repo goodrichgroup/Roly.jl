@@ -70,29 +70,29 @@ function _lambert(c, n)
 end
 
 """
-    _resolve_colors(spcs, speciesindex, sys, site_color)
+    _resolve_colors(spcs, speciesindex, rules, site_color)
 
 Work out which palette a species is drawn in, which of its sites can bond, and what color
 each site gets.
 
-`speciesindex` selects the palette; when it is `nothing` it is looked up in `sys`, falling
-back to `1`. Sites no bond in `sys` can use are drawn in `inert_color` if one is given, and
+`speciesindex` selects the palette; when it is `nothing` it is looked up in `rules`, falling
+back to `1`. Sites no bond in `rules` can use are drawn in `inert_color` if one is given, and
 otherwise as a tint of their own color by `inert_tint`; bonding sites are tinted by
-`bond_tint`. Without a `sys` there is no notion of a bond, so every site counts as bonding.
+`bond_tint`. Without a `rules` there is no notion of a bond, so every site counts as bonding.
 `site_color` is an optional callback `(speciesindex, site_index) -> color` that overrides all
 of that, tinting included.
 
 Returns `(speciesindex, palette, sitecolors, bonding)`.
 """
 function _resolve_colors(
-    spcs, speciesindex, sys, site_color; bond_tint=0, inert_tint=BODY_TINT, inert_color=INERT_COLOR
+    spcs, speciesindex, rules, site_color; bond_tint=0, inert_tint=BODY_TINT, inert_color=INERT_COLOR
 )
     n = nsites(spcs)
     if isnothing(speciesindex)
-        speciesindex = isnothing(sys) ? 1 : something(findfirst(==(spcs), species(sys)), 1)
+        speciesindex = isnothing(rules) ? 1 : something(findfirst(==(spcs), species(rules)), 1)
     end
     pal = species_palette(speciesindex, n)
-    bonding = isnothing(sys) ? trues(n) : [!isinert(sys, (speciesindex, i)) for i in 1:n]
+    bonding = isnothing(rules) ? trues(n) : [!isinert(rules, (speciesindex, i)) for i in 1:n]
 
     inert(i) = isnothing(inert_color) ? _tint(pal[i], inert_tint) : RGBf(inert_color)
     colors = if isnothing(site_color)

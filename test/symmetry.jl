@@ -51,12 +51,12 @@ geometric_symmetry(poly) = length(site_rotations(poly))
 """
 Totations mapping the union of the particles' actual corner sets onto itself. 
 """
-function body_symmetry(poly, sys, rotations)
+function body_symmetry(poly, rules, rotations)
     bs = [bindingsites(poly, i) for i in 1:nsites(poly)]
     c0 = sum(b.pose.x for b in bs) / length(bs)
     pts = [pt.pose * c - c0
            for pt in poly.particles
-           for c in Roly.corners(Roly.polyhedron(Roly.species(sys, pt.speciesindex)))]
+           for c in Roly.corners(Roly.polyhedron(Roly.species(rules, pt.speciesindex)))]
     return count(Q -> all(p -> any(q -> isapprox(Q * p, q; atol=1e-7), pts), pts), rotations)
 end
 
@@ -94,16 +94,16 @@ end
                                 twists=[0.0, 0.37, 0.0, 0.0, 0.0])), 4),
     ]
 
-    for (name, sys, maxsize) in cases
-        polys = polygen(sys; maxsize)
+    for (name, rules, maxsize) in cases
+        polys = polygen(rules; maxsize)
         @test !isempty(polys)
-        polyhedral = Roly.species(sys, 1) isa PolyhedronParticleSpecies
+        polyhedral = Roly.species(rules, 1) isa PolyhedronParticleSpecies
         for poly in polys
             rots = site_rotations(poly)
             @test symmetrynumber(poly) == length(rots)
             # For a solid, every one of those really does map the body onto itself, so
             # the agreement is not two views sharing the graph's resolution.
-            polyhedral && @test body_symmetry(poly, sys, rots) == length(rots)
+            polyhedral && @test body_symmetry(poly, rules, rots) == length(rots)
         end
     end
 

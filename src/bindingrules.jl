@@ -108,66 +108,66 @@ function _onlattice(pss::AbstractVector{<:ParticleSpecies})
 end
 
 """
-    interactionmatrix(sys::BindingRules)
+    interactionmatrix(rules::BindingRules)
 
-Return the interaction matrix of the assembly system `sys`.
+Return the interaction matrix of the assembly system `rules`.
 
 The interaction matrix is indexed by the colors of binding sites.
 If two binding sites have colors `c1` and `c2`, then the truth value of 
-`interactionmatrix(sys)[c1, c2]` determines whether the two sites are able
+`interactionmatrix(rules)[c1, c2]` determines whether the two sites are able
 to bind to each other.
 """
-@inline interactionmatrix(sys::BindingRules) = sys.intmat
+@inline interactionmatrix(rules::BindingRules) = rules.intmat
 
 """
-    species(sys::BindingRules)
+    species(rules::BindingRules)
 
-Return the list of particle species of the assembly system `sys`.
+Return the list of particle species of the assembly system `rules`.
 """
-@inline species(sys::BindingRules) = sys.particlespecies
-
-"""
-    species(sys::BindingRules, i::Integer)
-
-Return the `i`th particle species of the assembly system `sys`.
-"""
-@inline species(sys::BindingRules, i::Integer) = sys.particlespecies[i]
+@inline species(rules::BindingRules) = rules.particlespecies
 
 """
-    nspecies(sys::BindingRules)
+    species(rules::BindingRules, i::Integer)
 
-Return the number of particle species of the assembly system `sys`.
+Return the `i`th particle species of the assembly system `rules`.
 """
-@inline nspecies(sys::BindingRules) = length(sys.particlespecies)
-
-"""
-    nbonds(sys::BindingRules)
-
-Return the total number of possible bonds between binding sites of the assembly system `sys`.
-"""
-@inline nbonds(sys::BindingRules) = sys.nbonds
+@inline species(rules::BindingRules, i::Integer) = rules.particlespecies[i]
 
 """
-    nsites(sys::BindingRules)
+    nspecies(rules::BindingRules)
 
-Return the total number of binding sites across all particle species of the assembly system `sys`.
+Return the number of particle species of the assembly system `rules`.
 """
-@inline nsites(sys::BindingRules) = sys.nsites
+@inline nspecies(rules::BindingRules) = length(rules.particlespecies)
 
 """
-    ncolors(sys::BindingRules)
+    nbonds(rules::BindingRules)
 
-Return the total number of binding sites colors across all particle species of the assembly system `sys`.
+Return the total number of possible bonds between binding sites of the assembly system `rules`.
+"""
+@inline nbonds(rules::BindingRules) = rules.nbonds
 
-`ncolors(sys)` is not necessarily the equal to `nsites(sys)`. 
+"""
+    nsites(rules::BindingRules)
+
+Return the total number of binding sites across all particle species of the assembly system `rules`.
+"""
+@inline nsites(rules::BindingRules) = rules.nsites
+
+"""
+    ncolors(rules::BindingRules)
+
+Return the total number of binding sites colors across all particle species of the assembly system `rules`.
+
+`ncolors(rules)` is not necessarily the equal to `nsites(rules)`. 
 If particle species have symmetry, some binding sites may carry the same color.
 """
-@inline ncolors(sys::BindingRules) = sys.ncolors
+@inline ncolors(rules::BindingRules) = rules.ncolors
 
 """
     dimension(::BindingRules)
 
-Return the spatial dimension of the particles of the assembly system `sys`.
+Return the spatial dimension of the particles of the assembly system `rules`.
 """
 @inline dimension(::BindingRules{D}) where {D} = D
 @inline dimension(::Type{<:BindingRules{D}}) where {D} = D
@@ -177,60 +177,60 @@ Return the spatial dimension of the particles of the assembly system `sys`.
 @inline speciestype(::BindingRules{D,PS}) where {D,PS} = PS
 
 """
-    bonded_colors(sys::BindingRules)
+    bonded_colors(rules::BindingRules)
 
 Return all pairs of binding site colors that may bind according to the binding rules
-of the assembly system `sys`.
+of the assembly system `rules`.
 """
-@inline function bonded_colors(sys::BindingRules)
-    return sys._bondlist
+@inline function bonded_colors(rules::BindingRules)
+    return rules._bondlist
 end
 
 """
-    bonded_sites(sys::BindingRules)
+    bonded_sites(rules::BindingRules)
 
 Return all pairs of binding site locations that may bind according to the binding rules
-of the assembly system `sys`.
+of the assembly system `rules`.
 """
-@inline function bonded_sites(sys::BindingRules)
-    return sys._bonded_sites
+@inline function bonded_sites(rules::BindingRules)
+    return rules._bonded_sites
 end
 
 """
-    bonded_species(sys::BindingRules)
+    bonded_species(rules::BindingRules)
 
 Return all pairs of particle species that may bind according to the binding rules
-of the assembly system `sys`.
+of the assembly system `rules`.
 """
-@inline function bonded_species(sys::BindingRules)
-    return sys._bonded_species
+@inline function bonded_species(rules::BindingRules)
+    return rules._bonded_species
 end
 
 """
-    siteloc2color(sys::BindingRules, siteloc::BindingSiteLoc)
+    siteloc2color(rules::BindingRules, siteloc::BindingSiteLoc)
 
 Return the binding site color associated with the binding site location `siteloc`.
 """
-@inline function siteloc2color(sys::BindingRules, siteloc::BindingSiteLoc)
-    return sys._siteloc2color[siteloc]
+@inline function siteloc2color(rules::BindingRules, siteloc::BindingSiteLoc)
+    return rules._siteloc2color[siteloc]
 end
 
 """
-    color2siteloc(sys::BindingRules, color::Integer)
+    color2siteloc(rules::BindingRules, color::Integer)
 
 Return the (possible multiple) binding site locations associated with the binding site color `color`.
 """
-@inline function color2siteloc(sys::BindingRules, color::Integer)
-    return sys._color2siteloc[color]
+@inline function color2siteloc(rules::BindingRules, color::Integer)
+    return rules._color2siteloc[color]
 end
 
 """
-    color2species(sys::BindingRules, color::Integer)
+    color2species(rules::BindingRules, color::Integer)
 
 Return the particle species that contains the binding site with color `color`.
 """
-@inline function color2species(sys::BindingRules, color::Integer)
-    return color2siteloc(sys, color)[1][1]
+@inline function color2species(rules::BindingRules, color::Integer)
+    return color2siteloc(rules, color)[1][1]
 end
 
 """
@@ -255,43 +255,43 @@ function _orbit_representatives(
 end
 
 """
-    attachment_reps(sys::BindingRules, color::Integer)
+    attachment_reps(rules::BindingRules, color::Integer)
 
 The sites a particle may be attached through to a site of `color`, one per symmetry orbit.
 
 [`compatible_sitelocs`](@ref) contains every site the interaction matrix permits, this only lists the
 ones that lead to distinguishable structures. See [`_orbit_representatives`](@ref).
 """
-@inline attachment_reps(sys::BindingRules, color::Integer) = sys._attachment_reps[color]
+@inline attachment_reps(rules::BindingRules, color::Integer) = rules._attachment_reps[color]
 
 """
-    isinert(sys::BindingRules, siteloc::BindingSiteLoc)
+    isinert(rules::BindingRules, siteloc::BindingSiteLoc)
 
 Return `true` if the binding site at `siteloc` does not bind to any binding sites.
 """
-@inline function isinert(sys::BindingRules, siteloc::BindingSiteLoc)
-    color = siteloc2color(sys, siteloc)
-    return isinert(sys, color)
+@inline function isinert(rules::BindingRules, siteloc::BindingSiteLoc)
+    color = siteloc2color(rules, siteloc)
+    return isinert(rules, color)
 end
 
 """
-    isinert(sys::BindingRules, color::Integer)
+    isinert(rules::BindingRules, color::Integer)
 
 Return `true` if the binding site with color `color` does not bind to any binding sites.
 """
-@inline function isinert(sys::BindingRules, color::Integer)
-    return sys._isinert[color]
+@inline function isinert(rules::BindingRules, color::Integer)
+    return rules._isinert[color]
 end
 
 """
-    graphrep(sys::BindingRules)
+    graphrep(rules::BindingRules)
 
-Construct the graph representation of the ass embly system `sys`.
+Construct the graph representation of the ass embly system `rules`.
 """
-function graphrep(sys::BindingRules)
-    imat = interactionmatrix(sys)
-    ns = nsites(sys)
-    nb = nbonds(sys)
+function graphrep(rules::BindingRules)
+    imat = interactionmatrix(rules)
+    ns = nsites(rules)
+    nb = nbonds(rules)
 
     A = zeros(Int, ns + nb, ns + nb)
     edge_counter = 1
@@ -308,7 +308,7 @@ function graphrep(sys::BindingRules)
     end
 
     i = 1
-    for bb in species(sys)
+    for bb in species(rules)
         a = adjacency_matrix(graphrep(bb))
         n = size(a, 1)
         A[i:(i + n - 1), i:(i + n - 1)] .+= a
@@ -320,12 +320,12 @@ function graphrep(sys::BindingRules)
     return g
 end
 
-function compatible_sitelocs(sys::BindingRules, color::Integer)
-    return sys._compatible_sitelocs[color]
+function compatible_sitelocs(rules::BindingRules, color::Integer)
+    return rules._compatible_sitelocs[color]
 end
 
-function Base.show(io::Core.IO, sys::BindingRules)
-    print(io, "$(dimension(sys))d BindingRules[n=$(nspecies(sys)), k=$(nbonds(sys))]")
+function Base.show(io::Core.IO, rules::BindingRules)
+    print(io, "$(dimension(rules))d BindingRules[n=$(nspecies(rules)), k=$(nbonds(rules))]")
 end
 
 function _extract_nspecies(bonds::AbstractMatrix{<:Integer})

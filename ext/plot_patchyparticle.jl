@@ -12,7 +12,7 @@ function plot_particlespecies!(
     pose::Pose=Pose{2,F}();
     site_color=nothing,
     speciesindex=nothing,
-    sys=nothing,
+    rules=nothing,
     site_radius=0.25spcs.r,
     strokewidth=2,
     kwargs...,
@@ -20,7 +20,7 @@ function plot_particlespecies!(
     n = nsites(spcs)
     r = spcs.r
 
-    si, _, colors, _ = _resolve_colors(spcs, speciesindex, sys, site_color)
+    si, _, colors, _ = _resolve_colors(spcs, speciesindex, rules, site_color)
     cx, cy = pose.x[1], pose.x[2]
 
     # The body is a much fainter wash of the species color, so the patches read on top of it.
@@ -67,11 +67,11 @@ function particlemesh(
     pose::Pose=Pose{3,F}();
     site_color=nothing,
     speciesindex=nothing,
-    sys=nothing,
+    rules=nothing,
     site_radius=0.25spcs.r,
     patch_alpha=0.85,
 ) where {F}
-    si, _, colors, _ = _resolve_colors(spcs, speciesindex, sys, site_color)
+    si, _, colors, _ = _resolve_colors(spcs, speciesindex, rules, site_color)
     pts, tris, cols = Point3f[], NTuple{3,Int}[], RGBAf[]
 
     # The body stays opaque — it is a solid particle, and a see-through sphere shows its own

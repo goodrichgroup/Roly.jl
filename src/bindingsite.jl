@@ -173,7 +173,7 @@ end
 Return the binding site's color.
 
 If the binding site comes from an `BindingRules`, its interactions with other
-binding sites are determined by `interactionmatrix(sys)[:, color(b)]`.
+binding sites are determined by `interactionmatrix(rules)[:, color(b)]`.
 """
 color(b::BindingSite) = b.color
 

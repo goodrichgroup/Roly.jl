@@ -20,8 +20,8 @@
         j -> isapprox(dot(facenormal(p, i), facenormal(p, j)), -1; atol=1e-8), 1:nfaces(p)
     )
     pairs = unique([minmax(i, opposite(Cube(), i)) for i in 1:6])
-    sys = BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in pairs]), cube)
-    polys = polygen(sys; maxsize=3)
+    rules = BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in pairs]), cube)
+    polys = polygen(rules; maxsize=3)
     @test render(polys[end]) isa Figure
 
     # A 2D polyform, so the shared color resolution is covered in both dimensions.

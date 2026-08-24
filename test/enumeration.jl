@@ -74,23 +74,23 @@
     ]
 
     for (name, shp, sticky, want) in lattice_animals
-        sys = rules(shp, sticky)
-        ps = species(sys, 1)
+        rules = rules(shp, sticky)
+        ps = species(rules, 1)
         # one phase per bond, so it cannot leave the lattice.
         @test all(i -> Roly.nphases(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
                   sticky)
-        @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
+        @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
     end
 
     # The same two tilings from prisms whose side faces are *squares* rather than rectangles.
     # The face is then 4-fold about its normal where the prism is only 2-fold about it, so the
     # two solids differ in `gauge` but not in `stab`.
     for (shp, want) in [(Prism(3), [1, 2, 3, 6, 10, 22]), (Prism(6), [1, 2, 5, 12, 34])]
-        sys = rules(shp, sidefaces(shp))
-        b = Roly.bindingsites(species(sys, 1), first(sidefaces(shp)))
+        rules = rules(shp, sidefaces(shp))
+        b = Roly.bindingsites(species(rules, 1), first(sidefaces(shp)))
         @test (b.gauge, b.stab) == (4, 2)
         @test Roly.nphases(b, b) == 1
-        @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
+        @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
     end
 
     # setting locking=false, allows out of plane binding
@@ -101,8 +101,8 @@
         b = Roly.bindingsites(ps, first(sides))
         @test Roly.twistfreedom(b) == b.gauge == 4
         @test Roly.nphases(b, b) == 2
-        sys = BindingRules([1 first(sides) 1 first(sides)], ps)
-        @test [polyenum(sys; maxsize=i)[1] for i in eachindex(want)] == want
+        rules = BindingRules([1 first(sides) 1 first(sides)], ps)
+        @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
     end
 
     # 2D hexagons (one-sided) vs 3D hexagons (free)
@@ -169,8 +169,8 @@
 
     # A thinning probability with p*B < 1 makes the estimate collapse towards zero while
     # reporting a small spread, so the default heuristic must stay on the p*B > 1 side.
-    for (sys, budget) in ((I_polymino, 500), (Icyc, 40))
-        persize = diff([0; Roly._count_upto_budget(sys; maxsize=12, budget)[1]])
+    for (rules, budget) in ((I_polymino, 500), (Icyc, 40))
+        persize = diff([0; Roly._count_upto_budget(rules; maxsize=12, budget)[1]])
         branching = persize[end] / persize[end-1]
         @test clamp(1.2 / branching, eps(), 0.95) * branching >= 1
     end
@@ -233,10 +233,10 @@
 
             for k in 1:3
                 bonds = reduce(vcat, [[s s1 t s2] for s in 1:k for t in 1:k])
-                sys = BindingRules(bonds, [chainspecies(alike) for _ in 1:k])
-                @test nspecies(sys) == k
+                rules = BindingRules(bonds, [chainspecies(alike) for _ in 1:k])
+                @test nspecies(rules) == k
                 want = alike ? [(k^n + k^cld(n, 2)) ÷ 2 for n in 1:N] : [k^n for n in 1:N]
-                @test [polyenum(sys; maxsize=n)[1] for n in 1:N] == cumsum(want)
+                @test [polyenum(rules; maxsize=n)[1] for n in 1:N] == cumsum(want)
             end
         end
     end
@@ -253,9 +253,9 @@
                           s === :hexagon  ? UnitHexagon :
                           error("unknown geometry $s")
 
-    function sizecounts(sys)
+    function sizecounts(rules)
         counts = Int[]
-        polyenum(sys) do _, n
+        polyenum(rules) do _, n
             while length(counts) < n
                 push!(counts, 0)
             end

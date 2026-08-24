@@ -17,7 +17,7 @@ julia> bonds = [1 3 2 3;
                 2 1 4 1;
                 3 1 4 1];
 
-julia> sys = BindingRules(bonds, UnitTriangle)
+julia> rules = BindingRules(bonds, UnitTriangle)
 2d BindingRules[n=4, k=4]
 ```
 
@@ -75,7 +75,7 @@ The named groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref)
 [`ruleeditor`](@ref) builds a bond table geometrically: place blocks on a lattice and it reads the rules off every pair of touching sites.
 
 ```julia
-sys = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
+rules = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
 ```
 
 Arrow keys move the cursor, `Enter` places, `Space` erases, `r` and `R` rotate, digits `1` to `9` switch species, `q` accepts.
@@ -101,7 +101,7 @@ Pass `output=:bonds` or `output=:matrix` for a copy-pasteable result instead of 
 
 ```julia
 bonds = ruleeditor(UnitSquare; output=:bonds)  # n×4 integer matrix
-sys   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
+rules   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
 ```
 
 ## Enumerating polyforms
@@ -109,7 +109,7 @@ sys   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
 `polyenum` walks every polyform the rules allow.
 
 ```jldoctest workflow
-julia> result = polyenum(sys; maxsize=20, maxstrs=100_000);
+julia> result = polyenum(rules; maxsize=20, maxstrs=100_000);
 
 julia> result.nstructures
 16
@@ -129,7 +129,7 @@ Cap `maxsize` (particles per polyform) or `maxstrs` (total polyforms) when the r
 `polygen` returns the polyforms in a `Vector`, sorted by size.
 
 ```jldoctest workflow
-julia> polys = polygen(sys; maxsize=20);
+julia> polys = polygen(rules; maxsize=20);
 
 julia> length(polys)
 16
@@ -140,7 +140,7 @@ julia> length(polys)
 `countpolyforms` counts without storing anything, switching to an unbiased sampled estimate when exact enumeration gets too expensive.
 
 ```jldoctest workflow
-julia> c = countpolyforms(sys);
+julia> c = countpolyforms(rules);
 
 julia> c.n
 16.0
@@ -165,7 +165,7 @@ It requires an explicit `maxsize` when the rules allow polyforms of unbounded si
 ```jldoctest workflow
 julia> constraint(s, _) = composition(s)[4] <= 1 ? ACCEPT : REJECT;
 
-julia> polyenum(constraint, sys).nstructures
+julia> polyenum(constraint, rules).nstructures
 14
 ```
 
@@ -189,7 +189,7 @@ A species renders too, which is the quickest way to see how its faces are colore
 
 ```julia
 render(PolyhedronParticleSpecies(Prism(3); colors=[1, 2, 2, 2, 1]))
-render(UnitCube; bindingrules=sys)   # sites no bond can use are drawn inert
+render(UnitCube; bindingrules=rules)   # sites no bond can use are drawn inert
 ```
 
 [`polyformplot!`](@ref)`(ax, poly)` draws onto an existing Makie axis.

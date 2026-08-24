@@ -13,13 +13,13 @@ struct Particle{P<:Pose}
 end
 
 """
-    Particle(sys::BindingRules, speciesindex::Integer, pose=nothing; leadingvertex::Integer)
+    Particle(rules::BindingRules, speciesindex::Integer, pose=nothing; leadingvertex::Integer)
 
-Create a particle of species `speciesindex` within `sys` at a given `pose`.
+Create a particle of species `speciesindex` within `rules` at a given `pose`.
 """
-function Particle(sys::BindingRules, speciesindex::Integer, pose=nothing; leadingvertex::Integer)
+function Particle(rules::BindingRules, speciesindex::Integer, pose=nothing; leadingvertex::Integer)
     if isnothing(pose)
-        pose = one(posetype(sys))
+        pose = one(posetype(rules))
     end
     return Particle(pose, leadingvertex, speciesindex)
 end
@@ -29,8 +29,8 @@ Base.:*(part::Particle, p) = typeof(part)(part.pose * p, part.leadingvertex, par
 Base.:+(p, part::Particle) = typeof(part)(p + part.pose, part.leadingvertex, part.speciesindex)
 Base.:+(part::Particle, p) = typeof(part)(part.pose + p, part.leadingvertex, part.speciesindex)
 
-@inline graphvertices(p::Particle, sys::BindingRules) =
-    (1:nv(graphrep(species(sys, p.speciesindex)))) .+ (p.leadingvertex - 1)
+@inline graphvertices(p::Particle, rules::BindingRules) =
+    (1:nv(graphrep(species(rules, p.speciesindex)))) .+ (p.leadingvertex - 1)
 
 """
     leadingvertex(p::Particle)
@@ -57,49 +57,49 @@ Return the species index of particle `p` within its `BindingRules`.
 speciesindex(p::Particle) = p.speciesindex
 
 """
-    nsites(p::Particle, sys::BindingRules)
+    nsites(p::Particle, rules::BindingRules)
 
 Return the number of binding sites of particle `p`.
 """
-nsites(p::Particle, sys::BindingRules) = nsites(species(sys, p.speciesindex))
+nsites(p::Particle, rules::BindingRules) = nsites(species(rules, p.speciesindex))
 
 """
-    bindingsites(p::Particle, sys::BindingRules, i::Integer)
+    bindingsites(p::Particle, rules::BindingRules, i::Integer)
 
 Return the `i`th binding site of particle `p`.
 """
-function bindingsites(p::Particle, sys::BindingRules, i::Integer)
-    return p.pose * shift_vertices(bindingsites(species(sys, p.speciesindex), i), leadingvertex(p) - 1)
+function bindingsites(p::Particle, rules::BindingRules, i::Integer)
+    return p.pose * shift_vertices(bindingsites(species(rules, p.speciesindex), i), leadingvertex(p) - 1)
 end
 
 """
-    bindingsites(p::Particle, sys::BindingRules)
+    bindingsites(p::Particle, rules::BindingRules)
 
 Return an iterator over the binding sites of particle `p`.
 """
-function bindingsites(p::Particle, sys::BindingRules)
-    return (bindingsites(p, sys, i) for i in 1:nsites(p, sys))
+function bindingsites(p::Particle, rules::BindingRules)
+    return (bindingsites(p, rules, i) for i in 1:nsites(p, rules))
 end
 
 """
-    could_contact(p1::Particle, p2::Particle, sys::BindingRules)
+    could_contact(p1::Particle, p2::Particle, rules::BindingRules)
 
 Return `true` if the particles could potentially be in contact.
 """
-function could_contact(p1::Particle, p2::Particle, sys::BindingRules)
-    return could_contact(species(sys, p1.speciesindex) => p1.pose, species(sys, p2.speciesindex) => p2.pose)
+function could_contact(p1::Particle, p2::Particle, rules::BindingRules)
+    return could_contact(species(rules, p1.speciesindex) => p1.pose, species(rules, p2.speciesindex) => p2.pose)
 end
 
 """
-    overlap(p1::Particle, p2::Particle, sys::BindingRules)
+    overlap(p1::Particle, p2::Particle, rules::BindingRules)
 
 Return `true` if the particles are overlapping.
 """
-function overlap(p1::Particle, p2::Particle, sys::BindingRules)
-    spcs1, spcs2 = species(sys, p1.speciesindex), species(sys, p2.speciesindex)
+function overlap(p1::Particle, p2::Particle, rules::BindingRules)
+    spcs1, spcs2 = species(rules, p1.speciesindex), species(rules, p2.speciesindex)
 
     # Binding rules can override the overlap check
-    if sys._onlattice
+    if rules._onlattice
         atol = sqrt(eps(numtype(spcs1))) * (bounding_radius(spcs1) + bounding_radius(spcs2))
         return norm(p1.pose.x - p2.pose.x) < atol
     end
@@ -107,12 +107,12 @@ function overlap(p1::Particle, p2::Particle, sys::BindingRules)
 end
 
 """
-    isconvex(p::Particle, sys::BindingRules)
+    isconvex(p::Particle, rules::BindingRules)
 
 Return true if the particle has a convex shape, which enables minor optimizations when
 checking for overlaps.
 """
-isconvex(p::Particle, sys::BindingRules) = isconvex(species(sys, p.speciesindex))
+isconvex(p::Particle, rules::BindingRules) = isconvex(species(rules, p.speciesindex))
 
 function Base.show(io::Core.IO, p::Particle)
     print(io, "Particle[si=$(p.speciesindex), lv=$(p.leadingvertex)]")

@@ -21,7 +21,7 @@ function Makie.plot!(p::PolyformPlot{<:Tuple{<:ParticleSpecies}})
     # rules are optional too, and decide which sites are drawn as bonding.
     pose = p.pose[]
     args = isnothing(pose) ? (p.poly[],) : (p.poly[], pose)
-    plot_particlespecies!(p, args...; sys=p.bindingrules[])
+    plot_particlespecies!(p, args...; rules=p.bindingrules[])
     return p
 end
 
@@ -74,15 +74,15 @@ Species that provide a [`particlemesh`](@ref) are merged into one mesh so they d
 against each other; the rest are drawn one plot per particle.
 """
 function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
-    sys = bindingrules(poly)
+    rules = bindingrules(poly)
     pts, tris, cols = Point3f[], NTuple{3,Int}[], RGBAf[]
 
     for part in poly.particles
-        ps = species(sys, part.speciesindex)
+        ps = species(rules, part.speciesindex)
         part_pose = isnothing(pose) ? part.pose : pose * part.pose
-        geom = particlemesh(ps, part_pose; sys, kwargs...)
+        geom = particlemesh(ps, part_pose; rules, kwargs...)
         if isnothing(geom)
-            plot_particlespecies!(ax, ps, part_pose; sys, kwargs...)
+            plot_particlespecies!(ax, ps, part_pose; rules, kwargs...)
             continue
         end
         p, t, c = geom

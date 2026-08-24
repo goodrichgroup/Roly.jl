@@ -91,7 +91,7 @@ axis to match its dimension. Provided by the Makie extension, so it needs a back
 3D output needs a backend with a depth buffer, GLMakie or WGLMakie. CairoMakie sorts
 primitives instead of depth-testing them, so 3D polyforms show artifacts where faces meet.
 
-`bindingrules=sys` draws sites no bond can use as inert, which works for a bare species too.
+`bindingrules=rules` draws sites no bond can use as inert, which works for a bare species too.
 """
 function render end
 
