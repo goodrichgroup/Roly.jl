@@ -47,12 +47,13 @@ facenormal
 edgemidpoint
 minedgelength
 inradius
-rotationgroup
+rotationgroup(::Polyhedron)
+rotationgroup(::ParticleSpecies)
 faceorbits
 facesym
 siteorbits
 sitelabel
-site_symmetry
+permutationgroup
 check_encoding
 stabilizerorders(::ParticleSpecies)
 stabilizerorders(::Any, ::Any, ::Any)

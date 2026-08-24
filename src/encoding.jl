@@ -847,52 +847,84 @@ _sitetwists(psi::Rotation{3,F}, sitesym::Integer) where {F} = (psi * RotX(F(2π)
 _sitetwists(psi::Rotation{2}, ::Integer) = (psi,)
 
 """
-    site_symmetry(ps::ParticleSpecies)
-
-Return the number of rotations about the particle origin that map every binding site of `ps`
-onto a binding site with the same symmetry label, matching orientation as well as position.
-
-Frames need only agree up to the receiving site's own stabilizer.
-
-The turn count comes from each site's `sitesym`, never from its graph vertex count. Those
-coincide for the dart encoding, where a face gets one vertex per dart *because* it is that
-symmetric, but taking the vertex count would let an encoding certify itself: one vertex per
-face declares a pentagonal base 1-fold, exact frame matching then returns 1, the graph also
-says 1, and a combination that should be rejected passes.
-"""
-site_symmetry(ps::ParticleSpecies) = length(_site_symmetries(_sitedata(ps)...))
-
-"""
     sitelabel(ps::ParticleSpecies, i::Integer)
 
 Return the symmetry label of site `i` of `ps`, the graph label all of that site's vertices carry.
 """
 sitelabel(ps::ParticleSpecies, i::Integer) = Int(label(graphrep(ps), first(bindingsite(ps, i).vertices)))
 
-# Poses, site symmetries and the label each site is matched by. `site_symmetry` matches on the
-# graph's labels, since it asks what the graph claims; `siteorbits` matches on colors, since it
+"""
+    permutationgroup(ps::ParticleSpecies)
+
+Return the rotational symmetry group of `ps` as site permutations: one permutation per rotation
+about the particle origin that maps every binding site onto a site with the same symmetry label,
+matching orientation as well as position.
+
+The counterpart of [`rotationgroup`](@ref), which returns the same group as rotations. Compare
+[`symmetrynumber`](@ref), which reads the order of this group off the graph encoding instead;
+[`check_encoding`](@ref) is the check that the two agree.
+
+Frames need only agree up to the receiving site's own `sitesym`. That turn count comes from
+each site's `sitesym`, never from its graph vertex count. Those coincide for the dart encoding,
+where a face gets one vertex per dart *because* it is that symmetric, but taking the vertex
+count would let an encoding certify itself: one vertex per face declares a pentagonal base
+1-fold, exact frame matching then returns 1, the graph also says 1, and a combination that
+should be rejected passes.
+"""
+function permutationgroup(ps::ParticleSpecies)
+    perms = Vector{Int}[]
+    _eachsitesymmetry((_, perm) -> push!(perms, perm), _sitegeometry(ps)...)
+    return perms
+end
+
+"""
+    rotationgroup(ps::ParticleSpecies)
+
+Return the rotational symmetry group of `ps` as rotations about the particle origin: those that
+map every binding site onto a site with the same symmetry label, matching orientation as well as
+position.
+
+The counterpart of [`permutationgroup`](@ref), which returns the same group as site
+permutations, and of [`rotationgroup(::Polyhedron)`](@ref), which asks the same of a bare body.
+"""
+function rotationgroup(ps::ParticleSpecies)
+    rots = _rotationtype(posetype(ps))[]
+    _eachsitesymmetry((Q, _) -> push!(rots, Q), _sitegeometry(ps)...)
+    return rots
+end
+
+_rotationtype(::Type{<:Pose{D,F,R}}) where {D,F,R} = R
+
+# Poses, site symmetries and the label each site is matched by. The group functions match on the
+# graph's labels, since they ask what the graph claims; `siteorbits` matches on colors, since it
 # asks what the arrangement is.
-function _sitedata(ps::ParticleSpecies)
+function _sitegeometry(ps::ParticleSpecies)
     n = nsites(ps)
     sites = [bindingsite(ps, i) for i in 1:n]
     return ([s.pose for s in sites], [s.sitesym for s in sites], [sitelabel(ps, i) for i in 1:n])
 end
 
 """
-    _site_symmetries(poses, sitesyms, sitelabels)
+    _eachsitesymmetry(f, poses, sitesyms, sitelabels)
 
-Return the site permutations induced by the rotations about the particle origin that carry
-every site onto one with the same `sitelabels` entry, matching position and orientation.
+Call `f(Q, perm)` on every rotation `Q` about the particle origin that carries each site onto
+one with the same `sitelabels` entry, matching position and orientation, together with the site
+permutation `perm` it induces. Return how many there were.
 
 `sitelabels` is whatever a symmetry has to preserve: graph labels when asking what the graph
-claims, colors when asking what the arrangement is.
+claims, colors when asking what the arrangement is. Pass `f = Returns(nothing)` to only count.
+
+The candidates are enumerated by orbit and stabilizer: a rotation is fixed by where it sends
+site 1's frame, it must send site 1 to a site of the same label, and it may leave the frame in
+any of that site's `sitesym` equivalent turns. Every group element appears exactly once, since
+the outer loop runs over site 1's orbit and the inner one over its stabilizer.
 
 !!! warning "Particles only"
     This rests on a particle's sites having *distinct positions*, which makes a rotation
     determined by where it sends site 1, and makes the site map injective for free. Neither
     holds for an assembled [`Polyform`](@ref).
 """
-function _site_symmetries(poses, sitesyms, sitelabels)
+function _eachsitesymmetry(f, poses, sitesyms, sitelabels)
     n = length(poses)
     tol = sqrt(eps(eltype(typeof(first(poses)))))
     atol = tol * maximum(norm(p.x) for p in poses)
@@ -911,14 +943,29 @@ function _site_symmetries(poses, sitesyms, sitelabels)
         return perm
     end
 
-    perms = Vector{Int}[]
+    count = 0
     for a in 1:n
         sitelabels[a] == sitelabels[1] || continue
         for psi in _sitetwists(poses[a].psi, sitesyms[a])
-            perm = permutation(psi * inv(poses[1].psi))
-            isnothing(perm) || push!(perms, perm)
+            Q = psi * inv(poses[1].psi)
+            perm = permutation(Q)
+            isnothing(perm) && continue
+            f(Q, perm)
+            count += 1
         end
     end
+    return count
+end
+
+"""
+    _site_symmetries(poses, sitesyms, sitelabels)
+
+Return the site permutations of [`_eachsitesymmetry`](@ref), for callers that hold the site
+geometry rather than a [`ParticleSpecies`](@ref).
+"""
+function _site_symmetries(poses, sitesyms, sitelabels)
+    perms = Vector{Int}[]
+    _eachsitesymmetry((_, perm) -> push!(perms, perm), poses, sitesyms, sitelabels)
     return perms
 end
 
@@ -1054,7 +1101,7 @@ labels by hand instead of deriving them with [`siteorbits`](@ref).
 """
 function check_encoding(ps::ParticleSpecies)
     _check_labeling(ps)
-    geometric = site_symmetry(ps)
+    geometric = _eachsitesymmetry(Returns(nothing), _sitegeometry(ps)...)
     graph = symmetrynumber(ps)
     graph == geometric || throw(
         ArgumentError(

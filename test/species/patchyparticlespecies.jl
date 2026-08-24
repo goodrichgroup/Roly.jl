@@ -12,7 +12,7 @@ using Roly:
     could_contact,
     overlap,
     symmetrynumber,
-    site_symmetry
+    permutationgroup
 
 
 using Roly: PatchySphere, Polyhedron, Tetrahedron, Cube, Dodecahedron, Prism,
@@ -163,9 +163,9 @@ using LinearAlgebra: normalize, dot, det, norm
 
     # Evenly spaced identical patches really do have that symmetry
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
-    @test site_symmetry(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1])) == 3
+    @test length(permutationgroup(PatchyDisk([0.0, 2π / 3, 4π / 3]; colors=[1, 1, 1]))) == 3
     @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
-    @test site_symmetry(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
+    @test length(permutationgroup(PatchyDisk([0.0, π]; colors=[1, 1]))) == 2
 
     # Unevenly spaced ones do not, no matter what colors
     @test symmetrynumber(PatchyDisk([0.0, 0.5, 3.0]; colors=[1, 1, 1])) == 1
@@ -178,13 +178,13 @@ using LinearAlgebra: normalize, dot, det, norm
     uneven = [SVector(cos(t), sin(t)) for t in (0.0, 0.5, 3.0)]
     for labs in (Cint[1, 1, 1], Cint[1, 2, 3])
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3); vertex_labels=labs), 1.0, uneven)
-        @test symmetrynumber(ps) == site_symmetry(ps) == 1
+        @test symmetrynumber(ps) == length(permutationgroup(ps)) == 1
         @test labels(graphrep(ps)) == Cint[1, 2, 3]
     end
     # Evenly spaced patches of one color are equivalent
     even = [SVector(cos(t), sin(t)) for t in (0.0, 2π / 3, 4π / 3)]
     ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(3)), 1.0, even; colors=fill(1, 3))
-    @test symmetrynumber(ps) == site_symmetry(ps) == 3
+    @test symmetrynumber(ps) == length(permutationgroup(ps)) == 3
 
 
     # twists

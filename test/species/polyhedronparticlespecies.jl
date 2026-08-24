@@ -7,7 +7,7 @@ using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron
             nsites, dimension, isconvex, numtype, bindingsites, graphrep, setcolors!, color,
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
             collect_attachments, tocanon, toorig, BindingRules, Polyform, nbonds,
-            site_symmetry, PatchySphere
+            permutationgroup, PatchySphere
 
 using Roly: PolyhedronParticleSpecies, Prism, Tetrahedron, BindingRules, Polyform,
             raise!, collect_attachments, symmetrynumber, graphrep, nfaces
@@ -140,18 +140,18 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         # Distinct labels: both encodings describe the arrangement, and both give 1.
         for build in (PolyhedronParticleSpecies, dartspecies, cyclespecies)
             distinct = build(shp)
-            @test symmetrynumber(distinct) == site_symmetry(distinct) == 1
+            @test symmetrynumber(distinct) == length(permutationgroup(distinct)) == 1
         end
         # Repeated labels: only the dart encoding carries the rotation group, and forcing the
         # sparse one is rejected rather than silently reporting the cyclic order.
         geo = dartspecies(shp; colors=faceorbits(shp))
-        @test symmetrynumber(geo) == site_symmetry(geo) == order
+        @test symmetrynumber(geo) == length(permutationgroup(geo)) == order
         order == nfaces(shp) ||
             @test_throws ArgumentError cyclespecies(shp; colors=faceorbits(shp))
     end
     for (shp, order) in [(Tetrahedron(), 12), (Cube(), 24), (Dodecahedron(), 60), (Prism(5), 10)]
         sphere = PatchySphere(shp, 1.0; colors=faceorbits(shp))
-        @test symmetrynumber(sphere) == site_symmetry(sphere) == order
+        @test symmetrynumber(sphere) == length(permutationgroup(sphere)) == order
     end
 
     # Site stabilizers
@@ -203,7 +203,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # 12.
     pyramid = PolyhedronParticleSpecies(Pyramid(3); colors=fill(1, 4))
     @test length(unique(Roly.labels(graphrep(pyramid)))) == 2
-    @test symmetrynumber(pyramid) == site_symmetry(pyramid) == 3
+    @test symmetrynumber(pyramid) == length(permutationgroup(pyramid)) == 3
     # The sparse encoding imposes a cyclic order, which is not the symmetry of a tetrahedral
     # or octahedral patch arrangement: it claims n where the truth is |G|. This is the failure
     # that using `cycleencoding`/`dartencoding` does not rule out on its own.
@@ -256,12 +256,12 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # encoding, asked for explicitly -- a prism whose faces all start out distinct can be
     # recolored into its full D_3 and the derived quantities follow.
     prism = dartspecies(Prism(3, 1.0; h=2.0); colors=1:5)
-    @test symmetrynumber(prism) == site_symmetry(prism) == 1
+    @test symmetrynumber(prism) == length(permutationgroup(prism)) == 1
     @test Roly.stabilizerorders(prism) == fill(1, 5)
 
     caps = [i for i in 1:5 if abs(Roly.facenormal(Prism(3, 1.0; h=2.0), i)[3]) > 1e-8]
     setcolors!(prism, [i in caps ? 7 : 8 for i in 1:5])
-    @test symmetrynumber(prism) == site_symmetry(prism) == 6
+    @test symmetrynumber(prism) == length(permutationgroup(prism)) == 6
     # Caps are 3-fold about their normals and the prism is 3-fold about them; the rectangular
     # sides are 2-fold and so is the prism about those.
     @test [Roly.bindingsite(prism, i).stab for i in 1:5] == [i in caps ? 3 : 2 for i in 1:5]
@@ -448,7 +448,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # is folded into the key `siteorbits` groups by, so the orbit splits.
     split = PolyhedronParticleSpecies(shp; colors,
                                       twists=[i == first(sides) ? π/2 : 0.0 for i in 1:nfaces(shp)])
-    @test symmetrynumber(split) == site_symmetry(split) == 2
+    @test symmetrynumber(split) == length(permutationgroup(split)) == 2
     @test length(unique(Roly.labels(graphrep(split)))) == 3
     @test symmetrynumber(PolyhedronParticleSpecies(shp; colors)) == 6
 
@@ -486,9 +486,9 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # A twist shared across an orbit leaves the symmetry alone, since turns about a site's own
     # normal commute with its stabilizer; turning one face differently splits the orbit.
     uniform = PolyhedronParticleSpecies(shp; colors, twists=[i in sides ? 0.37 : 0.0 for i in 1:nfaces(shp)])
-    @test symmetrynumber(uniform) == site_symmetry(uniform) == 6
+    @test symmetrynumber(uniform) == length(permutationgroup(uniform)) == 6
     partial = PolyhedronParticleSpecies(shp; colors, twists=[i == first(sides) ? 0.37 : 0.0 for i in 1:nfaces(shp)])
-    @test symmetrynumber(partial) == site_symmetry(partial) == 2
+    @test symmetrynumber(partial) == length(permutationgroup(partial)) == 2
 
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0.0, 1.0])
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); locking=[true, false])

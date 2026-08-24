@@ -64,6 +64,6 @@ Roly arranges this when the species is built, using the rotations that preserve 
 
 ## Checking a species
 
-[`site_symmetry`](@ref) counts the rotations that carry every site onto a site of the same color.
+[`permutationgroup`](@ref) lists the rotations that carry every site onto a site of the same label, as site permutations; [`rotationgroup`](@ref) lists the same group as rotations.
 [`check_encoding`](@ref) compares that against the graph's symmetry number and throws if they disagree.
 Every built-in species runs it in its constructor; call it in your own if you write graph labels by hand.

@@ -1,6 +1,6 @@
 # The species interface as `docs/src/custom_species.md` documents it.
 using Roly
-using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color, siteorbits,
+using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, permutationgroup, setcolors!, color, siteorbits,
             cycleencoding, stabilizerorders, sat_overlap, edgenormals
 import Roly: graphrep, nsites, bindingsite, bounding_radius, isconvex
 using NautyGraphs, StaticArrays, LinearAlgebra, Rotations
@@ -55,7 +55,7 @@ end
     @test dimension(r) == 2
 
     # check automatic symmetry encoding
-    @test symmetrynumber(r) == site_symmetry(r) == 2
+    @test symmetrynumber(r) == length(permutationgroup(r)) == 2
     @test Roly.check_encoding(r) === r
     for cols in ([1, 1, 1, 1], [1, 2, 1, 2], [9, 9, 9, 9])
         @test symmetrynumber(Rectangle(2.0, 1.0; colors=cols)) == 2
@@ -70,10 +70,10 @@ end
     # and re-derives the labeling and the stabilizers
     setcolors!(r, [5, 6, 5, 6])
     @test [color(bindingsite(r, i)) for i in 1:4] == [5, 6, 5, 6]
-    @test symmetrynumber(r) == site_symmetry(r) == 2
+    @test symmetrynumber(r) == length(permutationgroup(r)) == 2
     # Coloring every edge alike cannot make a rectangle 4-fold symmetric
     setcolors!(r, fill(7, 4))
-    @test symmetrynumber(r) == site_symmetry(r) == 2
+    @test symmetrynumber(r) == length(permutationgroup(r)) == 2
     @test length(unique(Roly.labels(graphrep(r)))) == 2
     @test stabilizerorders(r) == fill(1, 4)
 

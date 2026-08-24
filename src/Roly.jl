@@ -54,7 +54,7 @@ public inradius, minedgelength
 # Graph encodings and the symmetry they record
 public dartencoding, cycleencoding
 public rotationgroup, faceorbits, facesym, siteorbits, stabilizerorders, sitelabel
-public site_symmetry, check_encoding
+public permutationgroup, check_encoding
 
 # What a bond fixes about relative orientation
 public contact_pairing, standard_twist, twistfreedom, twist
