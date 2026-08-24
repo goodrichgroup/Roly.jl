@@ -84,11 +84,11 @@
 
     # The same two tilings from prisms whose side faces are *squares* rather than rectangles.
     # The face is then 4-fold about its normal where the prism is only 2-fold about it, so the
-    # two solids differ in `gauge` but not in `stab`.
+    # two solids differ in `sitesym` but not in `stab`.
     for (shp, want) in [(Prism(3), [1, 2, 3, 6, 10, 22]), (Prism(6), [1, 2, 5, 12, 34])]
         rules = rules(shp, sidefaces(shp))
         b = Roly.bindingsites(species(rules, 1), first(sidefaces(shp)))
-        @test (b.gauge, b.stab) == (4, 2)
+        @test (b.sitesym, b.stab) == (4, 2)
         @test Roly.nphases(b, b) == 1
         @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
     end
@@ -99,7 +99,7 @@
         colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
         ps = PolyhedronParticleSpecies(shp; colors, locking=[!(i in sides) for i in 1:nfaces(shp)])
         b = Roly.bindingsites(ps, first(sides))
-        @test Roly.twistfreedom(b) == b.gauge == 4
+        @test Roly.twistfreedom(b) == b.sitesym == 4
         @test Roly.nphases(b, b) == 2
         rules = BindingRules([1 first(sides) 1 first(sides)], ps)
         @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want

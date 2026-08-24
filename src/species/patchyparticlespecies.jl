@@ -31,11 +31,11 @@ function PatchyParticleSpecies(
 
     tol = sqrt(eps(F)) * r
     poses = [normal_pose(patch_positions[i], patch_twists[i]) for i in eachindex(patch_positions)]
-    # One vertex per patch leaves no room for a turn about the patch normal, so the gauge is 1
+    # One vertex per patch leaves no room for a turn about the patch normal, so the sitesym is 1
     # whatever the arrangement; a patch that needs its own symmetry needs `dartencoding`.
-    gauges = ones(Int, n)
-    labs = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilizers(poses, gauges, labs)
+    sitesyms = ones(Int, n)
+    labs = siteorbits(poses, sitesyms, collect(colors))
+    stabs = sitestabilizers(poses, sitesyms, labs)
     setlabels!(g, collect(Cint, labs))
 
     sites = [BindingSite(poses[i], colors[i], i:i, tol, tol / r, 1, stabs[i]) for i in 1:n]
@@ -56,10 +56,10 @@ function PatchyDisk(angles, r=1; colors=1:length(angles))
     positions = [SVector(r * cos(F(phi)), r * sin(F(phi))) for phi in angles]
     poses = [normal_pose(positions[i], F(0)) for i in 1:n]
 
-    # A 2D site has no turn about its in-plane normal, so its gauge is 1 throughout.
-    gauges = ones(Int, n)
-    labels = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilizers(poses, gauges, labels)
+    # A 2D site has no turn about its in-plane normal, so its sitesym is 1 throughout.
+    sitesyms = ones(Int, n)
+    labels = siteorbits(poses, sitesyms, collect(colors))
+    stabs = sitestabilizers(poses, sitesyms, labels)
 
     g, ranges = cycleencoding(n; labels)
     sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1, stabs[i]) for i in 1:n]

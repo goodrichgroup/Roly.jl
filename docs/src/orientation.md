@@ -20,11 +20,11 @@ For a polyhedron face the twist reference is "local z points at the midpoint of 
 | quantity | meaning | square side face of a triangular prism |
 |---|---|---|
 | `degree` | graph vertices the site owns under [`dartencoding`](@ref) | 4 |
-| `gauge` | order of the face's own rotational symmetry about its normal | 4 |
+| `sitesym` | order of the face's own rotational symmetry about its normal | 4 |
 | `stab` | order of that site's stabilizer in the particle's symmetry group | 2 |
 
 Each divides the next, and all three are equal for a cube face.
-[`facegauge`](@ref) computes `gauge` from the face, [`sitestabilizers`](@ref) computes `stab` from the particle.
+[`facesym`](@ref) computes `sitesym` from the face, [`sitestabilizers`](@ref) computes `stab` from the particle.
 
 ## How many phases a bond has
 
@@ -34,7 +34,7 @@ Two turns describe the same structure when a rotation of the particle relates th
 Writing `q` for a site's [`twistfreedom`](@ref):
 
 ```
-L = lcm(q₁, q₂)          q = stab if the site is locking, gauge if not
+L = lcm(q₁, q₂)          q = stab if the site is locking, sitesym if not
 R = L / stab₂
 ```
 

@@ -196,13 +196,13 @@ using LinearAlgebra: normalize, dot, det, norm
     function dimer(twists)
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(4)), 1.0, pos, twists;
                                    colors=[1, 2, 3, 4])
-        @test all(i -> Roly.bindingsites(ps, i).gauge == 1, 1:4)
+        @test all(i -> Roly.bindingsites(ps, i).sitesym == 1, 1:4)
         rules = BindingRules([1 1 1 2], ps)
         poly = Polyform(rules, 1)
         for (site, loc, r) in collect_compatible_pairs(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
-            @test r == 0                      # gauge 1 on both sides, so one phase
+            @test r == 0                      # sitesym 1 on both sides, so one phase
             return trial.particles[2].pose
         end
         return nothing

@@ -57,15 +57,15 @@ Besides its pose and color, a [`BindingSite`](@ref) carries three numbers that d
 
 | field | meaning |
 |---|---|
-| `gauge` | order of the site's own rotational symmetry about its normal. Always 1 in 2D. [`facegauge`](@ref) computes it for a polyhedron face. |
+| `sitesym` | order of the site's own rotational symmetry about its normal. Always 1 in 2D. [`facesym`](@ref) computes it for a polyhedron face. |
 | `stab` | order of the site's stabilizer in the particle's rotation group, from [`sitestabilizers`](@ref). |
 | `locking` | whether the site holds its partner in the orientation its frame names (the default) or admits every orientation the shape permits. |
 
 [`nphases`](@ref) reads these to decide how many distinct bonds a pair of sites has.
 
-In 2D both `gauge` and `stab` are 1, so the five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` is right.
-In 3D `gauge` is still 1 for a site on a single vertex, but `stab` need not be, since a rotation about a patch's axis can carry the particle onto itself.
-Compute it with [`sitestabilizers`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, gauge, stab)`.
+In 2D both `sitesym` and `stab` are 1, so the five-argument `BindingSite(pose, color, vertices, touching_tol, alignment_tol)` is right.
+In 3D `sitesym` is still 1 for a site on a single vertex, but `stab` need not be, since a rotation about a patch's axis can carry the particle onto itself.
+Compute it with [`sitestabilizers`](@ref) and pass `BindingSite(pose, color, vertices, tol, tol, sitesym, stab)`.
 See [Orientation and phases](orientation.md).
 
 ## A worked example: rectangle
@@ -115,7 +115,7 @@ function Rectangle(width::Real, height::Real; colors=1:4)
         Pose(SVector{2,F}(-w/2, 0),  Angle2d{F}(F(π))),
         Pose(SVector{2,F}(0,   h/2), Angle2d{F}(F(π)/2)),
     ]
-    # A 2D site has no turn about its in-plane normal, so every gauge is 1.
+    # A 2D site has no turn about its in-plane normal, so every `sitesym` is 1.
     labels = siteorbits(poses, ones(Int, 4), collect(colors))
 
     # Directed 4-cycle, one vertex per binding site; `ranges[i]` is `i:i` here.

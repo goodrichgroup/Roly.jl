@@ -5,7 +5,7 @@ using Roly: Polyhedron, Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron
             facecentroid, facecentroids, facenormal, facenormals, edgemidpoint,
             minedgelength, bounding_radius, inradius,
             rotationgroup, geometriclabels, dartencoding, cycleencoding,
-            facegauge, RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral,
+            facesym, RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral,
             Icosahedral, grouporder
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
 
@@ -127,21 +127,21 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     # A face's own rotational symmetry about its normal. Equal to the degree only for a regular
     # face, and a divisor of it otherwise, so it cannot be read off the dart count.
     for p in (Tetrahedron(), Cube(), Octahedron(), Dodecahedron(), Icosahedron(), Antiprism(4))
-        @test facegauge(p) == [facedegree(p, i) for i in 1:nfaces(p)]
+        @test facesym(p) == [facedegree(p, i) for i in 1:nfaces(p)]
     end
     # A pyramid's sides are isosceles triangles: no rotational symmetry at all, despite degree 3.
-    @test facegauge(Pyramid(5)) == [5, 1, 1, 1, 1, 1]
+    @test facesym(Pyramid(5)) == [5, 1, 1, 1, 1, 1]
     # A prism's side faces are squares when
-    # h == a and mere rectangles otherwise, so their gauge halves while the degree stays 4.
-    @test facegauge(Prism(3)) == [3, 4, 4, 4, 3]
-    @test facegauge(Prism(3, 1.0; h=2.0)) == [3, 2, 2, 2, 3]
-    @test facegauge(Prism(6, 1.0; h=2.0)) == [6, 2, 2, 2, 2, 2, 2, 6]
+    # h == a and mere rectangles otherwise, so their sitesym halves while the degree stays 4.
+    @test facesym(Prism(3)) == [3, 4, 4, 4, 3]
+    @test facesym(Prism(3, 1.0; h=2.0)) == [3, 2, 2, 2, 3]
+    @test facesym(Prism(6, 1.0; h=2.0)) == [6, 2, 2, 2, 2, 2, 2, 6]
     # A box with three distinct edge lengths has rectangular faces throughout.
     box3 = Polyhedron([SVector(x, y, z) for x in (-1.0, 1.0) for y in (-2.0, 2.0) for z in (-3.0, 3.0)])
-    @test facegauge(box3) == fill(2, 6)
+    @test facesym(box3) == fill(2, 6)
     # It is a property of the face, not of the solid: a triangular prism is only 2-fold about a
     # square side face, but the face is still a square.
-    @test facegauge(Prism(3), 2) == 4
+    @test facesym(Prism(3), 2) == 4
 
     g, ranges = cycleencoding(6)
     @test nv(g) == 6

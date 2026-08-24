@@ -4,22 +4,22 @@
 A `BindingSite` describes an anchor point at which particles are attached together.
 The binding site color, together with an interaction matrix, determines whether two binding sites may bind.
 
-`gauge` is the order of the site's own rotational symmetry about its outward normal, disregarding the rest
+`sitesym` is the order of the site's own rotational symmetry about its outward normal, disregarding the rest
 of the particle.
 `stab` size of the stabilizer of this site in the rotational symmetry group of the containing particle.
 For example, consider a square side of a 3-prism (i.e. an extruded triangle). The side has 4-fold symmetry
-(`gauge == 4`), but only two of these rotations are symmetries of the entire particle (`stab == 2`).
+(`sitesym == 4`), but only two of these rotations are symmetries of the entire particle (`stab == 2`).
 
 A binding site's pose carries three things. Its position and its outward normal (the pose's local x axis)
 are physical. The remaining freedom in the frame, the *twist*, is generally not: 
-a site with a `gauge`-fold symmetry is unchanged by turns of `2π/gauge` about its normal,
-so `psi`, `psi·Rx(2π/gauge)`, ... all describe the same site.
+a site with a `sitesym`-fold symmetry is unchanged by turns of `2π/sitesym` about its normal,
+so `psi`, `psi·Rx(2π/sitesym)`, ... all describe the same site.
 
 `locking` determines if the binding site fixes the twist between it and its binding partners. A locking
 site holds its partner fixed in the relative orientation defined by its frame (see [`standard_offset`](@ref)), 
 up to symmetry transformations of the particle, so the number of the possible twists is equal to `stab`. 
 If `locking==false`, the site allows all twists that are compatible with the site symmetry alone, disregarding
-the symmetry of the particle, so the number of twists is equal to `gauge`.
+the symmetry of the particle, so the number of twists is equal to `sitesym`.
 The two choices of locking coincide whenever the stabilizer of the site is equal to its individual symmetry group.
 """
 struct BindingSite{P<:Pose,F<:Real}
@@ -28,7 +28,7 @@ struct BindingSite{P<:Pose,F<:Real}
     vertices::UnitRange{Int}
     touching_tolerance::F
     alignment_tolerance::F
-    gauge::Int
+    sitesym::Int
     stab::Int
     locking::Bool
 end
@@ -38,13 +38,13 @@ function BindingSite(
     vertices::UnitRange{<:Integer},
     touching_tolerance::Real,
     alignment_tolerance::Real,
-    gauge::Integer=1,
+    sitesym::Integer=1,
     stab::Integer=1,
     locking::Bool=true,
 ) where {P<:Pose}
     F = eltype(P)
     return BindingSite{P,F}(
-        pose, color, vertices, convert(F, touching_tolerance), convert(F, alignment_tolerance), gauge, stab, locking
+        pose, color, vertices, convert(F, touching_tolerance), convert(F, alignment_tolerance), sitesym, stab, locking
     )
 end
 
@@ -53,10 +53,10 @@ end
     pose=site.pose,
     color=site.color,
     vertices=site.vertices,
-    gauge=site.gauge,
+    sitesym=site.sitesym,
     stab=site.stab,
     locking=site.locking,
-) = typeof(site)(pose, color, vertices, site.touching_tolerance, site.alignment_tolerance, gauge, stab, locking)
+) = typeof(site)(pose, color, vertices, site.touching_tolerance, site.alignment_tolerance, sitesym, stab, locking)
 
 Base.:(==)(b1::BindingSite, b2::BindingSite) = b1.vertices == b2.vertices && b1.color == b2.color
 Base.hash(b::BindingSite, h::UInt) = hash(b.color, hash(b.vertices, h))
@@ -94,9 +94,9 @@ If there are `L` admissable twists, then any twists angle that is a multiple of 
     twistfreedom(b::BindingSite)
 
 Return how many possible twists binding site `b` allows. Equal to `stab` if the site is locking,
-and equal to `gauge` otherwise. See [`BindingSite`](@ref) and [`bondperiod`](@ref).
+and equal to `sitesym` otherwise. See [`BindingSite`](@ref) and [`bondperiod`](@ref).
 """
-@inline twistfreedom(b::BindingSite) = b.locking ? b.stab : b.gauge
+@inline twistfreedom(b::BindingSite) = b.locking ? b.stab : b.sitesym
 
 """
     bondperiod(b1::BindingSite, b2::BindingSite)
@@ -135,7 +135,7 @@ solutions of
 
     a*s₁ + b*s₂ = t   (mod K),      t = r*K/L
 
-`t` is always an integer: a site's gauge `gᵢ` divides its vertex count, so `L = lcm(g₁, g₂)`
+`t` is always an integer: a site's sitesym `gᵢ` divides its vertex count, so `L = lcm(g₁, g₂)`
 divides `K`. Since `gcd(s₁, s₂) = 1`, the congruence has exactly `gcd(k₁, k₂)` solutions for
 every `t`, and distinct phases give disjoint solution sets, so the pairing count never
 depends on the phase, and the graph records which phase a bond is in.
@@ -156,7 +156,7 @@ end
         ArgumentError(
             "a bond in $L phases cannot be encoded by sites of $k1 and $k2 graph vertices: " *
             "$L must divide lcm($k1, $k2) = $K. Give the sites more vertices, i.e. a graph built " *
-            "by `dartencoding` rather than `cycleencoding`, or declare a smaller gauge.",
+            "by `dartencoding` rather than `cycleencoding`, or declare a smaller sitesym.",
         ),
     )
     s1, s2 = K ÷ k1, K ÷ k2

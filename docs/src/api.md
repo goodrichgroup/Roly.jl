@@ -50,7 +50,7 @@ minedgelength
 inradius
 rotationgroup
 geometriclabels
-facegauge
+facesym
 siteorbits
 site_symmetry
 check_encoding

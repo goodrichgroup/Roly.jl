@@ -133,12 +133,12 @@ using Graphs, NautyGraphs
     @test_throws ArgumentError collect(contact_pairing(1:1, 2:2, 1, 4))
 
     # phases
-    site(gauge, stab, locking) =
+    site(sitesym, stab, locking) =
         BindingSite(Pose{3,Float64,RotMatrix3{Float64}}(SVector(1.0, 0.0, 0.0),
                                                         one(RotMatrix3{Float64})),
-                    1, 1:gauge, 1e-8, 1e-8, gauge, stab, locking)
+                    1, 1:sitesym, 1e-8, 1e-8, sitesym, stab, locking)
 
-    # A locking site's restricts down to its stabilizer; a rotation-free one restricts to its gauge
+    # A locking site's restricts down to its stabilizer; a rotation-free one restricts to its sitesym
     # The two coincide when a face is no more symmetric than the body around it.
     @test twistfreedom(site(4, 2, true)) == 2
     @test twistfreedom(site(4, 2, false)) == 4

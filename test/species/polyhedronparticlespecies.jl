@@ -65,7 +65,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     # The twist references have to agree up to `stab` under every label-preserving rotation:
     # that is what `_propagate_faces` establishes, and what makes bonds between symmetry-related
-    # faces equivalent. `_canonical_faces` on its own only gets them to agree up to `gauge`,
+    # faces equivalent. `_canonical_faces` on its own only gets them to agree up to `sitesym`,
     # which is strictly weaker wherever a face is more symmetric than the body around it.
     # Tetrahedron and octahedron are here for the cases with no translation-mated faces at all:
     # a tetrahedron has no antiparallel pair, and an octahedron's are related by inversion,
@@ -93,7 +93,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
             bi, bj = Roly.bindingsites(ps, i), Roly.bindingsites(ps, j)
             @test bj.stab == bi.stab
             # Q carries site i's frame onto site j's, up to a turn about j's normal lying in
-            # j's stabilizer -- not merely in its gauge.
+            # j's stabilizer -- not merely in its sitesym.
             @test any(0:(bj.stab - 1)) do m
                 isapprox(Q * bi.pose.psi, bj.pose.psi * RotX(2π * m / bj.stab); atol=1e-8)
             end
@@ -156,16 +156,16 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     end
 
     # Site stabilizers
-    # How much of a site's own symmetry the whole particle keeps. At most its gauge, and the
+    # How much of a site's own symmetry the whole particle keeps. At most its sitesym, and the
     # ratio is how many distinct ways a partner can attach there: turns in the stabilizer put
     # the same body in the same place with only its sites permuted.
-    gauges(ps) = [bindingsites(ps, i).gauge for i in 1:nsites(ps)]
-    phases(ps) = gauges(ps) .÷ Roly.sitestabilizers(ps)
+    sitesyms(ps) = [bindingsites(ps, i).sitesym for i in 1:nsites(ps)]
+    phases(ps) = sitesyms(ps) .÷ Roly.sitestabilizers(ps)
 
     # A cube keeps all four turns about a face normal, so a face-to-face bond has one
     # phase and nothing changes for polycubes.
     cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
-    @test gauges(cube) == fill(4, 6)
+    @test sitesyms(cube) == fill(4, 6)
     @test Roly.sitestabilizers(cube) == fill(4, 6)
     @test phases(cube) == fill(1, 6)
 
@@ -177,24 +177,24 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test phases(capped) == [c == 2 ? 1 : 2 for c in caps]
 
     # A triangular prism's side faces are squares
-    # when h == a (gauge 4) but the prism is only 2-fold about them, so a partner can attach
+    # when h == a (sitesym 4) but the prism is only 2-fold about them, so a partner can attach
     # two ways: in the plane, or tipped out of it.
     tri = PolyhedronParticleSpecies(Prism(3); colors=geometriclabels(Prism(3)))
-    @test gauges(tri) == [3, 4, 4, 4, 3]
+    @test sitesyms(tri) == [3, 4, 4, 4, 3]
     @test Roly.sitestabilizers(tri) == [3, 2, 2, 2, 3]
     @test phases(tri) == [1, 2, 2, 2, 1]
 
-    # Make the prism taller, so that faces become rectangles: gauge and stabilizer agree at 2,
+    # Make the prism taller, so that faces become rectangles: sitesym and stabilizer agree at 2,
     # leaving a single phase.
     tall = Prism(3, 1.0; h=2.0)
     tallps = PolyhedronParticleSpecies(tall; colors=geometriclabels(tall))
-    @test gauges(tallps) == [3, 2, 2, 2, 3]
+    @test sitesyms(tallps) == [3, 2, 2, 2, 3]
     @test phases(tallps) == fill(1, 5)
 
-    # A stabilizer always divides the gauge, and always divides the symmetry number.
+    # A stabilizer always divides the sitesym, and always divides the symmetry number.
     for ps in (cube, capped, tri, tallps, UnitDodecahedron, UnitAntiprism(4))
         stabs = Roly.sitestabilizers(ps)
-        @test all(gauges(ps) .% stabs .== 0)
+        @test all(sitesyms(ps) .% stabs .== 0)
         @test all(symmetrynumber(ps) .% stabs .== 0)
     end
 

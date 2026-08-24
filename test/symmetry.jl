@@ -4,7 +4,7 @@ using LinearAlgebra, StaticArrays, Rotations
 
 """
 Count the proper rotations about a polyform's centroid that map its oriented binding sites onto
-themselves, matching position, color, and frame up to each receiving site's own gauge.
+themselves, matching position, color, and frame up to each receiving site's own sitesym.
 
 Two subtleties:
 
@@ -20,7 +20,7 @@ function site_rotations(poly)
     c0 = sum(b.pose.x for b in bs) / length(bs)
     xs = [b.pose.x - c0 for b in bs]
     ps = [b.pose.psi for b in bs]
-    gs = [b.gauge for b in bs]
+    gs = [b.sitesym for b in bs]
     cs = [color(b) for b in bs]
     n = length(bs)
     atol = 1e-7 * max(1.0, maximum(norm, xs))

@@ -178,7 +178,7 @@ intrinsically chosen corner, fixing the twist reference of that face's binding s
 
 Convention: a site's local z axis points to the midpoint of its face's first edge.
 Faces that are related by a rotation of the body must pick compatible orderings.
-For example, a rectangle has gauge 2 and degree 4, so corners fall into two classes a 90deg turn apart.
+For example, a rectangle has degree 4 but only 2-fold symmetry, so corners fall into two classes a 90deg turn apart.
 Picking as a reference edge both long edges on some faces and a short edges on others hides the symmetry that relates them.
 
 The choice of twist reference is made from the geometry of the face: rotate to the lexicographically
@@ -218,7 +218,7 @@ label-preserving rotation of the body have the compatible ordering of corners.
 For example, consider a triangular prism with square sides. All square sides need to be
 oriented in such a way that rotations around the major axis map them to each other.
 Otherwise, spurrous 90deg rotations might appear. The issue comes from a mismatch of the
-faces' gauge (== 4) and stabilizer (== 2). `_propagate_faces` fixes this by propagating the
+faces' sitesym (== 4) and stabilizer (== 2). `_propagate_faces` fixes this by propagating the
 orientation of a reference face across its symmetry orbit.
 """
 function _propagate_faces(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}, labels) where {F}
@@ -501,20 +501,20 @@ function geometriclabels(p::Polyhedron)
 end
 
 """
-    facegauge(p::Polyhedron, i)
-    facegauge(p::Polyhedron)
+    facesym(p::Polyhedron, i)
+    facesym(p::Polyhedron)
 
 Return the order of face `i`'s own rotational symmetry about its outward normal.
 
-This is the `gauge` of a binding site placed on that face: a face invariant under turns of
-`2π/gauge` has that many equally good twist references, so nothing about the particle in
+This is the `sitesym` of a binding site placed on that face: a face invariant under turns of
+`2π/sitesym` has that many equally good twist references, so nothing about the particle in
 isolation may depend on which was picked. It divides the face degree and equals it only for a
-regular face; a rectangular face has degree 4 but gauge 2.
+regular face; a rectangular face has degree 4 but only 2-fold symmetry.
 
 It is a property of the face alone, not of the body it belongs to. A triangular prism is only
-2-fold about a square side face, but the face is still a square, so its gauge is 4.
+2-fold about a square side face, but the face is still a square, so `facesym` is 4 there.
 """
-function facegauge(p::Polyhedron{F}, i::Integer) where {F}
+function facesym(p::Polyhedron{F}, i::Integer) where {F}
     f = facevertices(p, i)
     k = length(f)
     c = facecentroid(p, i)
@@ -528,7 +528,7 @@ function facegauge(p::Polyhedron{F}, i::Integer) where {F}
         all(j -> isapprox(R * rel[j], rel[mod1(j + s, k)]; atol), 1:k)
     end
 end
-facegauge(p::Polyhedron) = [facegauge(p, i) for i in 1:nfaces(p)]
+facesym(p::Polyhedron) = [facesym(p, i) for i in 1:nfaces(p)]
 
 function Base.show(io::Core.IO, p::Polyhedron)
     return print(io, "Polyhedron[v=$(ncorners(p)), e=$(nedges(p)), f=$(nfaces(p))]")
@@ -622,11 +622,11 @@ function cycleencoding(nsites::Integer; labels=1:nsites)
 end
 
 """
-    _twistfreedoms(gauges, stabs, locking)
+    _twistfreedoms(sitesyms, stabs, locking)
 
 Per-site [`twistfreedom`](@ref) from the two symmetry counts and the locking flags.
 """
-_twistfreedoms(gauges, stabs, locking) = [l ? s : g for (g, s, l) in zip(gauges, stabs, locking)]
+_twistfreedoms(sitesyms, stabs, locking) = [l ? s : g for (g, s, l) in zip(sitesyms, stabs, locking)]
 
 """
     _perface(x, n, what)
@@ -653,9 +653,9 @@ The order is forced. A face's first corner is its site's twist reference, and se
 three steps:
 
 1. The body arrives with each face already started at an intrinsically chosen corner
-   which pins the references up to each face's `gauge`.
+   which pins the references up to each face's `sitesym`.
 2. That is enough to derive the labeling, since [`siteorbits`](@ref) compares frames only up
-   to `gauge`. Knowing the labeling gives the symmetry group.
+   to `sitesym`. Knowing the labeling gives the symmetry group.
 3. [`_propagate_faces`](@ref) then re-winds along that group, pinning the references up to
    `stab`.
 
@@ -674,8 +674,8 @@ function _facesites(
     alignment_tol::Real,
 ) where {F}
     n = nfaces(p)
-    gauges = facegauge(p)
-    labels = siteorbits(poseof(faces(p)), gauges, collect(zip(colors, twists)))
+    sitesyms = facesym(p)
+    labels = siteorbits(poseof(faces(p)), sitesyms, collect(zip(colors, twists)))
 
     fs = _propagate_faces(corners(p), faces(p), labels)
     # A twist is an angle about the site's own normal. Whole dart steps are taken by rotating
@@ -686,13 +686,13 @@ function _facesites(
     steps = [round(Int, t * length(f) / (2F(π))) for (f, t) in zip(fs, twists)]
     fs = [circshift(f, -mod(m, length(f))) for (f, m) in zip(fs, steps)]
     poses = [pose * RotX(F(t) - 2F(π) * m / length(f)) for (pose, t, m, f) in zip(poseof(fs), twists, steps, fs)]
-    stabs = sitestabilizers(poses, gauges, labels)
+    stabs = sitestabilizers(poses, sitesyms, labels)
 
-    cyclic = something(usecycle, _cycle_suffices(_twistfreedoms(gauges, stabs, locking), labels))
+    cyclic = something(usecycle, _cycle_suffices(_twistfreedoms(sitesyms, stabs, locking), labels))
     g, ranges = cyclic ? cycleencoding(n; labels) : dartencoding(fs; labels)
 
     sites = [
-        BindingSite(poses[i], colors[i], ranges[i], touching_tol, alignment_tol, gauges[i], stabs[i], locking[i]) for
+        BindingSite(poses[i], colors[i], ranges[i], touching_tol, alignment_tol, sitesyms[i], stabs[i], locking[i]) for
         i in 1:n
     ]
     return g, sites
@@ -836,12 +836,12 @@ function Antiprism(n::Integer, a::Real=1.0)
 end
 
 """
-    _siteturns(psi, gauge)
+    _siteturns(psi, sitesym)
 
-The orientations of a site that are equivalent by symmetry of the face: turns by `2π/gauge` 
+The orientations of a site that are equivalent by symmetry of the face: turns by `2π/sitesym` 
 about the sites own outward normal, which `normal_pose` puts on the site's local x axis.
 """
-_siteturns(psi::Rotation{3,F}, gauge::Integer) where {F} = (psi * RotX(F(2π) * m / gauge) for m in 0:(gauge - 1))
+_siteturns(psi::Rotation{3,F}, sitesym::Integer) where {F} = (psi * RotX(F(2π) * m / sitesym) for m in 0:(sitesym - 1))
 _siteturns(psi::Rotation{2}, ::Integer) = (psi,)
 
 """
@@ -852,7 +852,7 @@ onto a binding site with the same symmetry label, matching orientation as well a
 
 Frames need only agree up to the receiving site's own stabilizer.
 
-The turn count comes from each site's `gauge`, never from its graph vertex count. Those
+The turn count comes from each site's `sitesym`, never from its graph vertex count. Those
 coincide for the dart encoding, where a face gets one vertex per dart *because* it is that
 symmetric, but taking the vertex count would let an encoding certify itself: one vertex per
 face declares a pentagonal base 1-fold, exact frame matching then returns 1, the graph also
@@ -860,18 +860,18 @@ says 1, and a combination that should be rejected passes.
 """
 site_symmetry(ps::ParticleSpecies) = length(_site_symmetries(_sitedata(ps)...))
 
-# Poses, gauges and the key each site is matched by. `site_symmetry` keys on the graph's
+# Poses, site symmetries and the key each site is matched by. `site_symmetry` keys on the graph's
 # labels, since it asks what the graph claims; `siteorbits` keys on colors, since it asks what
 # the arrangement is.
 function _sitedata(ps::ParticleSpecies)
     n = nsites(ps)
     sites = [bindingsites(ps, i) for i in 1:n]
     labs = labels(graphrep(ps))
-    return ([s.pose for s in sites], [s.gauge for s in sites], [labs[first(s.vertices)] for s in sites])
+    return ([s.pose for s in sites], [s.sitesym for s in sites], [labs[first(s.vertices)] for s in sites])
 end
 
 """
-    _site_symmetries(poses, gauges, keys)
+    _site_symmetries(poses, sitesyms, keys)
 
 Return the site permutations induced by the rotations about the particle origin that carry
 every site onto one with the same `keys` entry, matching position and orientation.
@@ -881,7 +881,7 @@ every site onto one with the same `keys` entry, matching position and orientatio
     determined by where it sends site 1, and makes the site map injective for free. Neither
     holds for an assembled [`Polyform`](@ref).
 """
-function _site_symmetries(poses, gauges, keys)
+function _site_symmetries(poses, sitesyms, keys)
     n = length(poses)
     tol = sqrt(eps(eltype(typeof(first(poses)))))
     atol = tol * maximum(norm(p.x) for p in poses)
@@ -892,7 +892,7 @@ function _site_symmetries(poses, gauges, keys)
             j = findfirst(1:n) do j
                 keys[j] == keys[i] &&
                     isapprox(Q * poses[i].x, poses[j].x; atol) &&
-                    any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _siteturns(poses[j].psi, gauges[j]))
+                    any(psi -> isapprox(Q * poses[i].psi, psi; atol=tol), _siteturns(poses[j].psi, sitesyms[j]))
             end
             isnothing(j) && return nothing
             perm[i] = j
@@ -903,7 +903,7 @@ function _site_symmetries(poses, gauges, keys)
     perms = Vector{Int}[]
     for a in 1:n
         keys[a] == keys[1] || continue
-        for psi in _siteturns(poses[a].psi, gauges[a])
+        for psi in _siteturns(poses[a].psi, sitesyms[a])
             perm = permutation(psi * inv(poses[1].psi))
             isnothing(perm) || push!(perms, perm)
         end
@@ -912,15 +912,15 @@ function _site_symmetries(poses, gauges, keys)
 end
 
 """
-    siteorbits(poses, gauges, colors)
+    siteorbits(poses, sitesyms, colors)
 
 Group the sites into the orbits of the rotations that preserve the *colored* arrangement, and
 return one orbit index per site.
 """
-function siteorbits(poses, gauges, colors)
+function siteorbits(poses, sitesyms, colors)
     n = length(poses)
     orbit = collect(1:n)
-    for perm in _site_symmetries(poses, gauges, colors)
+    for perm in _site_symmetries(poses, sitesyms, colors)
         for i in 1:n
             lo, hi = minmax(orbit[i], orbit[perm[i]])
             hi == lo && continue
@@ -934,14 +934,14 @@ end
 
 """
     sitestabilizers(ps::ParticleSpecies)
-    sitestabilizers(poses, gauges, keys)
+    sitestabilizers(poses, sitesyms, keys)
 
 Return, per site, how many of the particle's own symmetries leave that site where it is.
 """
 sitestabilizers(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
 
-function sitestabilizers(poses, gauges, keys)
-    perms = _site_symmetries(poses, gauges, keys)
+function sitestabilizers(poses, sitesyms, keys)
+    perms = _site_symmetries(poses, sitesyms, keys)
     return [count(perm -> perm[i] == i, perms) for i in eachindex(poses)]
 end
 
@@ -973,9 +973,9 @@ end
 function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors)
     length(colors) == length(sites) || throw(ArgumentError("incorrect number of colors"))
     poses = [s.pose for s in sites]
-    gauges = [s.gauge for s in sites]
-    orbits = siteorbits(poses, gauges, collect(colors))
-    stabs = sitestabilizers(poses, gauges, orbits)
+    sitesyms = [s.sitesym for s in sites]
+    orbits = siteorbits(poses, sitesyms, collect(colors))
+    stabs = sitestabilizers(poses, sitesyms, orbits)
 
     labs = labels(g)
     for i in eachindex(sites)
