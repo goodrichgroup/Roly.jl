@@ -183,10 +183,6 @@ Picking as a reference edge both long edges on some faces and a short edges on o
 
 The choice of twist reference is made from the geometry of the face: rotate to the lexicographically
 least cyclic word of `(edge length, interior angle)`, which ensures compatible references throughout.
-
-This is the half of the job that can be done face by face, before any labeling exists, and it is
-what makes the encoding independent of the order the caller happened to list a face's corners in.
-[`_propagate_faces`](@ref) does the other half, which needs the symmetry group.
 """
 function _canonical_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     atol = sqrt(eps(F)) * maximum(norm, corners)
@@ -386,9 +382,7 @@ facecentroids(p::Polyhedron) = [facecentroid(p, i) for i in 1:nfaces(p)]
 Return the outward unit normal of the `i`th face of `p`.
 """
 function facenormal(p::Polyhedron{F}, i::Integer) where {F}
-    # Summed over the whole face, not taken from the first two edges: `_derive_faces` admits a
-    # corner sitting mid-edge, so the first two edges can be collinear and their cross product
-    # zero. Summing is also steadier on a face whose corners are nearly collinear.
+    # Summed over the whole face to handle degenerate edges
     f = p.faces[i]
     c = facecentroid(p, i)
     nrm = zero(SVector{3,F})
@@ -474,7 +468,6 @@ function _rotationgroup(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) wh
     return group
 end
 
-# See `facenormal` for why this sums over the whole face rather than taking one cross product.
 function _facenormal(cs::Vector{SVector{3,F}}, f::Vector{Int}) where {F}
     c = sum(cs[v] for v in f) / length(f)
     nrm = zero(SVector{3,F})
@@ -488,7 +481,7 @@ end
     faceorbits(p::Polyhedron)
 
 Group the faces into the orbits of [`rotationgroup`](@ref), and return one orbit index per
-face. The counterpart of [`siteorbits`](@ref) for a bare body.
+face.
 
 Passing these to [`dartencoding`](@ref) yields the body's true rotation group, whereas
 `labels=fill(1, nfaces(p))` yields the *combinatorial* symmetry of the face lattice, which
@@ -673,8 +666,7 @@ A face's first corner is its site's twist reference, and settling it takes three
 
 `twists` is applied last, once the references are fixed. It is folded into the key
 [`siteorbits`](@ref) groups by, alongside the color, so that giving two faces of one orbit
-different twists splits the orbit instead of going unrecorded; [`check_encoding`](@ref) then
-confirms the graph can express the result.
+different twists splits the orbit.
 """
 function _facesites(
     p::Polyhedron{F},
@@ -875,13 +867,6 @@ matching orientation as well as position.
 The counterpart of [`rotationgroup`](@ref), which returns the same group as rotations. Compare
 [`symmetrynumber`](@ref), which reads the order of this group off the graph encoding instead;
 [`check_encoding`](@ref) is the check that the two agree.
-
-Frames need only agree up to the receiving site's own `sitesym`. That turn count comes from
-each site's `sitesym`, never from its graph vertex count. Those coincide for the dart encoding,
-where a face gets one vertex per dart *because* it is that symmetric, but taking the vertex
-count would let an encoding certify itself: one vertex per face declares a pentagonal base
-1-fold, exact frame matching then returns 1, the graph also says 1, and a combination that
-should be rejected passes.
 """
 function permutationgroup(ps::ParticleSpecies)
     perms = Vector{Int}[]
@@ -897,7 +882,7 @@ map every binding site onto a site with the same symmetry label, matching orient
 position.
 
 The counterpart of [`permutationgroup`](@ref), which returns the same group as site
-permutations, and of [`rotationgroup(::Polyhedron)`](@ref), which asks the same of a bare body.
+permutations.
 """
 function rotationgroup(ps::ParticleSpecies)
     rots = _rotationtype(posetype(ps))[]
@@ -1023,7 +1008,7 @@ end
 """
     siteorbits(poses, sitesyms, colors)
 
-Group the sites into the orbits of the rotations that preserve the *colored* arrangement, and
+Group the sites into the orbits of the rotations that preserve the colored arrangement, and
 return one orbit index per site.
 """
 function siteorbits(poses, sitesyms, colors)
@@ -1047,21 +1032,16 @@ end
 """
     stabilizerorders(ps::ParticleSpecies)
 
-Return, per site, the order of that site's stabilizer: how many of the particle's own
-symmetries leave the site where it is. These are counts, not the subgroups themselves.
-
-Reads the orders `ps` already stores; use the three-argument method to derive them.
+Return the order of each site's stabilizer: how many of the particle's own
+symmetries leave the site where it is.
 """
 stabilizerorders(ps::ParticleSpecies) = [bindingsite(ps, i).stab for i in 1:nsites(ps)]
 
 """
     stabilizerorders(poses, sitesyms, sitelabels)
 
-Return, per site, the order of that site's stabilizer: how many of the particle's own
-symmetries leave the site where it is. These are counts, not the subgroups themselves.
-
-Derives the orders from the site geometry, which is what a species constructor needs before
-it can build its [`BindingSite`](@ref)s.
+Return the order of each site's stabilizer: how many of the particle's own
+symmetries leave the site where it is.
 """
 function stabilizerorders(poses, sitesyms, sitelabels)
     perms = _site_symmetries(poses, sitesyms, sitelabels)
@@ -1073,8 +1053,7 @@ end
 
 Give `sites` the interaction colors `colors`, and update `ps`' labeling and the stabilizers.
 
-Throws and leaves `ps` untouched if the recoloring asks for a symmetry the graph encoding
-cannot express.
+Throws if the recoloring asks for a symmetry the graph encoding cannot express.
 """
 function _recolor!(ps::ParticleSpecies, sites::AbstractVector{<:BindingSite}, colors)
     # store old labeling and restore on error
@@ -1100,8 +1079,6 @@ end
     _recolor!(sites, g::NautyDiGraph, colors)
 
 Give `sites` the interaction colors `colors`, and update `g`'s labeling and the stabilizers.
-
-Applies the recoloring unconditionally; the `ParticleSpecies` method checks it first.
 """
 function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors)
     length(colors) == length(sites) || throw(ArgumentError("incorrect number of colors"))
@@ -1125,12 +1102,6 @@ end
 Throw unless `ps`'s labeling is at least as fine as its coloring, and is exactly its symmetry
 orbits: two sites carry the same label if and only if a rotation of the particle carries one
 onto the other.
-
-"Only if" is the direction that is easy to get wrong, and comparing symmetry *numbers* does not
-catch it. Three sites on a directed cycle labeled `1, 1, 2` admit no automorphism, and if their
-geometry admits no rotation either then [`check_encoding`](@ref)'s count agrees at 1 while sites
-1 and 2 share a label that no rotation justifies. Everything downstream that reads a shared
-label as "these sites are interchangeable" would then be wrong; see [`_first_per_orbit`](@ref).
 """
 function _check_labeling(ps::ParticleSpecies)
     seen = Dict{Int,Int}()
@@ -1158,7 +1129,8 @@ function _check_labeling(ps::ParticleSpecies)
                 else
                     "here it splits sites that a rotation does map onto each other. "
                 end
-            ) * "Derive it with `siteorbits` rather than writing it out.",
+            ) *
+            "Derive it with `siteorbits` rather than writing it out.",
         ),
     )
     return ps
@@ -1170,11 +1142,11 @@ end
 Throw if `ps`'s graph claims a different symmetry from its geometry and colors, or if its
 labeling is not exactly its symmetry orbits. Return `ps`.
 
-Three things have to line up, and each catches what the one before it misses:
+Three things have to agree:
 
- 1. the labeling is at least as fine as the coloring, and is exactly the symmetry orbits;
- 2. the graph's automorphism group and the geometry's rotation group have the same *order*;
- 3. and they have the same *orbits*, since two groups of equal order can act differently.
+ 1. the labeling is at least as fine as the coloring, and is exactly the symmetry orbits
+ 2. the graph's automorphism group and the geometry's rotation group have the same order
+ 3. they also have the same orbits, since two groups of equal order can act differently
 
 Every built-in species runs this in its constructor. Call it in your own if you write graph
 labels by hand instead of deriving them with [`siteorbits`](@ref).

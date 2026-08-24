@@ -21,23 +21,6 @@ up to symmetry transformations of the particle, so the number of the possible tw
 If `locking==false`, the site allows all twists that are compatible with the site symmetry alone, disregarding
 the symmetry of the particle, so the number of twists is equal to `sitesym`.
 The two choices of locking coincide whenever the stabilizer of the site is equal to its individual symmetry group.
-
-`touching_tolerance` and `alignment_tolerance` decide when two sites count as meeting. Both follow
-the same convention throughout Roly:
-
-  - the base tolerance is `sqrt(eps(F))`, far above the rounding a handful of arithmetic
-    operations accumulates and far below any feature a body actually has;
-  - `touching_tolerance` scales it by a length of the particle, so a species built at a different
-    scale behaves the same way, and `alignment_tolerance` divides that length back out to leave a
-    plain angle;
-  - comparisons pass `rtol=0`, since a relative tolerance says nothing about a site sitting near
-    the origin;
-  - a comparison between two sites adds both sites' tolerances, so neither particle's scale
-    dominates.
-
-The one thing to watch is a body whose defining lengths differ by less than the tolerance, such as
-a prism whose height is within `sqrt(eps)` of its edge: it is read as the more symmetric body.
-That is inherent to deciding symmetry numerically.
 """
 struct BindingSite{P<:Pose,F<:Real}
     pose::P
@@ -140,8 +123,7 @@ Note the asymmetry: only the *attached* binding site's stabilizer is quotiented 
 polyform carrying `bbody` can merge structures too, but these are not knowable from one site,
 and need to be caught through canonization.
 """
-@inline _ndistincttwists(bbody::BindingSite, battach::BindingSite) =
-    twistfreedom(bbody, battach) ÷ battach.stab
+@inline _ndistincttwists(bbody::BindingSite, battach::BindingSite) = twistfreedom(bbody, battach) ÷ battach.stab
 
 """
     contact_pairing(vs1::UnitRange, vs2::UnitRange, t=0, ntwists=1)
@@ -162,9 +144,7 @@ the solutions of
 `gcd(k₁, k₂)` solutions for every `m`, and distinct twists give disjoint solution sets, so the
 pairing count never depends on the twist, and the graph records which twist a bond is in.
 """
-@inline function contact_pairing(
-    vs1::UnitRange{<:Integer}, vs2::UnitRange{<:Integer}, t::Integer=0, ntwists::Integer=1
-)
+@inline function contact_pairing(vs1::UnitRange{<:Integer}, vs2::UnitRange{<:Integer}, t::Integer=0, ntwists::Integer=1)
     k1, k2 = length(vs1), length(vs2)
     G = gcd(k1, k2)
     K = k1 * k2 ÷ G

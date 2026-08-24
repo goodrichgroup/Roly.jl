@@ -25,9 +25,7 @@ uses to decide which sites bond.
 `locking` says whether a bond locks orientation, or is free to bond in all geometrically permitted
 relative orientations.
 
-`twists` turns a face's binding site about its own normal, by an angle in radians. Two faces
-of one symmetry orbit may be given different twists, which splits the orbit; the graph encoding
-records the split, so the species' symmetry number drops accordingly.
+`twists` turns a face's binding site about its own normal, by an angle in radians.
 """
 function PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0)
     _polyhedronspecies(p, colors, locking, twists, nothing)
@@ -93,7 +91,14 @@ end
 
 function Base.copy(ps::PolyhedronParticleSpecies)
     return typeof(ps)(
-        copy(ps.g), copy(ps.sites), copy(ps.polyhedron), copy(ps.normals), copy(ps.edgedirections), ps.rmin, ps.rmax, ps.skin
+        copy(ps.g),
+        copy(ps.sites),
+        copy(ps.polyhedron),
+        copy(ps.normals),
+        copy(ps.edgedirections),
+        ps.rmin,
+        ps.rmax,
+        ps.skin,
     )
 end
 

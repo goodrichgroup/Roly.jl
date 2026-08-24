@@ -49,12 +49,10 @@ function PatchyParticleSpecies(
     r = F(r)
     n = length(patch_positions)
 
-    length(vertices) == n ||
-        throw(ArgumentError("expected $n vertex ranges, one per patch, got $(length(vertices))"))
+    length(vertices) == n || throw(ArgumentError("expected $n vertex ranges, one per patch, got $(length(vertices))"))
     owned = collect(Iterators.flatten(vertices))
-    (allunique(owned) && sort!(owned) == 1:nv(g)) || throw(
-        ArgumentError("the patches' vertex ranges must be disjoint and cover all $(nv(g)) vertices of the graph"),
-    )
+    (allunique(owned) && sort!(owned) == 1:nv(g)) ||
+        throw(ArgumentError("the patches' vertex ranges must be disjoint and cover all $(nv(g)) vertices of the graph"))
 
     tol = sqrt(eps(F)) * r
     poses = [normal_pose(patch_positions[i], patch_twists[i]) for i in 1:n]
@@ -71,9 +69,7 @@ function PatchyParticleSpecies(
     end
     setlabels!(g, vertexlabels)
 
-    sites = [
-        BindingSite(poses[i], colors[i], vertices[i], tol, tol / r, syms[i], stabs[i], locks[i]) for i in 1:n
-    ]
+    sites = [BindingSite(poses[i], colors[i], vertices[i], tol, tol / r, syms[i], stabs[i], locks[i]) for i in 1:n]
     return check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
 end
 

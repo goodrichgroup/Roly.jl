@@ -6,6 +6,7 @@ on a lattice.
 
 Everything here is internal to the editor except its entry point [`ruleeditor`](@ref), which
 `Roly` re-exports, so `Roly.ruleeditor(species)` is the way to reach it.
+This submodule was written by Claude Opus 5.
 """
 module RuleEditor
 

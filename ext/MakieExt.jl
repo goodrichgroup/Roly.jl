@@ -40,7 +40,7 @@ end
 
 Draw the particle species `spcs` at `pose` onto `ax`.
 
-`site_color` is an optional callback `(speciesindex, site_index) -> color` that controls
+`site_color` is an optional callback `(speciesindex, siteindex) -> color` that controls
 per-site coloring. When omitted, the species' palette is used, with sites that no bond can
 use greyed out.
 """

@@ -154,13 +154,11 @@ Return a lazy iterator over the external edges of `graphrep(p)`, corresponding t
 
 Return `true` if the graph vertices `u` and `v` belong to the same particle.
 
-`canonidxs` says which numbering `u` and `v` are in, the same way it does for
-[`bondindex`](@ref) and [`_isbound_vertex`](@ref).
-
-Each particle owns a contiguous block of original vertices starting at its leading vertex, so
-`u` and `v` are split apart exactly when some leading vertex falls between them.
+`canonidxs` says which numbering `u` and `v` are in.
 """
 @inline function _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs::Bool=true)
+    # Each particle owns a contiguous block of original vertices starting at its leading vertex, so
+    # `u` and `v` are split apart exactly when some leading vertex falls between them.
     canonidxs && ((u, v) = (toorig(p, u), toorig(p, v)))
     lo, hi = minmax(u, v)
     return !any(pt -> lo < leadingvertex(pt) <= hi, p.particles)
@@ -201,8 +199,7 @@ vertices `src` and `dst`, or `nothing` if they don't form a valid bond type.
 
 `canonidxs` says which numbering `src` and `dst` are in: `true`, the default, for the canonical
 one that `graphrep(poly)` and its `edges` are in, and `false` for the stable original one that
-`BindingSite.vertices` and `Particle.leadingvertex` are in. Every function on a `Polyform`
-taking bare vertex indices spells the choice this way.
+`BindingSite.vertices` and `Particle.leadingvertex` are in.
 """
 function bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs::Bool=true)
     rules = bindingrules(poly)
@@ -213,7 +210,7 @@ function bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs::Bool=t
     return findfirst(==(minmax(c1, c2)), bonded_colors(rules))
 end
 
-# Map a graph vertex back to (particle_index, site_index). `canonidxs` as in `bondindex`.
+# Map a graph vertex back to (particle_index, site_index).
 function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool=true)
     rules = bindingrules(p)
     orig_v = canonidxs ? toorig(p, v) : v
@@ -232,8 +229,8 @@ end
 Return the `i`-th binding site of `p`, counting through `p`'s particles in the order they are
 stored and through each particle's own sites, exactly as on a [`ParticleSpecies`](@ref).
 
-This ordering depends on how `p` was assembled. Use [`canonbindingsite`](@ref) for one that
-two isomorphic polyforms agree on.
+The ordering depends on how `p` was assembled. Use [`canonbindingsite`](@ref) for iterating through
+binding sites in canonical order.
 """
 function bindingsite(p::Polyform, i::Integer)
     rules = bindingrules(p)
@@ -250,7 +247,11 @@ end
 """
     bindingsites(p::Polyform)
 
-Return a lazy iterator over all binding sites of `p`, in the order [`bindingsite`](@ref) counts.
+Return a lazy iterator over all binding sites of `p`, counting through `p`'s particles in the order they are
+stored and through each particle's own sites, exactly as on a [`ParticleSpecies`](@ref).
+
+The ordering depends on how `p` was assembled. Use [`canonbindingsite`](@ref) for iterating through
+binding sites in canonical order.
 """
 bindingsites(p::Polyform) = (bindingsite(p, i) for i in 1:nsites(p))
 
@@ -332,12 +333,7 @@ with the particle permutation `perm` it induces. Return how many there were.
 A particle's frame need only match up to its species' own
 [`rotationgroup`](@ref rotationgroup(::ParticleSpecies)), so the candidates are `Q = Rₐ S R₁⁻¹`
 for each particle `a` of particle 1's species and each `S` in that group. Every element of the
-group appears exactly once, by orbit-stabilizer.
-
-Particles have *distinct positions*, since they may not overlap. That is what makes a rotation
-determined by where it sends particle 1 and makes the induced map injective for free, and it is
-why this reads particle poses rather than the site poses [`_eachsitesymmetry`](@ref) uses: the
-two sites of a bond sit at the same point.
+group appears exactly once.
 """
 function _eachpolyformsymmetry(f, p::Polyform)
     F = numtype(p)
@@ -622,8 +618,8 @@ end
 """
     _deletable_species(poly; target, visited, queue)
 
-Return `(top, runnerup, leading)`: the two largest species indices among the particles `lower!`
-could delete from `poly`, and the leading vertex of the particle achieving `top`.
+Return `(top, runnerup, top_lv)`: the two largest species indices among the particles `lower!`
+could delete from `poly`, and the top leading vertex of the particle achieving `top`.
 
 `lower!` deletes from the highest label class holding a removable particle. Canonical position
 runs with vertex label (nauty orders classes by color, `vertexlabels2labptn` by label), and
@@ -665,12 +661,11 @@ symmetry orbit is kept, since the others give the same child. And a candidate is
 index above the one being attached: the child's parent would then be a different polyform and
 reverse search would reject the pair anyway.
 
-The second filter is conservative about the *anchor* particle, the one carrying `site`. The
+The second filter is conservative about the anchor particle, the one carrying `site`. The
 anchor is excluded from the removable set, because a new particle bonded to it alone leaves it
 a cut vertex of the child. When the attachment also closes a ring the anchor does stay
 removable, and excluding it then only lets a few extra candidates through, which reverse search
-rejects. Deciding it exactly would mean building the child first, which is what this filter is
-there to avoid.
+rejects.
 """
 function collect_attachments!(attachments, poly::Polyform)
     rules = bindingrules(poly)

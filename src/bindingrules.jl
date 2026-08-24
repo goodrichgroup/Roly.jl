@@ -1,7 +1,7 @@
 """
     BindingSiteLoc
 
-Indicates the location of a binding site in the format `(speciesindex, site_index)`.
+Indicates the location of a binding site in the format `(speciesindex, siteindex)`.
 """
 const BindingSiteLoc = NTuple{2,Int}
 
@@ -262,13 +262,9 @@ Return one site per symmetry orbit of the particle species. Of the entries of `s
 sit on the same species and carry the same graph label, only the first survives.
 
 This rests on a shared label meaning the sites really are interchangeable, which is what
-[`_check_labeling`](@ref) enforces: a labeling has to be exactly the symmetry orbits, not merely
-fine enough to give the right symmetry number. Without that, dropping a site no rotation of the
-particle reaches would lose every structure attached through it.
+[`_check_labeling`](@ref) enforces: a labeling has to be exactly the symmetry orbits.
 """
-function _first_per_orbit(
-    particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{BindingSiteLoc}
-)
+function _first_per_orbit(particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{BindingSiteLoc})
     reps = BindingSiteLoc[]
     seen = Set{Tuple{Int,Int}}()
     for (spc, k) in sitelocs
@@ -286,7 +282,7 @@ end
 The sites a particle may be attached through to a site of `color`, one per symmetry orbit.
 
 [`compatible_sitelocs`](@ref) contains every site the interaction matrix permits, this only lists the
-ones that lead to distinguishable structures. See [`_first_per_orbit`](@ref).
+ones that lead to distinguishable structures.
 """
 @inline distinct_attachments(rules::BindingRules, color::Integer) = rules._distinct_attachments[color]
 
