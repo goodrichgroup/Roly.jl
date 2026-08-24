@@ -31,7 +31,7 @@ export bonds, bondindex, interior_edges, exterior_edges, subpolyform
 public canonbindingsite, canonbindingsites
 
 # Environments
-export Environment, ParticleEnvironment, BondEnvironment
+export PolyformEnvironment, ParticleEnvironment, BondEnvironment
 export particleenvironments, bondenvironments, crop, rootenvironment
 export tilings, isunitcell, tilelatticevectors, cantile, canchain, isunbounded, chainstatebound, growthwitness
 

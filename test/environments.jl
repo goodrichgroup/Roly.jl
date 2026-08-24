@@ -103,7 +103,7 @@
     e1 = Set(particleenvironments(dimerrules; depth=1))
     e2 = particleenvironments(dimerrules; depth=2)
     @test length(e2) == 4
-    @test Set(Environment(e.graph, e.rootvertices, 1, e.rules) for e in e2) == e1
+    @test Set(PolyformEnvironment(e.graph, e.rootvertices, 1, e.rules) for e in e2) == e1
 
     # crop reproduces direct extraction at the smaller radius, on every root of every cluster
     for s in polygen(chainrules; maxsize=5), p in 1:nparticles(s)

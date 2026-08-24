@@ -1,15 +1,16 @@
 """
-    Environment{N}
+    PolyformEnvironment{N}
 
-The local environment of `N` root particles: all particles within graph distance `depth` of a
-root, as an isomorphism class. See [`ParticleEnvironment`](@ref) and [`BondEnvironment`](@ref).
+The local environment of `N` root particles inside a [`Polyform`](@ref): all particles within
+graph distance `depth` of a root, as an isomorphism class. See [`ParticleEnvironment`](@ref) and
+[`BondEnvironment`](@ref).
 
   - `graph`: canonized graph representation with the root particles distinguished, in order
   - `rootvertices`: one canonical site vertex per root particle
   - `depth`: crop radius around each root
   - `rules`: the `BindingRules` the labels refer to
 """
-struct Environment{N,G<:AbstractNautyGraph,S<:BindingRules}
+struct PolyformEnvironment{N,G<:AbstractNautyGraph,S<:BindingRules}
     graph::G
     rootvertices::NTuple{N,Int}
     depth::Int
@@ -19,27 +20,29 @@ end
 """
     ParticleEnvironment
 
-[`Environment`](@ref) of a single particle: the ball of all particles within graph distance
+[`PolyformEnvironment`](@ref) of a single particle: the ball of all particles within graph distance
 `depth` of the root.
 """
-const ParticleEnvironment{G,S} = Environment{1,G,S}
+const ParticleEnvironment{G,S} = PolyformEnvironment{1,G,S}
 
 """
     BondEnvironment
 
-[`Environment`](@ref) of a bond: all particles within graph distance `depth` of either endpoint,
+[`PolyformEnvironment`](@ref) of a bond: all particles within graph distance `depth` of either endpoint,
 with the endpoints as roots, in order.
 """
-const BondEnvironment{G,S} = Environment{2,G,S}
+const BondEnvironment{G,S} = PolyformEnvironment{2,G,S}
 
-Base.hash(e::Environment, h::UInt) = hash(e.graph, hash(e.depth, h))
-function Base.:(==)(a::Environment{N}, b::Environment{N}) where {N}
+Base.hash(e::PolyformEnvironment, h::UInt) = hash(e.graph, hash(e.depth, h))
+function Base.:(==)(a::PolyformEnvironment{N}, b::PolyformEnvironment{N}) where {N}
     return a.depth == b.depth && a.rules === b.rules && a.graph == b.graph
 end
-Base.:(==)(::Environment, ::Environment) = false
+Base.:(==)(::PolyformEnvironment, ::PolyformEnvironment) = false
 
-_envname(N) = N == 1 ? "ParticleEnvironment" : N == 2 ? "BondEnvironment" : "Environment{$N}"
-Base.show(io::Core.IO, e::Environment{N}) where {N} = print(io, _envname(N), "[k=$(e.depth), nv=$(nv(e.graph))]")
+_envname(N) = N == 1 ? "ParticleEnvironment" : N == 2 ? "BondEnvironment" : "PolyformEnvironment{$N}"
+function Base.show(io::Core.IO, e::PolyformEnvironment{N}) where {N}
+    return print(io, _envname(N), "[k=$(e.depth), nv=$(nv(e.graph))]")
+end
 
 # Root marks are added in multiples of this, so marked labels never collide with site labels.
 function _markoffset(rules::BindingRules)
@@ -141,7 +144,7 @@ function ParticleEnvironment(poly::Polyform, root::Integer; depth::Integer, bufs
     dist = _particledists!(bufs, poly, (root,); maxdepth=depth)
     rootvertex = first(graphvertices(particles(poly, root), bindingrules(poly)))
     hm, rootvertices = _envgraph(poly, dist, depth, (root,), (rootvertex,))
-    return Environment(hm, rootvertices, Int(depth), bindingrules(poly))
+    return PolyformEnvironment(hm, rootvertices, Int(depth), bindingrules(poly))
 end
 
 """
@@ -160,7 +163,7 @@ function BondEnvironment(poly::Polyform, bond::Pair; depth::Integer, bufs=Enviro
     sitevertex(p, s) = first(bindingsite(particles(poly, p), rules, s).vertices)
     hm, rootvertices = _envgraph(poly, dist, depth, (p1, p2),
         (sitevertex(p1, s1), sitevertex(p2, s2)))
-    return Environment(hm, rootvertices, Int(depth), rules)
+    return PolyformEnvironment(hm, rootvertices, Int(depth), rules)
 end
 
 """
@@ -190,7 +193,7 @@ function Base.reverse(env::BondEnvironment)
         end
     end
     old2new = invperm(collect(Int, canonize!(h)))
-    return Environment(h, (old2new[env.rootvertices[2]], old2new[env.rootvertices[1]]), env.depth,
+    return PolyformEnvironment(h, (old2new[env.rootvertices[2]], old2new[env.rootvertices[1]]), env.depth,
         env.rules)
 end
 
@@ -318,7 +321,7 @@ function particleenvironments(f, rules::BindingRules; depth::Integer, maxsize=In
     rsys = RSSystem((w, v) -> _lsenv!(w, v, lsbufs), _adjenv!, v₀;
         compare=(a, b) -> a.key == b.key, aux)
 
-    frs = (s, _) -> f(Environment(copy(s.key), (s.rootvertex,), Int(depth), rules), nparticles(s.poly))
+    frs = (s, _) -> f(PolyformEnvironment(copy(s.key), (s.rootvertex,), Int(depth), rules), nparticles(s.poly))
     return reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs + 1, kwargs...)
 end
 
@@ -425,7 +428,7 @@ function bondenvironments(env::ParticleEnvironment)
             setlabel!(h, k, l)
         end
         old2new = invperm(collect(Int, canonize!(h)))
-        push!(out, Environment(h, (old2new[pos[u]], old2new[pos[w]]), env.depth - 1, env.rules))
+        push!(out, PolyformEnvironment(h, (old2new[pos[u]], old2new[pos[w]]), env.depth - 1, env.rules))
     end
     return out
 end
@@ -469,7 +472,7 @@ function crop(env::ParticleEnvironment, depth::Integer)
     # the root's mark survives the crop unchanged, so no relabeling is needed
     h = g[verts]
     old2new = invperm(collect(Int, canonize!(h)))
-    return Environment(h, (old2new[pos[env.rootvertices[1]]],), Int(depth), env.rules)
+    return PolyformEnvironment(h, (old2new[pos[env.rootvertices[1]]],), Int(depth), env.rules)
 end
 
 """
@@ -493,19 +496,19 @@ function crop(env::BondEnvironment, depth::Integer)
     # both roots keep their marks, so the labels carry over unchanged
     h = g[verts]
     old2new = invperm(collect(Int, canonize!(h)))
-    return Environment(h, (old2new[pos[env.rootvertices[1]]], old2new[pos[env.rootvertices[2]]]),
+    return PolyformEnvironment(h, (old2new[pos[env.rootvertices[1]]], old2new[pos[env.rootvertices[2]]]),
         Int(depth), env.rules)
 end
 
 """
-    rootenvironment(env::Environment, i, depth)
+    rootenvironment(env::PolyformEnvironment, i, depth)
 
 The [`ParticleEnvironment`](@ref) of root `i` of `env` at radius `depth`, extracted from `env`.
 
 Valid whenever the radius-`depth` ball of that root lies inside `env` (for a bond environment,
 any `depth <= env.depth`).
 """
-function rootenvironment(env::Environment{N}, i::Integer, depth::Integer) where {N}
+function rootenvironment(env::PolyformEnvironment{N}, i::Integer, depth::Integer) where {N}
     1 <= i <= N || throw(ArgumentError("`env` has $N roots"))
     0 <= depth <= env.depth || throw(ArgumentError("`depth` must lie in [0, $(env.depth)]"))
     g = env.graph
@@ -526,7 +529,7 @@ function rootenvironment(env::Environment{N}, i::Integer, depth::Integer) where 
         setlabel!(h, k, l + (comp[v] == rootcomp ? offset : 0))
     end
     old2new = invperm(collect(Int, canonize!(h)))
-    return Environment(h, (old2new[pos[env.rootvertices[i]]],), Int(depth), env.rules)
+    return PolyformEnvironment(h, (old2new[pos[env.rootvertices[i]]],), Int(depth), env.rules)
 end
 
 # Particle-level adjacency of an environment graph (bond edges are bidirectional).
