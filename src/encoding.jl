@@ -908,6 +908,9 @@ Call `f(Q, perm)` on every rotation `Q` about the particle origin that carries e
 one with the same `sitelabels` entry, matching position and orientation, together with the site
 permutation `perm` it induces. Return how many there were.
 
+The particle is nothing but these three arrays: entry `i` of each describes site `i`, and the
+origin is the one the poses are given in.
+
 `sitelabels` is whatever a symmetry has to preserve: graph labels when asking what the graph
 claims, colors when asking what the arrangement is. Pass `f = Returns(nothing)` to only count.
 
