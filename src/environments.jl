@@ -92,6 +92,10 @@ end
 
 # Graph distances from the `roots` via `bfs!`: vertices of the same particle are free, bonds
 # cost one hop. Capped at `maxdepth`. Fills and returns `bufs.dist`.
+#
+# `vertex2particle` rather than polyform.jl's `_same_particle`: the search needs the neighbor's
+# particle, not just whether it is this one, and both that and `_same_particle` scan the particle
+# list per edge where the table is a lookup.
 function _particledists!(bufs::EnvironmentBuffers, poly::Polyform, roots; maxdepth)
     rules = bindingrules(poly)
     g = graphrep(poly)
@@ -139,6 +143,9 @@ function _envgraph(poly::Polyform, dist::AbstractVector{<:Integer}, depth::Integ
     groups = map(p -> offsets[p]:(offsets[p]+nsites(particles(poly, p), rules)-1), roots)
     hm, orig2canon = _canonmarked(h, groups, _markoffset(rules))
 
+    # Follow each root vertex through the two renumberings the crop imposed. `ov` is an original
+    # vertex of particle `p`, so `ov - leadingvertex` is its offset inside that particle's block,
+    # `offsets[p]` is where the block starts in `h`, and `orig2canon` carries the result into `hm`.
     canonrootvertices = map(roots, rootvertices) do p, ov
         orig2canon[offsets[p]+ov-leadingvertex(particles(poly, p))]
     end
