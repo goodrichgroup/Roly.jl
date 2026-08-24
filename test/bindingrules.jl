@@ -5,7 +5,7 @@ using Roly: nspecies, nbonds, nsites, dimension, species,
 using Roly: PolygonParticleSpecies, PolyhedronParticleSpecies, PatchyDisk, Cube, Prism,
             Tetrahedron, Polyhedron, facenormal, nfaces
 
-using Roly: compatible_sitelocs, attachment_reps, siteloc2color, collect_compatible_pairs,
+using Roly: compatible_sitelocs, distinct_attachments, siteloc2color, collect_compatible_pairs,
             raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
             Cube, Prism, nfaces, color, bindingsites
 
@@ -134,12 +134,12 @@ using StaticArrays: SVector
     # to one representative. With every face distinct there is nothing to collapse.
     alike = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
     @test length(compatible_sitelocs(alike, 1)) == 6
-    @test length(attachment_reps(alike, 1)) == 1
+    @test length(distinct_attachments(alike, 1)) == 1
 
     distinct = BindingRules(reduce(vcat, [[1 i 1 j] for i in 1:6 for j in i:6]),
                             PolyhedronParticleSpecies(Cube()))
     for c in 1:Roly.ncolors(distinct)
-        @test length(attachment_reps(distinct, c)) == length(compatible_sitelocs(distinct, c))
+        @test length(distinct_attachments(distinct, c)) == length(compatible_sitelocs(distinct, c))
     end
 
     # check that representatives are enough, and everything else is just duplicates
@@ -178,7 +178,7 @@ using StaticArrays: SVector
     for (name, rules) in systems
         poly = Polyform(rules, 1)
         for _ in 1:3     # monomer, then grow, so the host is asymmetric in later rounds too
-            @test children(poly, compatible_sitelocs) == children(poly, attachment_reps)
+            @test children(poly, compatible_sitelocs) == children(poly, distinct_attachments)
             nxt = nothing
             for (site, loc, r) in collect_compatible_pairs(poly)
                 trial = copy(poly)

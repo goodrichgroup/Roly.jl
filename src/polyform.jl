@@ -524,7 +524,7 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
             isinert(rules, color(site)) && continue
 
             # only keep one partner site per orbit
-            for siteloc in attachment_reps(rules, color(site))
+            for siteloc in distinct_attachments(rules, color(site))
                 # The new particle is always removable, so `lower!` stops at its label class
                 # unless a higher one survives. If one does, the child's deletion is some other
                 # particle and the parent test would reject it.

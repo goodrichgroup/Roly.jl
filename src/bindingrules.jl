@@ -26,7 +26,7 @@ struct BindingRules{D,PS<:ParticleSpecies}
     _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
     _compatible_sitelocs::Vector{Vector{BindingSiteLoc}}
-    _attachment_reps::Vector{Vector{BindingSiteLoc}}
+    _distinct_attachments::Vector{Vector{BindingSiteLoc}}
     _isinert::BitVector
     _onlattice::Bool
 end
@@ -68,7 +68,7 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
             intmat[c2, c] && append!(compatible_sitelocs_cache[c], color2siteloc[c2])
         end
     end
-    attachment_reps = [_orbit_representatives(particlespecies, ls) for ls in compatible_sitelocs_cache]
+    distinct_attachments = [_first_per_orbit(particlespecies, ls) for ls in compatible_sitelocs_cache]
     isinert_cache = BitVector(!any(intmat[:, c]) for c in 1:ncolors)
 
     return BindingRules{D,PS}(
@@ -83,7 +83,7 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
         bondedsites,
         bondedspecies,
         compatible_sitelocs_cache,
-        attachment_reps,
+        distinct_attachments,
         isinert_cache,
         _onlattice(particlespecies),
     )
@@ -234,12 +234,12 @@ Return the particle species that contains the binding site with color `color`.
 end
 
 """
-    _orbit_representatives(particlespecies, sitelocs)
+    _first_per_orbit(particlespecies, sitelocs)
 
 Return one site per symmetry orbit of the particle species. Any entries of `sitelocs` on the same species carrying
 the same graph label, only the first survives.
 """
-function _orbit_representatives(
+function _first_per_orbit(
     particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{BindingSiteLoc}
 )
     reps = BindingSiteLoc[]
@@ -255,14 +255,14 @@ function _orbit_representatives(
 end
 
 """
-    attachment_reps(rules::BindingRules, color::Integer)
+    distinct_attachments(rules::BindingRules, color::Integer)
 
 The sites a particle may be attached through to a site of `color`, one per symmetry orbit.
 
 [`compatible_sitelocs`](@ref) contains every site the interaction matrix permits, this only lists the
-ones that lead to distinguishable structures. See [`_orbit_representatives`](@ref).
+ones that lead to distinguishable structures. See [`_first_per_orbit`](@ref).
 """
-@inline attachment_reps(rules::BindingRules, color::Integer) = rules._attachment_reps[color]
+@inline distinct_attachments(rules::BindingRules, color::Integer) = rules._distinct_attachments[color]
 
 """
     isinert(rules::BindingRules, siteloc::BindingSiteLoc)
