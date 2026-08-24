@@ -77,7 +77,7 @@
         rules = sidebonded(shp, sticky)
         ps = species(rules, 1)
         # one twist per bond, so it cannot leave the lattice.
-        @test all(i -> Roly._ndistincttwists(Roly.bindingsites(ps, i), Roly.bindingsites(ps, i)) == 1,
+        @test all(i -> Roly._ndistincttwists(Roly.bindingsite(ps, i), Roly.bindingsite(ps, i)) == 1,
                   sticky)
         @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
     end
@@ -87,7 +87,7 @@
     # two solids differ in `sitesym` but not in `stab`.
     for (shp, want) in [(Prism(3), [1, 2, 3, 6, 10, 22]), (Prism(6), [1, 2, 5, 12, 34])]
         rules = sidebonded(shp, sidefaces(shp))
-        b = Roly.bindingsites(species(rules, 1), first(sidefaces(shp)))
+        b = Roly.bindingsite(species(rules, 1), first(sidefaces(shp)))
         @test (b.sitesym, b.stab) == (4, 2)
         @test Roly._ndistincttwists(b, b) == 1
         @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
@@ -98,7 +98,7 @@
         sides = sidefaces(shp)
         colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
         ps = PolyhedronParticleSpecies(shp; colors, locking=[!(i in sides) for i in 1:nfaces(shp)])
-        b = Roly.bindingsites(ps, first(sides))
+        b = Roly.bindingsite(ps, first(sides))
         @test Roly.twistfreedom(b) == b.sitesym == 4
         @test Roly._ndistincttwists(b, b) == 2
         rules = BindingRules([1 first(sides) 1 first(sides)], ps)
@@ -228,8 +228,8 @@
             ps = chainspecies(alike)
             @test symmetrynumber(ps) == want_sym
             # The two bonding sites, found by color so each geometry can index its own faces.
-            s1 = findfirst(i -> color(bindingsites(ps, i)) == 1, 1:nsites(ps))
-            s2 = alike ? s1 : findfirst(i -> color(bindingsites(ps, i)) == 2, 1:nsites(ps))
+            s1 = findfirst(i -> color(bindingsite(ps, i)) == 1, 1:nsites(ps))
+            s2 = alike ? s1 : findfirst(i -> color(bindingsite(ps, i)) == 2, 1:nsites(ps))
 
             for k in 1:3
                 bonds = reduce(vcat, [[s s1 t s2] for s in 1:k for t in 1:k])

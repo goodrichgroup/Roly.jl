@@ -19,7 +19,7 @@ export RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral, Icosahedral, gr
 
 # Particle species
 export ParticleSpecies, SpeciesAndPose
-export nsites, bindingsites, graphrep, symmetrynumber
+export nsites, bindingsite, bindingsites, graphrep, symmetrynumber
 
 # Assembly system
 export BindingRules, interactionmatrix
@@ -28,6 +28,7 @@ export ncolors, nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, i
 # Polyforms
 export Polyform, nparticles, bindingrules, composition
 export bonds, bondindex, interior_edges, exterior_edges
+public canonbindingsite, canonbindingsites
 
 # Enumeration
 export ACCEPT, REJECT, BREAK

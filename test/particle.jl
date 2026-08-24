@@ -18,9 +18,9 @@ using Roly: Particle, graphvertices, leadingvertex, speciesindex, overlap, could
 
     @test nsites(part, rules) == 4
 
-    site1 = bindingsites(part, rules, 1)
+    site1 = bindingsite(part, rules, 1)
     @test first(site1.vertices) == 1
-    site1_shifted = bindingsites(part_shifted, rules, 1)
+    site1_shifted = bindingsite(part_shifted, rules, 1)
     @test first(site1_shifted.vertices) == length(gvs) + 1
 
     @test length(collect(bindingsites(part, rules))) == nsites(part, rules)

@@ -37,7 +37,7 @@ using LinearAlgebra: normalize, dot, det, norm
         @test numtype(ps) == Float64
         @test nv(graphrep(ps)) == n
         for i in 1:n
-            @test norm(bindingsites(ps, i).pose.x) ≈ 1.0 atol = 1e-10
+            @test norm(bindingsite(ps, i).pose.x) ≈ 1.0 atol = 1e-10
         end
     end
 
@@ -49,35 +49,35 @@ using LinearAlgebra: normalize, dot, det, norm
     @test nsites(ps1) == 1
     @test dimension(ps1) == 2
     @test nv(graphrep(ps1)) == 1
-    @test norm(bindingsites(ps1, 1).pose.x) ≈ 1.0 atol = 1e-10
+    @test norm(bindingsite(ps1, 1).pose.x) ≈ 1.0 atol = 1e-10
 
     # n=2: uses a 4-vertex graph to encode orientation
     ps2 = PatchyDisk([0.0, π])
     @test nsites(ps2) == 2
     @test dimension(ps2) == 2
     @test nv(graphrep(ps2)) == 2
-    @test bindingsites(ps2, 1).vertices == 1:1
-    @test bindingsites(ps2, 2).vertices == 2:2
+    @test bindingsite(ps2, 1).vertices == 1:1
+    @test bindingsite(ps2, 2).vertices == 2:2
 
     # Two equivalent patches give a symmetry number of 2.
     @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2
-    @test bindingsites(ps2, 1).pose.x ≈ SVector(1.0, 0.0) atol = 1e-10
-    @test bindingsites(ps2, 2).pose.x ≈ SVector(-1.0, 0.0) atol = 1e-10
+    @test bindingsite(ps2, 1).pose.x ≈ SVector(1.0, 0.0) atol = 1e-10
+    @test bindingsite(ps2, 2).pose.x ≈ SVector(-1.0, 0.0) atol = 1e-10
 
     # custom radius
     r = 2.5
     psr = PatchyDisk([0.0, π / 2, π, 3π / 2], r)
     @test nsites(psr) == 4
     for i in 1:4
-        @test norm(bindingsites(psr, i).pose.x) ≈ r atol = 1e-10
+        @test norm(bindingsite(psr, i).pose.x) ≈ r atol = 1e-10
     end
 
     # colors
     ps_col = PatchyDisk([0.0, π / 2, π, 3π / 2]; colors=[1, 2, 1, 2])
-    @test color(bindingsites(ps_col, 1)) == 1
-    @test color(bindingsites(ps_col, 2)) == 2
-    @test color(bindingsites(ps_col, 3)) == 1
-    @test color(bindingsites(ps_col, 4)) == 2
+    @test color(bindingsite(ps_col, 1)) == 1
+    @test color(bindingsite(ps_col, 2)) == 2
+    @test color(bindingsite(ps_col, 3)) == 1
+    @test color(bindingsite(ps_col, 4)) == 2
 
     # symmetrynumber: all distinct -> 1, all equal -> n
     @test symmetrynumber(PatchyDisk([0.0, 2π / 3, 4π / 3])) == 1
@@ -89,8 +89,8 @@ using LinearAlgebra: normalize, dot, det, norm
     ps_c = copy(ps)
     @test nsites(ps_c) == nsites(ps)
     setcolors!(ps_c, [10, 20, 30])
-    @test color(bindingsites(ps_c, 1)) == 10
-    @test color(bindingsites(ps, 1)) != 10
+    @test color(bindingsite(ps_c, 1)) == 10
+    @test color(bindingsite(ps, 1)) != 10
     @test_throws ArgumentError setcolors!(ps, [1, 2])
 
     io = IOBuffer()
@@ -122,7 +122,7 @@ using LinearAlgebra: normalize, dot, det, norm
 
         # Patches sit on the sphere, along the face centroid directions.
         for i in 1:np
-            b = bindingsites(ps, i)
+            b = bindingsite(ps, i)
             @test isapprox(norm(b.pose.x), 2.0)
             @test isapprox(normalize(b.pose.x), normalize(facecentroid(shp, i)); atol=1e-10)
             # On a sphere the patch normal is radial, and local z is the tangential part
@@ -196,7 +196,7 @@ using LinearAlgebra: normalize, dot, det, norm
     function dimer(twists)
         ps = PatchyParticleSpecies(NautyDiGraph(cycle_digraph(4)), 1.0, pos, twists;
                                    colors=[1, 2, 3, 4])
-        @test all(i -> Roly.bindingsites(ps, i).sitesym == 1, 1:4)
+        @test all(i -> Roly.bindingsite(ps, i).sitesym == 1, 1:4)
         rules = BindingRules([1 1 1 2], ps)
         poly = Polyform(rules, 1)
         for (site, loc, r) in collect_compatible_pairs(poly)

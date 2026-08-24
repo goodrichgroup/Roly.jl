@@ -26,16 +26,16 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
     @test nsites(ps_labels) == 4
 
     ps_colors = PolygonParticleSpecies(4; colors=[1, 2, 1, 2])
-    @test color(bindingsites(ps_colors, 1)) == 1
-    @test color(bindingsites(ps_colors, 2)) == 2
-    @test color(bindingsites(ps_colors, 3)) == 1
+    @test color(bindingsite(ps_colors, 1)) == 1
+    @test color(bindingsite(ps_colors, 2)) == 2
+    @test color(bindingsite(ps_colors, 3)) == 1
 
     ps = PolygonParticleSpecies(4)
     ps2 = copy(ps)
     @test nsites(ps2) == nsites(ps)
     setcolors!(ps2, [10, 20, 30, 40])
-    @test color(bindingsites(ps2, 1)) == 10
-    @test color(bindingsites(ps, 1)) != 10
+    @test color(bindingsite(ps2, 1)) == 10
+    @test color(bindingsite(ps, 1)) != 10
 
     io = IOBuffer()
     show(io, ps)

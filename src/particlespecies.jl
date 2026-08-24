@@ -40,11 +40,11 @@ posetype(::ParticleSpecies{D,B}) where {D,B} = posetype(B)
 posetype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = posetype(B)
 
 """
-    bindingsites(p::ParticleSpecies, i::Integer)
+    bindingsite(p::ParticleSpecies, i::Integer)
 
 Return the `i`th binding site of particle species `p`.
 """
-function bindingsites end
+function bindingsite end
 
 """
     bindingsites(p::ParticleSpecies)
@@ -52,7 +52,7 @@ function bindingsites end
 Return an iterator over all binding sites of a particle of species `p`.
 """
 function bindingsites(p::ParticleSpecies)
-    return (bindingsites(p, i) for i in 1:nsites(p))
+    return (bindingsite(p, i) for i in 1:nsites(p))
 end
 
 """
@@ -134,7 +134,7 @@ of `graphrep(p)`.
 """
 function symmetrynumber(p::ParticleSpecies)
     # DO NOT `canonize` here: a species' graph must stay in construction order, since
-    # `BindingSite.vertices` indexes it directly and `bindingsites(::Particle, ...)` reaches those
+    # `BindingSite.vertices` indexes it directly and `bindingsite(::Particle, ...)` reaches those
     # vertices by shifting the range by a leading vertex. Reordering here would silently
     # decouple the two.
     _, autg = nauty(graphrep(p))

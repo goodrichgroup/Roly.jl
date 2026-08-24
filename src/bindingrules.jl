@@ -346,7 +346,7 @@ function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {P
     c = 1
     l = 1
     for ps in particlespecies
-        cols = [color(bindingsites(ps, si)) for si in 1:nsites(ps)]
+        cols = [color(bindingsite(ps, si)) for si in 1:nsites(ps)]
         setcolors!(ps, cols .- minimum(cols) .+ c)
         c = maximum(cols) - minimum(cols) + c + 1
 
@@ -364,7 +364,7 @@ function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:Partic
 
     for (spcs, ps) in enumerate(particlespecies)
         for si in 1:nsites(ps)
-            site = bindingsites(ps, si)
+            site = bindingsite(ps, si)
             c = color(site)
             spcssite = (spcs, si)
             push!(get!(color2siteloc, c, BindingSiteLoc[]), spcssite)

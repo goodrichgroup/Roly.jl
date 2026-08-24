@@ -26,7 +26,7 @@ A species must define these methods:
 |---|---|
 | `graphrep(ps)` | The species' `NautyDiGraph`. See below. |
 | `nsites(ps)` | Number of binding sites. |
-| `bindingsites(ps, i)` | The `i`th `BindingSite`. |
+| `bindingsite(ps, i)` | The `i`th `BindingSite`. |
 | `bounding_radius(ps)` | Radius of a sphere at the pose origin enclosing the particle. |
 | `overlap(p1::SpeciesAndPose, p2::SpeciesAndPose)` | Whether two particles at given poses overlap. |
 | `Base.copy(ps)` | Deep copy. `BindingRules` copies each species to reassign its colors. |
@@ -75,7 +75,7 @@ A non-square rectangle with a site at each edge midpoint, exercising the whole i
 ```julia
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose
-import Roly: graphrep, nsites, bindingsites,
+import Roly: graphrep, nsites, bindingsite,
              bounding_radius, isconvex, overlap
 using NautyGraphs
 using StaticArrays, LinearAlgebra, Rotations
@@ -151,7 +151,7 @@ Four of them just read the struct:
 ```julia
 graphrep(ps::Rectangle) = ps.g
 nsites(ps::Rectangle) = length(ps.sites)
-bindingsites(ps::Rectangle, i::Integer) = ps.sites[i]
+bindingsite(ps::Rectangle, i::Integer) = ps.sites[i]
 bounding_radius(ps::Rectangle) = sqrt(ps.width^2 + ps.height^2) / 2
 isconvex(::Rectangle) = true
 

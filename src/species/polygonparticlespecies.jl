@@ -57,7 +57,7 @@ end
 
 graphrep(p::PolygonParticleSpecies) = p.g
 nsites(p::PolygonParticleSpecies) = length(p.sites)
-bindingsites(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
+bindingsite(p::PolygonParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolygonParticleSpecies) = true
 
 """

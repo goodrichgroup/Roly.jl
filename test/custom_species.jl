@@ -2,7 +2,7 @@
 using Roly
 using Roly: BindingSite, ParticleSpecies, SpeciesAndPose, site_symmetry, setcolors!, color, siteorbits,
             cycleencoding, stabilizerorders, sat_overlap, edgenormals
-import Roly: graphrep, nsites, bindingsites, bounding_radius, isconvex
+import Roly: graphrep, nsites, bindingsite, bounding_radius, isconvex
 using NautyGraphs, StaticArrays, LinearAlgebra, Rotations
 
 struct Rectangle{F,B<:BindingSite} <: ParticleSpecies{2,B}
@@ -35,7 +35,7 @@ end
 
 graphrep(ps::Rectangle) = ps.g
 nsites(ps::Rectangle) = length(ps.sites)
-bindingsites(ps::Rectangle, i::Integer) = ps.sites[i]
+bindingsite(ps::Rectangle, i::Integer) = ps.sites[i]
 isconvex(::Rectangle) = true
 bounding_radius(ps::Rectangle) = sqrt(ps.width^2 + ps.height^2) / 2
 # Required: `BindingRules` copies each species before shifting its colors.
@@ -69,7 +69,7 @@ end
     # `setcolors!` needs no definition: the generic method finds the sites in the `sites` field
     # and re-derives the labeling and the stabilizers
     setcolors!(r, [5, 6, 5, 6])
-    @test [color(bindingsites(r, i)) for i in 1:4] == [5, 6, 5, 6]
+    @test [color(bindingsite(r, i)) for i in 1:4] == [5, 6, 5, 6]
     @test symmetrynumber(r) == site_symmetry(r) == 2
     # Coloring every edge alike cannot make a rectangle 4-fold symmetric
     setcolors!(r, fill(7, 4))

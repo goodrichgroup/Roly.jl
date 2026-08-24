@@ -97,7 +97,7 @@ end
 
 graphrep(p::PolyhedronParticleSpecies) = p.g
 nsites(p::PolyhedronParticleSpecies) = length(p.sites)
-bindingsites(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
+bindingsite(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolyhedronParticleSpecies) = true
 bounding_radius(ps::PolyhedronParticleSpecies) = ps.rmax
 

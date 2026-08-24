@@ -15,7 +15,7 @@ Two subtleties:
     the pointwise conditions.
 """
 function site_rotations(poly)
-    bs = [bindingsites(poly, i) for i in 1:nsites(poly)]
+    bs = [bindingsite(poly, i) for i in 1:nsites(poly)]
     isempty(bs) && return []
     c0 = sum(b.pose.x for b in bs) / length(bs)
     xs = [b.pose.x - c0 for b in bs]
@@ -52,7 +52,7 @@ geometric_symmetry(poly) = length(site_rotations(poly))
 Totations mapping the union of the particles' actual corner sets onto itself. 
 """
 function body_symmetry(poly, rules, rotations)
-    bs = [bindingsites(poly, i) for i in 1:nsites(poly)]
+    bs = [bindingsite(poly, i) for i in 1:nsites(poly)]
     c0 = sum(b.pose.x for b in bs) / length(bs)
     pts = [pt.pose * c - c0
            for pt in poly.particles

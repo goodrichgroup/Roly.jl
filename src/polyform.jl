@@ -197,8 +197,8 @@ function bondindex(poly::Polyform, src::Integer, dst::Integer)
     rules = bindingrules(poly)
     p1, b1 = _vertex_to_particle_site(poly, src)
     p2, b2 = _vertex_to_particle_site(poly, dst)
-    c1 = color(bindingsites(particles(poly, p1), rules, b1))
-    c2 = color(bindingsites(particles(poly, p2), rules, b2))
+    c1 = color(bindingsite(particles(poly, p1), rules, b1))
+    c2 = color(bindingsite(particles(poly, p2), rules, b2))
     return findfirst(==(minmax(c1, c2)), bonded_colors(rules))
 end
 
@@ -209,27 +209,28 @@ function _vertex_to_particle_site(p::Polyform, v::Integer)
     for (i, part) in enumerate(p.particles)
         orig_v in graphvertices(part, rules) || continue
         for j in 1:nsites(part, rules)
-            orig_v in bindingsites(part, rules, j).vertices && return (i, j)
+            orig_v in bindingsite(part, rules, j).vertices && return (i, j)
         end
     end
     return nothing
 end
 
 """
-    bindingsites(p::Polyform, i::Integer)
+    bindingsite(p::Polyform, i::Integer)
 
-Return the `i`-th binding site of `p`. The ordering is determined by the canonical
-graph labeling and is therefore deterministic across equivalent polyforms.
+Return the `i`-th binding site of `p`, counting through `p`'s particles in the order they are
+stored and through each particle's own sites, exactly as on a [`ParticleSpecies`](@ref).
+
+This ordering depends on how `p` was assembled. Use [`canonbindingsite`](@ref) for one that
+two isomorphic polyforms agree on.
 """
-function bindingsites(p::Polyform, i::Integer)
+function bindingsite(p::Polyform, i::Integer)
     rules = bindingrules(p)
     k = 0
-    for v in p.canon2orig
-        prtcl = particle_from_leadingvertex(p, v)
-        isnothing(prtcl) && continue
+    for prtcl in p.particles
         for j in 1:nsites(prtcl, rules)
             k += 1
-            k == i && return bindingsites(prtcl, rules, j)
+            k == i && return bindingsite(prtcl, rules, j)
         end
     end
     return nothing
@@ -238,9 +239,36 @@ end
 """
     bindingsites(p::Polyform)
 
+Return a lazy iterator over all binding sites of `p`, in the order [`bindingsite`](@ref) counts.
+"""
+bindingsites(p::Polyform) = (bindingsite(p, i) for i in 1:nsites(p))
+
+"""
+    canonbindingsite(p::Polyform, i::Integer)
+
+Return the `i`-th binding site of `p` in canonical order, which follows the canonical graph
+labeling and is therefore the same for any two isomorphic polyforms.
+"""
+function canonbindingsite(p::Polyform, i::Integer)
+    rules = bindingrules(p)
+    k = 0
+    for v in p.canon2orig
+        prtcl = particle_from_leadingvertex(p, v)
+        isnothing(prtcl) && continue
+        for j in 1:nsites(prtcl, rules)
+            k += 1
+            k == i && return bindingsite(prtcl, rules, j)
+        end
+    end
+    return nothing
+end
+
+"""
+    canonbindingsites(p::Polyform)
+
 Return a lazy iterator over all binding sites of `p` in canonical order.
 """
-bindingsites(p::Polyform) = (bindingsites(p, i) for i in 1:nsites(p))
+canonbindingsites(p::Polyform) = (canonbindingsite(p, i) for i in 1:nsites(p))
 
 """
     bonds(p::Polyform)
@@ -309,7 +337,7 @@ function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t::I
     speciesindex, site_index = siteloc
     particle_species = species(rules, speciesindex)
     leadingvertex = nv(graphrep(poly)) + 1
-    mate = bindingsites(particle_species, site_index)
+    mate = bindingsite(particle_species, site_index)
     particle_pose = standard_twist(site, t, twistfreedom(site, mate)) * inv(mate.pose)
     attached_particle = Particle(particle_pose, leadingvertex, speciesindex)
 
@@ -458,7 +486,7 @@ function collect_open_bindingsites!(sites, poly::Polyform)
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
         for k in 1:nsites(part, rules)
-            site = bindingsites(part, rules, k)
+            site = bindingsite(part, rules, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(rules, color(site)) && continue
             push!(sites, site)
@@ -519,7 +547,7 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
         # The host is excluded, so it takes the runner-up when it is itself the top scorer.
         deletable = leadingvertex(part) == best_lv ? second : best
         for k in 1:nsites(part, rules)
-            site = bindingsites(part, rules, k)
+            site = bindingsite(part, rules, k)
             _isbound_vertex(poly, part, first(site.vertices)) && continue
             isinert(rules, color(site)) && continue
 
@@ -529,7 +557,7 @@ function collect_compatible_pairs!(pairs, poly::Polyform)
                 # unless a higher one survives. If one does, the child's deletion is some other
                 # particle and the parent test would reject it.
                 siteloc[1] < deletable && continue
-                mate = bindingsites(species(rules, siteloc[1]), siteloc[2])
+                mate = bindingsite(species(rules, siteloc[1]), siteloc[2])
                 for t in 0:(_ndistincttwists(site, mate) - 1)
                     push!(pairs, (site, siteloc, t))
                 end

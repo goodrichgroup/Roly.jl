@@ -29,8 +29,8 @@ function plot_particlespecies!(
              color=_tint(species_basecolor(si), PATCHY_BODY_TINT),
              strokecolor=:black, strokewidth, kwargs...)
 
-    xs = [(pose * bindingsites(spcs, i).pose.x)[1] for i in 1:n]
-    ys = [(pose * bindingsites(spcs, i).pose.x)[2] for i in 1:n]
+    xs = [(pose * bindingsite(spcs, i).pose.x)[1] for i in 1:n]
+    ys = [(pose * bindingsite(spcs, i).pose.x)[2] for i in 1:n]
     scatter!(ax, xs, ys;
              marker=_disk_marker(site_radius), markersize=1, markerspace=:data,
              color=colors, strokecolor=:black, strokewidth=1, alpha=0.8)
@@ -80,7 +80,7 @@ function particlemesh(
     body = RGBAf(_tint(species_basecolor(si), PATCHY_BODY_TINT), 1)
     _spheremesh!(pts, tris, cols, Point3f(pose.x), Float32(spcs.r), body)
     for i in 1:nsites(spcs)
-        x = Point3f(pose * bindingsites(spcs, i).pose.x)
+        x = Point3f(pose * bindingsite(spcs, i).pose.x)
         _spheremesh!(
             pts, tris, cols, x, Float32(site_radius), RGBAf(colors[i], patch_alpha);
             nlat=12, nlon=18,

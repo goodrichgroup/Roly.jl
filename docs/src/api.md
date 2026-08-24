@@ -90,6 +90,7 @@ Antiprism
 ```@docs
 ParticleSpecies
 SpeciesAndPose
+bindingsite
 bindingsites
 nsites
 graphrep
@@ -147,6 +148,8 @@ Polyform
 nparticles
 bindingrules
 composition
+canonbindingsite
+canonbindingsites
 bonds
 bondindex
 interior_edges

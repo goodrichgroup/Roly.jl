@@ -232,8 +232,8 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     b = PolyhedronParticleSpecies(shifted; colors=fill(1, 6))
     @test symmetrynumber(a) == symmetrynumber(b) == 24
     for i in 1:6
-        @test isapprox(Roly.bindingsites(a, i).pose.x, Roly.bindingsites(b, i).pose.x; atol=1e-12)
-        @test isapprox(Roly.bindingsites(a, i).pose.psi, Roly.bindingsites(b, i).pose.psi; atol=1e-12)
+        @test isapprox(Roly.bindingsite(a, i).pose.x, Roly.bindingsite(b, i).pose.x; atol=1e-12)
+        @test isapprox(Roly.bindingsite(a, i).pose.psi, Roly.bindingsite(b, i).pose.psi; atol=1e-12)
     end
 
     # A corner used by no face errors

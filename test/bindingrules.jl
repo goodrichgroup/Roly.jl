@@ -150,11 +150,11 @@ using StaticArrays: SVector
             part = Roly.particle_from_leadingvertex(poly, orig_v)
             isnothing(part) && continue
             for k in 1:Roly.nsites(part, rules)
-                site = bindingsites(part, rules, k)
+                site = bindingsite(part, rules, k)
                 Roly._isbound_vertex(poly, part, first(site.vertices)) && continue
                 Roly.isinert(rules, color(site)) && continue
                 for siteloc in sitelocs_of(rules, color(site))
-                    mate = bindingsites(Roly.species(rules, siteloc[1]), siteloc[2])
+                    mate = bindingsite(Roly.species(rules, siteloc[1]), siteloc[2])
                     for r in 0:(Roly._ndistincttwists(site, mate) - 1)
                         trial = copy(poly)
                         ismissing(raise!(trial, site, siteloc, r)) && continue

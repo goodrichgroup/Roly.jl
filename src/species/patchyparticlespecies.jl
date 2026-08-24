@@ -122,7 +122,7 @@ Base.copy(ps::PatchyParticleSpecies) = typeof(ps)(copy(ps.g), copy(ps.sites), ps
 
 graphrep(ps::PatchyParticleSpecies) = ps.g
 nsites(ps::PatchyParticleSpecies) = length(ps.sites)
-bindingsites(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
+bindingsite(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
 isconvex(::PatchyParticleSpecies) = true
 
 function could_contact(::SpeciesAndPose{<:PatchyParticleSpecies}, ::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...)

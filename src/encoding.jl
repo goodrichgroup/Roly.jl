@@ -860,14 +860,14 @@ site_symmetry(ps::ParticleSpecies) = length(_site_symmetries(_sitedata(ps)...))
 
 Return the symmetry label of site `i` of `ps`, the graph label all of that site's vertices carry.
 """
-sitelabel(ps::ParticleSpecies, i::Integer) = Int(labels(graphrep(ps))[first(bindingsites(ps, i).vertices)])
+sitelabel(ps::ParticleSpecies, i::Integer) = Int(labels(graphrep(ps))[first(bindingsite(ps, i).vertices)])
 
 # Poses, site symmetries and the label each site is matched by. `site_symmetry` matches on the
 # graph's labels, since it asks what the graph claims; `siteorbits` matches on colors, since it
 # asks what the arrangement is.
 function _sitedata(ps::ParticleSpecies)
     n = nsites(ps)
-    sites = [bindingsites(ps, i) for i in 1:n]
+    sites = [bindingsite(ps, i) for i in 1:n]
     return ([s.pose for s in sites], [s.sitesym for s in sites], [sitelabel(ps, i) for i in 1:n])
 end
 
@@ -944,7 +944,7 @@ symmetries leave the site where it is. These are counts, not the subgroups thems
 
 Reads the orders `ps` already stores; use the three-argument method to derive them.
 """
-stabilizerorders(ps::ParticleSpecies) = [bindingsites(ps, i).stab for i in 1:nsites(ps)]
+stabilizerorders(ps::ParticleSpecies) = [bindingsite(ps, i).stab for i in 1:nsites(ps)]
 
 """
     stabilizerorders(poses, sitesyms, sitelabels)
@@ -1012,7 +1012,7 @@ share a color.
 function _check_labeling(ps::ParticleSpecies)
     seen = Dict{Int,Int}()
     for i in 1:nsites(ps)
-        b = bindingsites(ps, i)
+        b = bindingsite(ps, i)
         l = sitelabel(ps, i)
         c = get!(seen, l, color(b))
         c == color(b) || throw(

@@ -64,12 +64,12 @@ Return the number of binding sites of particle `p`.
 nsites(p::Particle, rules::BindingRules) = nsites(species(rules, p.speciesindex))
 
 """
-    bindingsites(p::Particle, rules::BindingRules, i::Integer)
+    bindingsite(p::Particle, rules::BindingRules, i::Integer)
 
 Return the `i`th binding site of particle `p`.
 """
-function bindingsites(p::Particle, rules::BindingRules, i::Integer)
-    return p.pose * shift_vertices(bindingsites(species(rules, p.speciesindex), i), leadingvertex(p) - 1)
+function bindingsite(p::Particle, rules::BindingRules, i::Integer)
+    return p.pose * shift_vertices(bindingsite(species(rules, p.speciesindex), i), leadingvertex(p) - 1)
 end
 
 """
@@ -78,7 +78,7 @@ end
 Return an iterator over the binding sites of particle `p`.
 """
 function bindingsites(p::Particle, rules::BindingRules)
-    return (bindingsites(p, rules, i) for i in 1:nsites(p, rules))
+    return (bindingsite(p, rules, i) for i in 1:nsites(p, rules))
 end
 
 """

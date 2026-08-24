@@ -40,11 +40,11 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
         # One site per face, sitting at the face centroid.
         for i in 1:nf
-            @test isapprox(bindingsites(ps, i).pose.x, facecentroid(shp, i); atol=1e-10)
-            @test length(bindingsites(ps, i).vertices) == 1
+            @test isapprox(bindingsite(ps, i).pose.x, facecentroid(shp, i); atol=1e-10)
+            @test length(bindingsite(ps, i).vertices) == 1
         end
         # The closest site is at the inradius, and everything is inside the bound.
-        @test isapprox(minimum(norm(bindingsites(ps, i).pose.x) for i in 1:nf), inradius(shp))
+        @test isapprox(minimum(norm(bindingsite(ps, i).pose.x) for i in 1:nf), inradius(shp))
         @test all(norm(c) <= Roly.bounding_radius(ps) + 1e-10 for c in corners(shp))
 
         @test occursin("PolyhedronParticleSpecies", sprint(show, ps))
@@ -55,7 +55,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # at the midpoint of the face's first edge
     for (name, ps, shp, nf, _) in solids
         for i in 1:nf
-            psi = bindingsites(ps, i).pose.psi
+            psi = bindingsite(ps, i).pose.psi
             @test isapprox(psi[:, 1], Roly.facenormal(shp, i); atol=1e-10)
             v = edgemidpoint(shp, i, 1) - facecentroid(shp, i)
             @test isapprox(psi[:, 3], normalize(v); atol=1e-10)
@@ -77,7 +77,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
                         ("Tetrahedron", Tetrahedron()), ("Octahedron", Octahedron())]
         ps = PolyhedronParticleSpecies(shp; colors=faceorbits(shp))
         labs = Roly.labels(graphrep(ps))
-        sitelabel(i) = labs[first(Roly.bindingsites(ps, i).vertices)]
+        sitelabel(i) = labs[first(Roly.bindingsite(ps, i).vertices)]
         centroids = [facecentroid(shp, i) - sum(corners(shp)) / length(corners(shp))
                      for i in 1:nfaces(shp)]
         faceat(x) = findfirst(i -> isapprox(centroids[i], x; atol=1e-8), 1:nfaces(shp))
@@ -90,7 +90,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
         for Q in group, i in 1:nfaces(shp)
             j = faceat(Q * centroids[i])
-            bi, bj = Roly.bindingsites(ps, i), Roly.bindingsites(ps, j)
+            bi, bj = Roly.bindingsite(ps, i), Roly.bindingsite(ps, j)
             @test bj.stab == bi.stab
             # Q carries site i's frame onto site j's, up to a turn about j's normal lying in
             # j's stabilizer -- not merely in its sitesym.
@@ -159,7 +159,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # How much of a site's own symmetry the whole particle keeps. At most its sitesym, and the
     # ratio is how many distinct ways a partner can attach there: turns in the stabilizer put
     # the same body in the same place with only its sites permuted.
-    sitesyms(ps) = [bindingsites(ps, i).sitesym for i in 1:nsites(ps)]
+    sitesyms(ps) = [bindingsite(ps, i).sitesym for i in 1:nsites(ps)]
     ntwists(ps) = sitesyms(ps) .÷ Roly.stabilizerorders(ps)
 
     # A cube keeps all four turns about a face normal, so a face-to-face bond has one
@@ -227,19 +227,19 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test nv(graphrep(PolyhedronParticleSpecies(shp; colors=fill(1, 6)))) == 24
     @test nv(graphrep(dartspecies(shp))) == 24
     @test nv(graphrep(cyclespecies(shp))) == 6
-    @test all(length(bindingsites(dartspecies(shp), i).vertices) == 4 for i in 1:6)
+    @test all(length(bindingsite(dartspecies(shp), i).vertices) == 4 for i in 1:6)
 
     @test_throws ArgumentError PolyhedronParticleSpecies(shp; colors=1:5)
 
     ps = PolyhedronParticleSpecies(Cube(); colors=[3, 1, 4, 1, 5, 9])
-    @test color(bindingsites(ps, 1)) == 3
-    @test color(bindingsites(ps, 5)) == 5
+    @test color(bindingsite(ps, 1)) == 3
+    @test color(bindingsite(ps, 5)) == 5
 
     cp = copy(ps)
     # A recoloring that groups the sites the same way needs no new graph, so it applies in place.
     setcolors!(cp, [30, 10, 40, 10, 50, 90])
-    @test color(bindingsites(cp, 1)) == 30
-    @test color(bindingsites(ps, 1)) == 3          # the copy is independent
+    @test color(bindingsite(cp, 1)) == 30
+    @test color(bindingsite(ps, 1)) == 3          # the copy is independent
     @test_throws ArgumentError setcolors!(cp, [1, 2])
 
     # A recoloring that groups sites differently does need a new graph. This cube's colors are nearly all
@@ -248,7 +248,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test symmetrynumber(cp) == symmetrynumber(ps) == 1
     @test_throws ArgumentError setcolors!(cp, fill(10, 6))
     @test symmetrynumber(cp) == 1                  # and the failed call leaves it untouched
-    @test [color(bindingsites(cp, i)) for i in 1:6] == [30, 10, 40, 10, 50, 90]
+    @test [color(bindingsite(cp, i)) for i in 1:6] == [30, 10, 40, 10, 50, 90]
     # Built with those colors from the start, it is the dart encoding and the symmetry is there.
     @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(10, 6))) == 24
 
@@ -265,7 +265,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test symmetrynumber(prism) == site_symmetry(prism) == 6
     # Caps are 3-fold about their normals and the prism is 3-fold about them; the rectangular
     # sides are 2-fold and so is the prism about those.
-    @test [Roly.bindingsites(prism, i).stab for i in 1:5] == [i in caps ? 3 : 2 for i in 1:5]
+    @test [Roly.bindingsite(prism, i).stab for i in 1:5] == [i in caps ? 3 : 2 for i in 1:5]
     @test length(unique(Roly.labels(graphrep(prism)))) == 2
 
     id = Pose{3,Float64,RotMatrix3{Float64}}(SVector(0.0, 0.0, 0.0), one(RotMatrix3{Float64}))
