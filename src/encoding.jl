@@ -860,7 +860,7 @@ site_symmetry(ps::ParticleSpecies) = length(_site_symmetries(_sitedata(ps)...))
 
 Return the symmetry label of site `i` of `ps`, the graph label all of that site's vertices carry.
 """
-sitelabel(ps::ParticleSpecies, i::Integer) = Int(labels(graphrep(ps))[first(bindingsite(ps, i).vertices)])
+sitelabel(ps::ParticleSpecies, i::Integer) = Int(label(graphrep(ps), first(bindingsite(ps, i).vertices)))
 
 # Poses, site symmetries and the label each site is matched by. `site_symmetry` matches on the
 # graph's labels, since it asks what the graph claims; `siteorbits` matches on colors, since it
@@ -964,9 +964,12 @@ function stabilizerorders(poses, sitesyms, sitelabels)
 end
 
 """
-    _recolor!(sites, g, colors)
+    _recolor!(ps::ParticleSpecies, sites, colors)
 
-Give `sites` the interaction colors `colors`, and update the labeling and the stabilizers.
+Give `sites` the interaction colors `colors`, and update `ps`' labeling and the stabilizers.
+
+Throws and leaves `ps` untouched if the recoloring asks for a symmetry the graph encoding
+cannot express.
 """
 function _recolor!(ps::ParticleSpecies, sites::AbstractVector{<:BindingSite}, colors)
     # store old labeling and restore on error
@@ -988,6 +991,13 @@ function _recolor!(ps::ParticleSpecies, sites::AbstractVector{<:BindingSite}, co
     return nothing
 end
 
+"""
+    _recolor!(sites, g::NautyDiGraph, colors)
+
+Give `sites` the interaction colors `colors`, and update `g`'s labeling and the stabilizers.
+
+Applies the recoloring unconditionally; the `ParticleSpecies` method checks it first.
+"""
 function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors)
     length(colors) == length(sites) || throw(ArgumentError("incorrect number of colors"))
     poses = [s.pose for s in sites]
@@ -995,14 +1005,12 @@ function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors
     orbits = siteorbits(poses, sitesyms, collect(colors))
     stabs = stabilizerorders(poses, sitesyms, orbits)
 
-    labs = labels(g)
     for i in eachindex(sites)
         sites[i] = setstab(setcolor(sites[i], colors[i]), stabs[i])
         for v in sites[i].vertices
-            labs[v] = orbits[i]
+            setlabel!(g, v, orbits[i])
         end
     end
-    setlabels!(g, labs)
     return nothing
 end
 

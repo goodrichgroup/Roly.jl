@@ -373,8 +373,10 @@ function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {P
         c = maximum(cols) - minimum(cols) + c + 1
 
         g = graphrep(ps)
-        labs = labels(g)
-        setlabels!(g, labs .- minimum(labs) .+ l)
+        offset = l - minimum(labels(g))
+        for v in vertices(g)
+            setlabel!(g, v, label(g, v) + offset)
+        end
         l = maximum(labels(g)) + 1
     end
     return particlespecies

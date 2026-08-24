@@ -76,8 +76,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
                         ("Antiprism(4)", Antiprism(4)), ("Dodecahedron", Dodecahedron()),
                         ("Tetrahedron", Tetrahedron()), ("Octahedron", Octahedron())]
         ps = PolyhedronParticleSpecies(shp; colors=faceorbits(shp))
-        labs = Roly.labels(graphrep(ps))
-        sitelabel(i) = labs[first(Roly.bindingsite(ps, i).vertices)]
+        sitelabel(i) = Roly.sitelabel(ps, i)
         centroids = [facecentroid(shp, i) - sum(corners(shp)) / length(corners(shp))
                      for i in 1:nfaces(shp)]
         faceat(x) = findfirst(i -> isapprox(centroids[i], x; atol=1e-8), 1:nfaces(shp))
