@@ -110,7 +110,7 @@ UnitTriangle
 UnitSquare
 UnitHexagon
 PolyhedronParticleSpecies
-shape
+polyhedron
 UnitTetrahedron
 UnitCube
 UnitOctahedron

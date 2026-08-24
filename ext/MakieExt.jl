@@ -4,7 +4,7 @@ using Roly
 using Makie
 using LinearAlgebra: dot, normalize
 import Roly: species, bindingrules, polyformplot, polyformplot!, render
-import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, shape, bounding_radius
+import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, polyhedron, bounding_radius
 
 @recipe PolyformPlot (poly, ) begin
     bindingrules = nothing

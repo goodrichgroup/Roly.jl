@@ -60,7 +60,7 @@ public contact_pairing, standard_offset, twistfreedom, bondperiod, nphases, phas
 
 # The `ParticleSpecies` interface, implemented rather than called
 public isconvex, bounding_radius, could_contact, overlap
-public sat_overlap, edgenormals, shape
+public sat_overlap, edgenormals, polyhedron
 
 
 include("utils.jl")

@@ -6,7 +6,7 @@ A 3D convex polyhedron with one binding site per face.
 struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
     g::NautyDiGraph
     sites::Vector{B}
-    shape::Polyhedron{F}
+    polyhedron::Polyhedron{F}
     normals::Vector{SVector{3,F}}
     edgedirections::Vector{SVector{3,F}}
     rmin::F
@@ -91,7 +91,7 @@ end
 
 function Base.copy(ps::PolyhedronParticleSpecies)
     return typeof(ps)(
-        copy(ps.g), copy(ps.sites), copy(ps.shape), copy(ps.normals), copy(ps.edgedirections), ps.rmin, ps.rmax, ps.skin
+        copy(ps.g), copy(ps.sites), copy(ps.polyhedron), copy(ps.normals), copy(ps.edgedirections), ps.rmin, ps.rmax, ps.skin
     )
 end
 
@@ -102,12 +102,12 @@ isconvex(::PolyhedronParticleSpecies) = true
 bounding_radius(ps::PolyhedronParticleSpecies) = ps.rmax
 
 """
-    shape(ps::PolyhedronParticleSpecies)
+    polyhedron(ps::PolyhedronParticleSpecies)
 
 Return the [`Polyhedron`](@ref) the species was built from.
 """
-shape(ps::PolyhedronParticleSpecies) = ps.shape
-corners(ps::PolyhedronParticleSpecies) = corners(ps.shape)
+polyhedron(ps::PolyhedronParticleSpecies) = ps.polyhedron
+corners(ps::PolyhedronParticleSpecies) = corners(ps.polyhedron)
 
 function overlap(
     p1::SpeciesAndPose{<:PolyhedronParticleSpecies}, p2::SpeciesAndPose{<:PolyhedronParticleSpecies}; kwargs...

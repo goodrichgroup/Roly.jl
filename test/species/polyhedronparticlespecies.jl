@@ -2,7 +2,7 @@ using Roly
 using Roly: PolyhedronParticleSpecies, UnitTetrahedron, UnitCube, UnitOctahedron,
             UnitDodecahedron, UnitIcosahedron, UnitPyramid, UnitPrism, UnitAntiprism,
             Polyhedron, Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron,
-            Pyramid, Prism, Antiprism, shape, corners, nfaces, facedegree, facecentroid,
+            Pyramid, Prism, Antiprism, polyhedron, corners, nfaces, facedegree, facecentroid,
             geometriclabels, rotationgroup, inradius, edgemidpoint,
             nsites, dimension, isconvex, numtype, bindingsites, graphrep, setcolors!, color,
             could_contact, overlap, symmetrynumber, nparticles, raise!, lower!,
@@ -32,7 +32,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test numtype(ps) === Float64
         @test isconvex(ps)
         @test nsites(ps) == nf
-        @test shape(ps) === shp || nfaces(shape(ps)) == nf
+        @test polyhedron(ps) === shp || nfaces(polyhedron(ps)) == nf
 
         # Default labels are all distinct, so the sparse encoding is used.
         @test nv(graphrep(ps)) == nf

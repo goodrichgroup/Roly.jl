@@ -69,7 +69,7 @@ function particlemesh(
     bordercolors = [RGBAf(_shade(c, 0.35), alpha) for c in colors]
 
     pts, tris, ptcolors = Point3f[], NTuple{3,Int}[], RGBAf[]
-    _facemesh!(pts, tris, ptcolors, shape(spcs), pose, facecolors, border, bordercolors)
+    _facemesh!(pts, tris, ptcolors, polyhedron(spcs), pose, facecolors, border, bordercolors)
     return pts, tris, ptcolors
 end
 
