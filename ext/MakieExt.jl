@@ -40,7 +40,7 @@ end
 
 Draw the particle species `spcs` at `pose` onto `ax`.
 
-`site_color` is an optional callback `(species_index, site_index) -> color` that controls
+`site_color` is an optional callback `(speciesindex, site_index) -> color` that controls
 per-site coloring. When omitted, the species' palette is used, with sites that no bond can
 use greyed out.
 """
@@ -78,7 +78,7 @@ function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
     pts, tris, cols = Point3f[], NTuple{3,Int}[], RGBAf[]
 
     for part in poly.particles
-        ps = species(sys, part.species_index)
+        ps = species(sys, part.speciesindex)
         part_pose = isnothing(pose) ? part.pose : pose * part.pose
         geom = particlemesh(ps, part_pose; sys, kwargs...)
         if isnothing(geom)

@@ -56,7 +56,7 @@ function body_symmetry(poly, sys, rotations)
     c0 = sum(b.pose.x for b in bs) / length(bs)
     pts = [pt.pose * c - c0
            for pt in poly.particles
-           for c in Roly.corners(Roly.polyhedron(Roly.species(sys, pt.species_index)))]
+           for c in Roly.corners(Roly.polyhedron(Roly.species(sys, pt.speciesindex)))]
     return count(Q -> all(p -> any(q -> isapprox(Q * p, q; atol=1e-7), pts), pts), rotations)
 end
 

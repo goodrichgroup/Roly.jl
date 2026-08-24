@@ -29,7 +29,7 @@
     polys2d = polygen(sys2d; maxsize=3)
     @test render(polys2d[end]) isa Figure
 
-    # An explicitly passed `species_index` picks the palette instead of being overridden by
+    # An explicitly passed `speciesindex` picks the palette instead of being overridden by
     # the default of 1.
     _, _, colors1, bonding1 = ext._resolve_colors(cube, 1, nothing, nothing)
     _, _, colors2, _ = ext._resolve_colors(cube, 2, nothing, nothing)

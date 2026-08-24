@@ -1,7 +1,7 @@
 """
     BindingSiteLoc
 
-Indicates the location of a binding site in the format `(species_index, site_index)`.
+Indicates the location of a binding site in the format `(speciesindex, site_index)`.
 """
 const BindingSiteLoc = NTuple{2,Int}
 

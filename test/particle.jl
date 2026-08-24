@@ -1,17 +1,17 @@
-using Roly: Particle, graphvertices, leading_vertex, species_index, overlap, could_contact
+using Roly: Particle, graphvertices, leadingvertex, speciesindex, overlap, could_contact
 
 @testset "particle" begin
     sys = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
-    part = Particle(sys, 1; leading_vertex=1)
-    @test leading_vertex(part) == 1
-    @test species_index(part) == 1
+    part = Particle(sys, 1; leadingvertex=1)
+    @test leadingvertex(part) == 1
+    @test speciesindex(part) == 1
 
-    part2 = Particle(sys, 1; leading_vertex=1)
+    part2 = Particle(sys, 1; leadingvertex=1)
     gvs = graphvertices(part2, sys)
     @test first(gvs) == 1
 
-    part_shifted = Particle(sys, 1; leading_vertex=length(gvs) + 1)
+    part_shifted = Particle(sys, 1; leadingvertex=length(gvs) + 1)
     gvs2 = graphvertices(part_shifted, sys)
     @test first(gvs2) == length(gvs) + 1
     @test length(gvs2) == length(gvs)
@@ -41,5 +41,5 @@ using Roly: Particle, graphvertices, leading_vertex, species_index, overlap, cou
     show(io, part)
     @test contains(String(take!(io)), "Particle")
     show(io, MIME"text/plain"(), part)
-    @test contains(String(take!(io)), "species_index")
+    @test contains(String(take!(io)), "speciesindex")
 end
