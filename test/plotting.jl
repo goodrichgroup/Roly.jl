@@ -43,11 +43,17 @@
     @test Set(keys(exposed)) == Set(Roly.opensitelocs(metaseed))
     parts = ext._metaparts(mp, Roly.Pose{3,Float64}(), nothing, nothing, nothing, nothing)
     @test length(parts) == nparticles(metaseed)
-    wash = ext._tint(ext.species_basecolor(si), ext.BODY_TINT)
+    wash = ext.RGBf(ext.INERT_COLOR)
     for (p, (_, _, _, sitecolor)) in enumerate(parts), k in 1:nsites(cube)
         want = get(exposed, ParticleSite(p, k), wash)
         @test sitecolor(0, k) == want
     end
+    # every exposed color stays clear of the interior one. A species palette ramps from pale to
+    # dark, so a tinted species color would land on its pale end and the two would not read apart
+    chan(c) = (ext.RGBf(c).r, ext.RGBf(c).g, ext.RGBf(c).b)
+    apart(a, b) = sum(abs, chan(a) .- chan(b))
+    @test minimum(apart(c, wash) for c in values(exposed)) > 0.25
+
     # the sites a bond inside the cluster consumes are exactly the washed ones
     @test count(((p, k),) -> get(exposed, ParticleSite(p, k), wash) == wash,
                 [(p, k) for p in 1:nparticles(metaseed) for k in 1:nsites(cube)]) ==

@@ -1,8 +1,13 @@
 # A meta-particle has no shape of its own: it is the polyform it wraps. So it is drawn by drawing
 # that polyform's particles, with the colors of the meta-species painted back onto the sites it
 # exposes. Everything else -- sites a bond inside the cluster already consumes, and open sites the
-# species chose not to expose -- fades to a wash of the species color, since nothing can attach
-# through them at this level.
+# species chose not to expose -- is drawn in `INERT_COLOR`, the same neutral the rest of the
+# package uses for a site nothing can bond to.
+#
+# Neutral rather than a tint of the species color: a species palette ramps from pale to dark, and
+# a tinted species color lands squarely on its pale end. On a block of squares the first exposed
+# site came out within 0.1 of the interior and the two were indistinguishable. Grey has no hue to
+# collide with.
 
 """
     _metasites(spcs::MetaParticleSpecies, speciesindex, rules, sitecolor)
@@ -15,11 +20,10 @@ meta `rules`: a site the new rules leave inert is drawn inert, whatever it was i
 polyform.
 """
 function _metasites(spcs::MetaParticleSpecies, speciesindex, rules, sitecolor)
-    # 3D sites are whole faces and get the same wash a polyhedron's own faces get; a 2D site is a
-    # marker on an edge and is drawn at full strength.
-    si, _, colors, _ = _resolve_colors(
-        spcs, speciesindex, rules, sitecolor; bond_tint=(dimension(spcs) == 3 ? FACE_TINT : 0)
-    )
+    # Untinted, in 3D as well as 2D. A polyhedron tints its own faces because its whole surface is
+    # bulk, but here the bulk is the neutral interior and the exposed sites are the few markers on
+    # it, so they carry the weight. Tinting them towards white would walk them into the interior.
+    si, _, colors, _ = _resolve_colors(spcs, speciesindex, rules, sitecolor)
 
     # Match the species' sites back to the polyform's by vertex range, not by `==`: a recolored
     # site is no longer equal to the one it was taken from.
@@ -35,10 +39,10 @@ end
 # `_resolve_colors` down the line asks for every site, so the inner rules never enter: colors are
 # settled here.
 function _metaparts(spcs::MetaParticleSpecies, pose, speciesindex, rules, sitecolor, interiorcolor)
-    si, exposed = _metasites(spcs, speciesindex, rules, sitecolor)
+    _, exposed = _metasites(spcs, speciesindex, rules, sitecolor)
     poly = polyform(spcs)
     inner = bindingrules(poly)
-    wash = isnothing(interiorcolor) ? _tint(species_basecolor(si), BODY_TINT) : RGBf(interiorcolor)
+    wash = isnothing(interiorcolor) ? RGBf(INERT_COLOR) : RGBf(interiorcolor)
     return [
         (
             species(inner, part.speciesindex),
@@ -84,8 +88,8 @@ end
 
 Draw a meta-particle as the polyform it wraps, recolored to the sites it exposes.
 
-`interiorcolor` overrides the wash the rest of the polyform is drawn in; by default it is the
-species' own color blended towards white.
+`interiorcolor` overrides the color the rest of the polyform is drawn in; by default it is
+`INERT_COLOR`, since nothing can attach through those sites at this level.
 """
 function plot_particlespecies!(
     ax,
