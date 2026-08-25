@@ -28,8 +28,7 @@ function _metasites(spcs::MetaParticleSpecies, speciesindex, rules, sitecolor)
     # Match the species' sites back to the polyform's by vertex range, not by `==`: a recolored
     # site is no longer equal to the one it was taken from.
     poly = polyform(spcs)
-    locs = exposedsites(ParticleSite, poly)
-    byvertex = Dict(first(s.vertices) => locs[j] for (j, s) in enumerate(exposedsites(poly)))
+    byvertex = Dict(first(bindingsite(poly, l).vertices) => l for l in exposedsites(poly))
     exposed = Dict(byvertex[first(bindingsite(spcs, i).vertices)] => colors[i] for i in 1:nsites(spcs))
     return si, exposed
 end

@@ -52,7 +52,7 @@ Each site's `sitesym` and `locking` carry over from the polyform, while its `sta
 against the polyform by [`siteorbits`](@ref) and [`stabilizerorders`](@ref).
 """
 function MetaParticleSpecies(poly::Polyform; colors=nothing)
-    MetaParticleSpecies(poly, opensites(ParticleSite, poly); colors)
+    MetaParticleSpecies(poly, opensites(poly); colors)
 end
 
 function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
@@ -62,7 +62,7 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     n > 0 || throw(ArgumentError("a meta-species needs at least one exposed site"))
     allunique(picks) || throw(ArgumentError("`sites` names the same site twice"))
 
-    exposable = Set(exposedsites(ParticleSite, poly))
+    exposable = Set(exposedsites(poly))
     open = map(picks) do (p, k)
         1 <= p <= nparticles(poly) ||
             throw(ArgumentError("`poly` has $(nparticles(poly)) particles, so ($p, $k) is out of range"))

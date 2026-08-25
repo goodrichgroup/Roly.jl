@@ -26,7 +26,7 @@ export nsites, bindingsite, bindingsites, graphrep, symmetrynumber
 # Assembly system
 export BindingRules, SpeciesSite, interactionmatrix
 export ncolors, nspecies, nbonds, isinert, species
-public bonded_colors, bonded_sites, bonded_species
+public bonded_colors, bonded_sites, bonded_species, sitesofcolor, speciesofcolor
 
 # Polyforms
 export Polyform, ParticleSite, nparticles, bindingrules, composition, bonds

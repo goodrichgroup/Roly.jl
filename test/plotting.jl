@@ -40,7 +40,7 @@
     # its exposed sites keep their colors; everything else is one wash of the species color
     si, exposed = ext._metasites(mp, nothing, nothing, nothing)
     @test length(exposed) == nsites(mp)
-    @test Set(keys(exposed)) == Set(Roly.opensites(ParticleSite, metaseed))
+    @test Set(keys(exposed)) == Set(Roly.opensites(metaseed))
     parts = ext._metaparts(mp, Roly.Pose{3,Float64}(), nothing, nothing, nothing, nothing)
     @test length(parts) == nparticles(metaseed)
     wash = ext.RGBf(ext.INERT_COLOR)

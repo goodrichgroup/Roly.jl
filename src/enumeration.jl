@@ -18,9 +18,9 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
     j == 1 && collect_attachments!(aux.attachments, v)
     j > length(aux.attachments) && return nothing
 
-    site, siteloc, t = aux.attachments[j]
+    site, loc, t = aux.attachments[j]
     copy!(u, v)
-    out = raise!(u, site, siteloc, t)
+    out = raise!(u, site, loc, t)
     (ismissing(out) || isnothing(out)) && return out
 
     if graphrep(out) ∈ aux.seen

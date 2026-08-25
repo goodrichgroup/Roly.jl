@@ -66,8 +66,8 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     end
 
     di = copy(mono)
-    site, siteloc = first(collect_attachments(di))
-    @test !isnothing(raise!(di, site, siteloc))
+    site, loc = first(collect_attachments(di))
+    @test !isnothing(raise!(di, site, loc))
     @test nparticles(di) == 2
     @test nsites(di) == 8
 
@@ -98,11 +98,11 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
     lower!(poly_raise)
 
     attachments = collect_attachments(poly_raise)
-    site, siteloc = first(attachments)
+    site, loc = first(attachments)
     i = 1
     while ismissing(raise!(poly_raise, attachments[i]...))
         i += 1
-        site_siteloc = attachments[i]
+        siteandloc = attachments[i]
     end
 
     @test poly == poly_raise

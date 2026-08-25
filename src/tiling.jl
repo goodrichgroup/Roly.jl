@@ -129,10 +129,10 @@ end
 # machinery can build, laid back out as plain particles. `maxorder == 1` needs no special case,
 # since the meta-monomer is `poly` itself.
 function _tilecells(poly::Polyform, maxorder::Integer)
-    inner = opensites(poly)
-    cells = TileCell{eltype(poly.particles),eltype(inner)}[]
+    S = BindingSite{posetype(bindingrules(poly)),numtype(bindingrules(poly))}
+    cells = TileCell{eltype(poly.particles),S}[]
     # With no open site there is nothing for a translate to bond to, and no meta-species to build.
-    isempty(inner) && return cells
+    isempty(opensites(poly)) && return cells
 
     for meta in polygen(metarules(MetaParticleSpecies(poly)); maxsize=maxorder)
         parts, _, sites = _unwrapparts(meta)
@@ -275,17 +275,17 @@ function _walkchain(poly::Polyform, states, maxlength)
         site = bindingsite(part, rules, k)
         _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
         isinert(rules, color(site)) && continue
-        for siteloc in possible_attachments(rules, color(site))
-            mate = bindingsite(rules, siteloc)
+        for loc in possible_attachments(rules, color(site))
+            mate = bindingsite(rules, loc)
             for r in 0:(_ndistincttwists(site, mate)-1)
                 child = copy(poly)
-                ismissing(raise!(child, site, siteloc, r)) && continue
+                ismissing(raise!(child, site, loc, r)) && continue
                 # `raise!` forms every geometric contact, so growth may cross-link back onto the
                 # chain. That is a valid structure and often the interesting one -- the walk only
                 # insists that one particle was added, and always extends the newest
                 nparticles(child) == n + 1 || continue
 
-                state = (siteloc.species, siteloc.site, Int(r))
+                state = (loc.species, loc.site, Int(r))
                 j = findlast(==(state), states)
                 if j !== nothing
                     w = _screwwitness(child, j, n + 1)
@@ -389,11 +389,11 @@ function _extendends(poly::Polyform)
             site = bindingsite(part, rules, k)
             _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
             isinert(rules, color(site)) && continue
-            for siteloc in possible_attachments(rules, color(site))
-                mate = bindingsite(rules, siteloc)
+            for loc in possible_attachments(rules, color(site))
+                mate = bindingsite(rules, loc)
                 for r in 0:(_ndistincttwists(site, mate)-1)
                     child = copy(poly)
-                    ismissing(raise!(child, site, siteloc, r)) && continue
+                    ismissing(raise!(child, site, loc, r)) && continue
                     _ischain(child) && push!(out, child)
                 end
             end

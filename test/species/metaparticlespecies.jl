@@ -6,7 +6,7 @@
     chainlike = BindingRules([1 1 1 3], UnitSquare)
     chainstrs = polygen(chainlike; maxsize=4)
     dimer = chainstrs[findfirst(s -> nparticles(s) == 2, chainstrs)]
-    open = opensites(dimer)
+    open = [bindingsite(dimer, l) for l in opensites(dimer)]
     @test length(open) == 2
 
     mp = MetaParticleSpecies(dimer)
@@ -58,19 +58,21 @@
 
     @testset "choosing which sites to expose" begin
         # every unbound site is offered, bound ones never are
-        @test length(exposedsites(ParticleSite, dimer)) == 2 * nsites(UnitSquare) - 2
-        @test all(((p, k),) -> 1 <= p <= nparticles(dimer), exposedsites(ParticleSite, dimer))
+        @test length(exposedsites(dimer)) == 2 * nsites(UnitSquare) - 2
+        @test all(((p, k),) -> 1 <= p <= nparticles(dimer), exposedsites(dimer))
         # the open ones are the non-inert ones, and are what the default exposes, in this order
-        @test length(opensites(ParticleSite, dimer)) == length(open)
-        @test opensites(dimer) == filter(s -> !Roly.isinert(chainlike, color(s)), exposedsites(dimer))
-        @test [color(bindingsite(mp, i)) for i in 1:nsites(mp)] == [color(s) for s in opensites(dimer)]
+        @test length(opensites(dimer)) == length(open)
+        @test opensites(dimer) ==
+              filter(l -> !Roly.isinert(chainlike, color(bindingsite(dimer, l))), exposedsites(dimer))
+        @test [color(bindingsite(mp, i)) for i in 1:nsites(mp)] ==
+              [color(bindingsite(dimer, l)) for l in opensites(dimer)]
         # the two views agree site for site
-        @test exposedsites(dimer) ==
-              [bindingsite(dimer.particles[p], chainlike, k) for (p, k) in exposedsites(ParticleSite, dimer)]
+        @test [bindingsite(dimer, l) for l in exposedsites(dimer)] ==
+              [bindingsite(dimer.particles[p], chainlike, k) for (p, k) in exposedsites(dimer)]
 
         # a site that is inert inside the polyform becomes usable by being named and given a
         # colour the new rules speak
-        inert = setdiff(exposedsites(ParticleSite, dimer), opensites(ParticleSite, dimer))
+        inert = setdiff(exposedsites(dimer), opensites(dimer))
         @test !isempty(inert)
         activated = MetaParticleSpecies(dimer, inert[1:2]; colors=[1, 2])
         @test nsites(activated) == 2
@@ -80,12 +82,12 @@
               [1, 2, 3]
 
         # exposure order is the caller's
-        pair = opensites(ParticleSite, dimer)
+        pair = opensites(dimer)
         @test [color(bindingsite(MetaParticleSpecies(dimer, reverse(pair)), i)) for i in 1:2] ==
-              reverse([color(s) for s in opensites(dimer)])
+              reverse([color(bindingsite(dimer, l)) for l in opensites(dimer)])
 
         bound = [ParticleSite(p, k) for p in 1:nparticles(dimer) for k in 1:nsites(UnitSquare)
-                 if ParticleSite(p, k) ∉ Set(exposedsites(ParticleSite, dimer))]
+                 if ParticleSite(p, k) ∉ Set(exposedsites(dimer))]
         @test length(bound) == 2
         @test_throws ArgumentError MetaParticleSpecies(dimer, bound[1:1])
         @test_throws ArgumentError MetaParticleSpecies(dimer, [(1, 99)])
@@ -101,7 +103,7 @@
         sym = let strs = polygen(selfrules; maxsize=2)
             strs[findfirst(s -> nparticles(s) == 2, strs)]
         end
-        live = opensites(ParticleSite, sym)
+        live = opensites(sym)
         @test length(live) == 2
         @test symmetrynumber(MetaParticleSpecies(sym, live)) == 2
         @test symmetrynumber(MetaParticleSpecies(sym, live[1:1])) == 1
@@ -225,7 +227,7 @@
         end
         # a distinct color per exposed site, bonding only the given pairs
         function keyed(poly, pairing)
-            sites = opensites(poly)
+            sites = [bindingsite(poly, l) for l in opensites(poly)]
             ps = MetaParticleSpecies(poly; colors=1:length(sites))
             pairs = pairing(sites)
             @test sort(collect(Iterators.flatten(pairs))) == 1:length(sites)
@@ -362,7 +364,7 @@
         end
 
         # and so does exposing only one of the two
-        one = MetaParticleSpecies(sym, opensites(ParticleSite, sym)[1:1])
+        one = MetaParticleSpecies(sym, opensites(sym)[1:1])
         @test length(Roly.rotationgroup(one)) == symmetrynumber(one) == 1
     end
 

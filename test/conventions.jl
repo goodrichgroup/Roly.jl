@@ -33,8 +33,8 @@
     # The two site addresses are different types, so neither can stand in for the other.
     @test SpeciesSite(1, 2) != ParticleSite(1, 2)
     @test !isa(SpeciesSite(1, 2), ParticleSite)
-    @test_throws MethodError Roly.siteloc2color(rules, ParticleSite(1, 1))
-    @test_throws MethodError raise!(copy(dimer), first(opensites(dimer)), ParticleSite(1, 1))
+    @test_throws MethodError color(rules, ParticleSite(1, 1))
+    @test_throws MethodError raise!(copy(dimer), bindingsite(dimer, first(opensites(dimer))), ParticleSite(1, 1))
     # but each still destructures like the pair it replaced
     @test (SpeciesSite(3, 4)...,) == (3, 4)
     @test (ParticleSite(3, 4)...,) == (3, 4)
@@ -47,11 +47,10 @@
 
     # `bonds` speaks ParticleSite, the rules speak SpeciesSite
     @test eltype(collect(bonds(dimer))) == Pair{ParticleSite,ParticleSite}
-    # each accessor is named for what it returns, and the type says which view
-    @test eltype(opensites(dimer)) <: BindingSite
-    @test eltype(opensites(ParticleSite, dimer)) == ParticleSite
-    @test eltype(exposedsites(ParticleSite, dimer)) == ParticleSite
-    @test opensites(dimer) == [bindingsite(dimer, l) for l in opensites(ParticleSite, dimer)]
-    @test exposedsites(dimer) == [bindingsite(dimer, l) for l in exposedsites(ParticleSite, dimer)]
+    # the site accessors return addresses; the site itself is one index away
+    @test eltype(opensites(dimer)) == ParticleSite
+    @test eltype(exposedsites(dimer)) == ParticleSite
+    @test opensites(dimer) ⊆ exposedsites(dimer)
+    @test all(l -> bindingsite(dimer, l) isa BindingSite, exposedsites(dimer))
     @test eltype(Roly.possible_attachments(rules, 1)) == SpeciesSite
 end

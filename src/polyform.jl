@@ -494,16 +494,16 @@ function composition(p::Polyform)
 end
 
 """
-    raise!(poly::Polyform, site::BindingSite, siteloc::SpeciesSite, t=0)
+    raise!(poly::Polyform, site::BindingSite, loc::SpeciesSite, t=0)
 
-Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`,
+Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `loc`,
 in twist `t` of the bond (see [`standard_twist`](@ref)).
 
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
-function raise!(poly::Polyform, site::BindingSite, siteloc::SpeciesSite, t::Integer=0; kwargs...)
+function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSite, t::Integer=0; kwargs...)
     rules = bindingrules(poly)
-    speciesindex, siteindex = siteloc
+    speciesindex, siteindex = loc
     particle_species = species(rules, speciesindex)
     leadingvertex = nv(graphrep(poly)) + 1
     mate = bindingsite(particle_species, siteindex)
@@ -696,44 +696,33 @@ end
 
 """
     exposedsites(poly::Polyform)
-    exposedsites(T, poly::Polyform)
 
-Every *unbound* binding site of `poly`, in canonical order.
+The [`ParticleSite`](@ref) of every *unbound* binding site of `poly`, in canonical order.
 
 Bound sites are consumed by the bonds holding `poly` together and are never listed. Sites whose
 color takes part in no rule are listed, even though nothing can attach through them as `poly`
 stands; [`opensites`](@ref) is this list without them.
 
-`T` picks the view: `BindingSite`, the default, for the sites themselves, and
-[`ParticleSite`](@ref) for the addresses that name them.
+Addresses rather than the sites themselves, since `bindingsite(poly, loc)` gets the site from
+the address but nothing gets the address back from a site.
 
 These are the sites a [`MetaParticleSpecies`](@ref) may expose. It exposes the open ones by
 default, and an inert one becomes usable simply by being named and given a live color.
 """
-exposedsites(::Type{ParticleSite}, poly::Polyform) = [l for (l, _) in _exposed(poly)]
-exposedsites(::Type{BindingSite}, poly::Polyform) = [s for (_, s) in _exposed(poly)]
-exposedsites(poly::Polyform) = exposedsites(BindingSite, poly)
+exposedsites(poly::Polyform) = [l for (l, _) in _exposed(poly)]
 
 """
     opensites(poly::Polyform)
-    opensites(T, poly::Polyform)
 
-Every binding site of `poly` a partner can still attach through: the unbound ones whose color
-some rule uses, in canonical order.
+The [`ParticleSite`](@ref) of every binding site of `poly` a partner can still attach through:
+the unbound ones whose color some rule uses, in canonical order.
 
-`T` picks the view, as for [`exposedsites`](@ref), which lists the inert ones too.
+See [`exposedsites`](@ref), which lists the inert ones too.
 """
-function opensites(::Type{ParticleSite}, poly::Polyform)
+function opensites(poly::Polyform)
     rules = bindingrules(poly)
     return [l for (l, s) in _exposed(poly) if !isinert(rules, color(s))]
 end
-
-function opensites(::Type{BindingSite}, poly::Polyform)
-    rules = bindingrules(poly)
-    return [s for (_, s) in _exposed(poly) if !isinert(rules, color(s))]
-end
-
-opensites(poly::Polyform) = opensites(BindingSite, poly)
 
 """
     _deletable_species(poly; target, dist, queue)
@@ -772,7 +761,7 @@ end
     collect_attachments!(attachments, poly::Polyform)
 
 Fill `attachments` with every way of growing `poly` by one particle, as triples
-`(site, siteloc, t)`: an open binding site of `poly`, the species and site index of the
+`(site, loc, t)`: an open binding site of `poly`, the species and site index of the
 particle to attach, and which of the bond's distinct twists to attach it in.
 
 Two filters keep the list down to what reverse search can use. Only one partner site per
@@ -806,13 +795,13 @@ function collect_attachments!(attachments, poly::Polyform)
             _isbound_vertex(poly, anchor, first(site.vertices); canonidxs=false) && continue
             isinert(rules, color(site)) && continue
 
-            for siteloc in distinct_attachments(rules, color(site))
+            for loc in distinct_attachments(rules, color(site))
                 # The new particle is always removable, so `lower!` stops at its label class
                 # unless a higher one survives.
-                siteloc.species < deletable && continue
-                mate = bindingsite(rules, siteloc)
+                loc.species < deletable && continue
+                mate = bindingsite(rules, loc)
                 for t in 0:(_ndistincttwists(site, mate) - 1)
-                    push!(attachments, (site, siteloc, t))
+                    push!(attachments, (site, loc, t))
                 end
             end
         end

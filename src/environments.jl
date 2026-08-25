@@ -269,8 +269,8 @@ function _collectballpairs!(aux::EnvironmentEnumAux, poly::Polyform)
             site = bindingsite(part, rules, k)
             _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
             isinert(rules, color(site)) && continue
-            for siteloc in possible_attachments(rules, color(site))
-                push!(aux.pairs, (site, siteloc))
+            for loc in possible_attachments(rules, color(site))
+                push!(aux.pairs, (site, loc))
             end
         end
     end
@@ -288,9 +288,9 @@ function _adjenv!(u::EnvironmentState, v::EnvironmentState, j::Integer, aux::Env
     j == 1 && _collectballpairs!(aux, v.poly)
     j > length(aux.pairs) && return nothing
 
-    site, siteloc = aux.pairs[j]
+    site, loc = aux.pairs[j]
     copy!(u.poly, v.poly)
-    ismissing(raise!(u.poly, site, siteloc)) && return missing
+    ismissing(raise!(u.poly, site, loc)) && return missing
     _rekey!(u)
     u.key in aux.seen && return missing
     push!(aux.seen, copy(u.key))

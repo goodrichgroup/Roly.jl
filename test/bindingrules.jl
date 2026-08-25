@@ -1,11 +1,11 @@
 using Roly: nspecies, nbonds, nsites, dimension, species,
             interactionmatrix, bonded_colors, bonded_sites, bonded_species,
-            siteloc2color, color2siteloc, color2species, isinert, possible_attachments
+            sitesofcolor, speciesofcolor, isinert, possible_attachments
 
 using Roly: PolygonParticleSpecies, PolyhedronParticleSpecies, PatchyDisk, Cube, Prism,
             Tetrahedron, Polyhedron, facenormal, nfaces
 
-using Roly: possible_attachments, distinct_attachments, siteloc2color, collect_attachments,
+using Roly: possible_attachments, distinct_attachments, collect_attachments,
             raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
             Cube, Prism, nfaces, color, bindingsites
 
@@ -37,11 +37,11 @@ using StaticArrays: SVector
     @test length(bsp) == 2
     @test all(==((1, 1)), bsp)
 
-    c1 = siteloc2color(rules, SpeciesSite(1, 1))
-    c3 = siteloc2color(rules, SpeciesSite(1, 3))
+    c1 = color(rules, SpeciesSite(1, 1))
+    c3 = color(rules, SpeciesSite(1, 3))
     @test imat[c1, c3]
-    @test color2siteloc(rules, c1) == [SpeciesSite(1, 1)]
-    @test color2species(rules, c1) == 1
+    @test sitesofcolor(rules, c1) == [SpeciesSite(1, 1)]
+    @test speciesofcolor(rules, c1) == 1
 
     @test !isinert(rules, c1)
     @test !isinert(rules, SpeciesSite(1, 1))
@@ -50,7 +50,7 @@ using StaticArrays: SVector
     @test possible_attachments(rules, c3) == [SpeciesSite(1, 1)]
 
     sys1bond = BindingRules([1 1 1 3], UnitSquare)
-    c2 = siteloc2color(sys1bond, SpeciesSite(1, 2))
+    c2 = color(sys1bond, SpeciesSite(1, 2))
     @test isinert(sys1bond, c2)
     @test isinert(sys1bond, SpeciesSite(1, 2))
 
@@ -153,11 +153,11 @@ using StaticArrays: SVector
                 site = bindingsite(part, rules, k)
                 Roly._isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
                 Roly.isinert(rules, color(site)) && continue
-                for siteloc in sitesof(rules, color(site))
-                    mate = bindingsite(Roly.species(rules, siteloc.species), siteloc.site)
+                for loc in sitesof(rules, color(site))
+                    mate = bindingsite(Roly.species(rules, loc.species), loc.site)
                     for r in 0:(Roly._ndistincttwists(site, mate) - 1)
                         trial = copy(poly)
-                        ismissing(raise!(trial, site, siteloc, r)) && continue
+                        ismissing(raise!(trial, site, loc, r)) && continue
                         push!(out, copy(graphrep(trial)))
                     end
                 end
