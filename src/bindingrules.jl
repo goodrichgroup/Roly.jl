@@ -1,9 +1,25 @@
 """
-    BindingSiteLoc
+    SpeciesSite(species, site)
 
-Indicates the location of a binding site in the format `(speciesindex, siteindex)`.
+Which binding site of which particle species: the address a set of [`BindingRules`](@ref) speaks
+in, fixed when the rules are written.
+
+Distinct from [`ParticleSite`](@ref), which names a site of one particle inside a
+[`Polyform`](@ref). Both were `NTuple{2,Int}` once, so nothing stopped handing one to a function
+expecting the other.
+
+Iterates and indexes like the pair it replaces, so `(s, k) = siteloc` still works.
 """
-const BindingSiteLoc = NTuple{2,Int}
+struct SpeciesSite
+    species::Int
+    site::Int
+end
+
+Base.iterate(l::SpeciesSite, i::Int=1) = i > 2 ? nothing : (getfield(l, i), i + 1)
+Base.length(::SpeciesSite) = 2
+Base.getindex(l::SpeciesSite, i::Integer) = getfield(l, Int(i))
+Base.show(io::Core.IO, l::SpeciesSite) = print(io, "SpeciesSite(", l.species, ", ", l.site, ")")
+Base.isless(a::SpeciesSite, b::SpeciesSite) = (a.species, a.site) < (b.species, b.site)
 
 """
     BindingRules(bonds, particlespecies)
@@ -20,13 +36,13 @@ struct BindingRules{D,PS<:ParticleSpecies}
     nbonds::Int
     nsites::Int
     ncolors::Int
-    _color2siteloc::Dict{Int,Vector{BindingSiteLoc}}
-    _siteloc2color::Dict{BindingSiteLoc,Int}
+    _color2siteloc::Dict{Int,Vector{SpeciesSite}}
+    _siteloc2color::Dict{SpeciesSite,Int}
     _bondlist::Vector{NTuple{2,Int}}
-    _bonded_sites::Vector{NTuple{2,Vector{BindingSiteLoc}}}
+    _bonded_sites::Vector{NTuple{2,Vector{SpeciesSite}}}
     _bonded_species::Vector{NTuple{2,Int}}
-    _possible_attachments::Vector{Vector{BindingSiteLoc}}
-    _distinct_attachments::Vector{Vector{BindingSiteLoc}}
+    _possible_attachments::Vector{Vector{SpeciesSite}}
+    _distinct_attachments::Vector{Vector{SpeciesSite}}
     _isinert::BitVector
     _onlattice::Bool
 end
@@ -62,7 +78,7 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
 
-    possible = [Vector{BindingSiteLoc}() for _ in 1:ncolors]
+    possible = [Vector{SpeciesSite}() for _ in 1:ncolors]
     for c in 1:ncolors
         for c2 in 1:ncolors
             intmat[c2, c] && append!(possible[c], color2siteloc[c2])
@@ -228,11 +244,11 @@ of the assembly system `rules`.
 end
 
 """
-    siteloc2color(rules::BindingRules, siteloc::BindingSiteLoc)
+    siteloc2color(rules::BindingRules, siteloc::SpeciesSite)
 
 Return the binding site color associated with the binding site location `siteloc`.
 """
-@inline function siteloc2color(rules::BindingRules, siteloc::BindingSiteLoc)
+@inline function siteloc2color(rules::BindingRules, siteloc::SpeciesSite)
     return rules._siteloc2color[siteloc]
 end
 
@@ -263,14 +279,14 @@ sit on the same species and carry the same graph label, only the first survives.
 This rests on a shared label meaning the sites really are interchangeable, which is what
 [`_check_labeling`](@ref) enforces: a labeling has to be exactly the symmetry orbits.
 """
-function _first_per_orbit(particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{BindingSiteLoc})
-    reps = BindingSiteLoc[]
+function _first_per_orbit(particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{SpeciesSite})
+    reps = SpeciesSite[]
     seen = Set{Tuple{Int,Int}}()
     for (spc, k) in sitelocs
         orbit = (spc, sitelabel(particlespecies[spc], k))
         orbit in seen && continue
         push!(seen, orbit)
-        push!(reps, (spc, k))
+        push!(reps, SpeciesSite(spc, k))
     end
     return reps
 end
@@ -286,11 +302,11 @@ ones that lead to distinguishable structures.
 @inline distinct_attachments(rules::BindingRules, color::Integer) = rules._distinct_attachments[color]
 
 """
-    isinert(rules::BindingRules, siteloc::BindingSiteLoc)
+    isinert(rules::BindingRules, siteloc::SpeciesSite)
 
 Return `true` if the binding site at `siteloc` does not bind to any binding sites.
 """
-@inline function isinert(rules::BindingRules, siteloc::BindingSiteLoc)
+@inline function isinert(rules::BindingRules, siteloc::SpeciesSite)
     color = siteloc2color(rules, siteloc)
     return isinert(rules, color)
 end
@@ -389,15 +405,15 @@ function _adjust_labels_and_colors(particlespecies::AbstractVector{PS}) where {P
 end
 
 function _make_bindingsite_lookuptables(particlespecies::AbstractVector{<:ParticleSpecies})
-    color2siteloc = Dict{Int,Vector{BindingSiteLoc}}()
-    siteloc2color = Dict{BindingSiteLoc,Int}()
+    color2siteloc = Dict{Int,Vector{SpeciesSite}}()
+    siteloc2color = Dict{SpeciesSite,Int}()
 
     for (spcs, ps) in enumerate(particlespecies)
         for si in 1:nsites(ps)
             site = bindingsite(ps, si)
             c = color(site)
-            spcssite = (spcs, si)
-            push!(get!(color2siteloc, c, BindingSiteLoc[]), spcssite)
+            spcssite = SpeciesSite(spcs, si)
+            push!(get!(color2siteloc, c, SpeciesSite[]), spcssite)
             siteloc2color[spcssite] = c
         end
     end
@@ -422,8 +438,8 @@ function _intmat_from_bonds(bonds, siteloc2color, ncolors)
     intmat = zeros(Bool, ncolors, ncolors)
     for bond in bonds
         spcs1, site1, spcs2, site2 = bond
-        c1 = siteloc2color[(spcs1, site1)]
-        c2 = siteloc2color[(spcs2, site2)]
+        c1 = siteloc2color[SpeciesSite(spcs1, site1)]
+        c2 = siteloc2color[SpeciesSite(spcs2, site2)]
         intmat[c1, c2] = intmat[c2, c1] = true
     end
     return Symmetric(intmat)

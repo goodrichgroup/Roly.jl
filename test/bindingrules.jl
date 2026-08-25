@@ -37,22 +37,22 @@ using StaticArrays: SVector
     @test length(bsp) == 2
     @test all(==((1, 1)), bsp)
 
-    c1 = siteloc2color(rules, (1, 1))
-    c3 = siteloc2color(rules, (1, 3))
+    c1 = siteloc2color(rules, SpeciesSite(1, 1))
+    c3 = siteloc2color(rules, SpeciesSite(1, 3))
     @test imat[c1, c3]
-    @test color2siteloc(rules, c1) == [(1, 1)]
+    @test color2siteloc(rules, c1) == [SpeciesSite(1, 1)]
     @test color2species(rules, c1) == 1
 
     @test !isinert(rules, c1)
-    @test !isinert(rules, (1, 1))
+    @test !isinert(rules, SpeciesSite(1, 1))
 
-    @test possible_attachments(rules, c1) == [(1, 3)]
-    @test possible_attachments(rules, c3) == [(1, 1)]
+    @test possible_attachments(rules, c1) == [SpeciesSite(1, 3)]
+    @test possible_attachments(rules, c3) == [SpeciesSite(1, 1)]
 
     sys1bond = BindingRules([1 1 1 3], UnitSquare)
-    c2 = siteloc2color(sys1bond, (1, 2))
+    c2 = siteloc2color(sys1bond, SpeciesSite(1, 2))
     @test isinert(sys1bond, c2)
-    @test isinert(sys1bond, (1, 2))
+    @test isinert(sys1bond, SpeciesSite(1, 2))
 
     io = IOBuffer()
     show(io, rules)
@@ -154,7 +154,7 @@ using StaticArrays: SVector
                 Roly._isbound_vertex(poly, part, first(site.vertices)) && continue
                 Roly.isinert(rules, color(site)) && continue
                 for siteloc in sitelocs_of(rules, color(site))
-                    mate = bindingsite(Roly.species(rules, siteloc[1]), siteloc[2])
+                    mate = bindingsite(Roly.species(rules, siteloc.species), siteloc.site)
                     for r in 0:(Roly._ndistincttwists(site, mate) - 1)
                         trial = copy(poly)
                         ismissing(raise!(trial, site, siteloc, r)) && continue

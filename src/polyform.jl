@@ -59,6 +59,28 @@ Base.show(io::Core.IO, ::Type{Polyform{D}}) where {D} = print(io, "Polyform{$D}"
 Base.:(==)(p1::Polyform, p2::Polyform) = bindingrules(p1) === bindingrules(p2) && graphrep(p1) == graphrep(p2)
 
 """
+    ParticleSite(particle, site)
+
+Which binding site of which particle inside a [`Polyform`](@ref): where a site actually is in an
+assembled structure.
+
+Distinct from [`SpeciesSite`](@ref), which names a site of a *species* and is what a set of
+[`BindingRules`](@ref) speaks in. Both were `NTuple{2,Int}` once.
+
+Iterates and indexes like the pair it replaces, so `(p, k) = ps` still works.
+"""
+struct ParticleSite
+    particle::Int
+    site::Int
+end
+
+Base.iterate(l::ParticleSite, i::Int=1) = i > 2 ? nothing : (getfield(l, i), i + 1)
+Base.length(::ParticleSite) = 2
+Base.getindex(l::ParticleSite, i::Integer) = getfield(l, Int(i))
+Base.show(io::Core.IO, l::ParticleSite) = print(io, "ParticleSite(", l.particle, ", ", l.site, ")")
+Base.isless(a::ParticleSite, b::ParticleSite) = (a.particle, a.site) < (b.particle, b.site)
+
+"""
     nparticles(p::Polyform)
 
 Return the number of particles in `p`.
@@ -220,7 +242,7 @@ function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool=true)
     for (i, part) in enumerate(p.particles)
         orig_v in graphvertices(part, rules) || continue
         for j in 1:nsites(part, rules)
-            orig_v in bindingsite(part, rules, j).vertices && return (i, j)
+            orig_v in bindingsite(part, rules, j).vertices && return ParticleSite(i, j)
         end
     end
     return nothing
@@ -406,7 +428,7 @@ vertices, so a bond between two dart-encoded faces reaches `graphrep(p)` as seve
 sites are joined by at most one bond, so the pair of sites an edge lands on names the bond.
 """
 function _bondedges(p::Polyform)
-    seen = Set{NTuple{2,NTuple{2,Int}}}()
+    seen = Set{NTuple{2,ParticleSite}}()
     return filter(collect(exterior_edges(p))) do (; src, dst)
         key = minmax(_vertex_to_particle_site(p, src), _vertex_to_particle_site(p, dst))
         key in seen && return false
@@ -418,20 +440,12 @@ end
 """
     bonds(p::Polyform)
 
-Return a lazy iterator of bonds in `p`, each one once. Each element has the form
-
-    (particle=i, site=j) => (particle=k, site=l)
-
-where `i`, `k` are indices into `p.particles` and `j`, `l` are site indices
-within those particles.
+Return a lazy iterator of bonds in `p`, each one once, as [`ParticleSite`](@ref) pairs.
 """
 function bonds(p::Polyform)
     return (
-        let (lhs, rhs) = minmax(_vertex_to_particle_site(p, e.src), _vertex_to_particle_site(p, e.dst)),
-            (p1, s1) = lhs,
-            (p2, s2) = rhs
-
-            (particle=p1, site=s1) => (particle=p2, site=s2)
+        let (lhs, rhs) = minmax(_vertex_to_particle_site(p, e.src), _vertex_to_particle_site(p, e.dst))
+            lhs => rhs
         end for e in _bondedges(p)
     )
 end
@@ -470,14 +484,14 @@ function composition(p::Polyform)
 end
 
 """
-    raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t=0)
+    raise!(poly::Polyform, site::BindingSite, siteloc::SpeciesSite, t=0)
 
 Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `siteloc`,
 in twist `t` of the bond (see [`standard_twist`](@ref)).
 
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
-function raise!(poly::Polyform, site::BindingSite, siteloc::BindingSiteLoc, t::Integer=0; kwargs...)
+function raise!(poly::Polyform, site::BindingSite, siteloc::SpeciesSite, t::Integer=0; kwargs...)
     rules = bindingrules(poly)
     speciesindex, siteindex = siteloc
     particle_species = species(rules, speciesindex)
@@ -657,14 +671,14 @@ end
 function _exposed(poly::Polyform)
     rules = bindingrules(poly)
     index = Dict(leadingvertex(p) => i for (i, p) in enumerate(poly.particles))
-    out = Tuple{NTuple{2,Int},BindingSite{posetype(rules),numtype(rules)}}[]
+    out = Tuple{ParticleSite,BindingSite{posetype(rules),numtype(rules)}}[]
     for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
         for k in 1:nsites(part, rules)
             s = bindingsite(part, rules, k)
             _isbound_vertex(poly, part, first(s.vertices); canonidxs=false) && continue
-            push!(out, ((index[leadingvertex(part)], k), s))
+            push!(out, (ParticleSite(index[leadingvertex(part)], k), s))
         end
     end
     return out
@@ -673,7 +687,7 @@ end
 """
     exposedsitelocs(poly::Polyform)
 
-The `(particle, site)` location of every *unbound* binding site of `poly`, in canonical order.
+The [`ParticleSite`](@ref) of every *unbound* binding site of `poly`, in canonical order.
 
 Bound sites are consumed by the bonds holding `poly` together and are never listed. Sites whose
 color takes part in no rule are listed, even though nothing can attach through them as `poly`
@@ -682,7 +696,6 @@ stands; [`opensitelocs`](@ref) is this list without them.
 These are the sites a [`MetaParticleSpecies`](@ref) may expose. It exposes the open ones by
 default, and an inert one becomes usable simply by being named and given a live color.
 
-A location here is `(particle, site)`, not the `(species, site)` of [`BindingSiteLoc`](@ref).
 """
 exposedsitelocs(poly::Polyform) = [l for (l, _) in _exposed(poly)]
 
@@ -696,8 +709,8 @@ exposedsites(poly::Polyform) = [s for (_, s) in _exposed(poly)]
 """
     opensitelocs(poly::Polyform)
 
-The `(particle, site)` location of every binding site of `poly` a partner can still attach
-through: the unbound ones whose color some rule uses, in canonical order.
+The [`ParticleSite`](@ref) of every binding site of `poly` a partner can still attach through:
+the unbound ones whose color some rule uses, in canonical order.
 
 See [`exposedsitelocs`](@ref), which lists the inert ones too.
 """
@@ -791,8 +804,8 @@ function collect_attachments!(attachments, poly::Polyform)
             for siteloc in distinct_attachments(rules, color(site))
                 # The new particle is always removable, so `lower!` stops at its label class
                 # unless a higher one survives.
-                siteloc[1] < deletable && continue
-                mate = bindingsite(species(rules, siteloc[1]), siteloc[2])
+                siteloc.species < deletable && continue
+                mate = bindingsite(species(rules, siteloc.species), siteloc.site)
                 for t in 0:(_ndistincttwists(site, mate) - 1)
                     push!(attachments, (site, siteloc, t))
                 end
@@ -811,5 +824,5 @@ See [`collect_attachments!`](@ref).
 function collect_attachments(poly::Polyform)
     rules = bindingrules(poly)
     BS = BindingSite{posetype(rules),numtype(rules)}
-    return collect_attachments!(Tuple{BS,BindingSiteLoc,Int}[], poly)
+    return collect_attachments!(Tuple{BS,SpeciesSite,Int}[], poly)
 end

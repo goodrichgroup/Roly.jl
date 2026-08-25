@@ -69,7 +69,7 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
         part = poly.particles[p]
         1 <= k <= nsites(part, rules) ||
             throw(ArgumentError("particle $p has $(nsites(part, rules)) sites, so ($p, $k) is out of range"))
-        (p, k) in exposable || throw(
+        ParticleSite(p, k) in exposable || throw(
             ArgumentError(
                 "site ($p, $k) is bound inside the polyform; a bond already consumes it, so it cannot be exposed",
             ),

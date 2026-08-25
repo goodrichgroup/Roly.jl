@@ -84,8 +84,8 @@
         @test [color(bindingsite(MetaParticleSpecies(dimer, reverse(pair)), i)) for i in 1:2] ==
               reverse([color(s) for s in opensites(dimer)])
 
-        bound = [(p, k) for p in 1:nparticles(dimer) for k in 1:nsites(UnitSquare)
-                 if (p, k) ∉ Set(exposedsitelocs(dimer))]
+        bound = [ParticleSite(p, k) for p in 1:nparticles(dimer) for k in 1:nsites(UnitSquare)
+                 if ParticleSite(p, k) ∉ Set(exposedsitelocs(dimer))]
         @test length(bound) == 2
         @test_throws ArgumentError MetaParticleSpecies(dimer, bound[1:1])
         @test_throws ArgumentError MetaParticleSpecies(dimer, [(1, 99)])

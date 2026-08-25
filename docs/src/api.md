@@ -131,6 +131,7 @@ PatchySphere
 
 ```@docs
 BindingRules
+SpeciesSite
 interactionmatrix
 nspecies
 nbonds
@@ -146,6 +147,7 @@ isinert
 
 ```@docs
 Polyform
+ParticleSite
 nparticles
 bindingrules
 composition

@@ -276,7 +276,7 @@ function _walkchain(poly::Polyform, states, maxlength)
         _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
         isinert(rules, color(site)) && continue
         for siteloc in possible_attachments(rules, color(site))
-            mate = bindingsite(species(rules, siteloc[1]), siteloc[2])
+            mate = bindingsite(species(rules, siteloc.species), siteloc.site)
             for r in 0:(_ndistincttwists(site, mate)-1)
                 child = copy(poly)
                 ismissing(raise!(child, site, siteloc, r)) && continue
@@ -285,7 +285,7 @@ function _walkchain(poly::Polyform, states, maxlength)
                 # insists that one particle was added, and always extends the newest
                 nparticles(child) == n + 1 || continue
 
-                state = (siteloc[1], siteloc[2], Int(r))
+                state = (siteloc.species, siteloc.site, Int(r))
                 j = findlast(==(state), states)
                 if j !== nothing
                     w = _screwwitness(child, j, n + 1)
@@ -361,7 +361,7 @@ function chainstatebound(rules::BindingRules)
             site = bindingsite(ps, k)
             phases = 1
             for loc in possible_attachments(rules, color(site))
-                mate = bindingsite(species(rules, loc[1]), loc[2])
+                mate = bindingsite(species(rules, loc.species), loc.site)
                 phases = max(phases, _ndistincttwists(mate, site))
             end
             total += phases
@@ -390,7 +390,7 @@ function _extendends(poly::Polyform)
             _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
             isinert(rules, color(site)) && continue
             for siteloc in possible_attachments(rules, color(site))
-                mate = bindingsite(species(rules, siteloc[1]), siteloc[2])
+                mate = bindingsite(species(rules, siteloc.species), siteloc.site)
                 for r in 0:(_ndistincttwists(site, mate)-1)
                     child = copy(poly)
                     ismissing(raise!(child, site, siteloc, r)) && continue
