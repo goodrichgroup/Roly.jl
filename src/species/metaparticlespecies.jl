@@ -5,7 +5,7 @@ A `Polyform` wrapped as a `ParticleSpecies`, so that meta-assemblies can be buil
 polyforms.
 
 Chosen unbound sites of the polyform become the species' sites. By default these are every one that is not
-inert, and otherwise exactly those named, see [`exposablesites`](@ref). Geometry is delegated: two
+inert, and otherwise exactly those named, see [`exposedsitelocs`](@ref). Geometry is delegated: two
 meta-particles overlap exactly when any of their constituent particles do.
 
 Meta-species describe *meta*-assembly systems, whose `BindingRules` say how meta-particles
@@ -38,34 +38,12 @@ struct MetaParticleSpecies{D,F,B<:BindingSite,G<:AbstractNautyGraph,PF} <: Parti
 end
 
 """
-    exposablesites(poly::Polyform)
-
-Every unbound binding site of `poly`, as rows of `(particle, site, color, inert)`.
-"""
-function exposablesites(poly::Polyform)
-    rules = bindingrules(poly)
-    index = Dict(leadingvertex(p) => i for (i, p) in enumerate(poly.particles))
-    rows = @NamedTuple{particle::Int, site::Int, color::Int, inert::Bool}[]
-    # iterate through binding sites and push them if unbound
-    for orig_v in poly.canon2orig
-        part = particle_from_leadingvertex(poly, orig_v)
-        isnothing(part) && continue
-        for k in 1:nsites(part, rules)
-            s = bindingsite(part, rules, k)
-            _isbound_vertex(poly, part, first(s.vertices); canonidxs=false) && continue
-            push!(rows, (particle=index[leadingvertex(part)], site=k, color=color(s), inert=isinert(rules, color(s))))
-        end
-    end
-    return rows
-end
-
-"""
     MetaParticleSpecies(poly::Polyform; colors=nothing)
     MetaParticleSpecies(poly::Polyform, sites; colors=nothing)
 
 Wrap `poly` as a particle species whose sites are the ones named by `sites`, given as `(particle, site)`
 pairs and exposed in that order. Without them every unbound, non-inert site is exposed, in
-[`exposablesites`](@ref) order.
+[`exposedsitelocs`](@ref) order.
 
   - `colors`: one interaction color per exposed site; by default each keeps the color it has
     inside `poly`
@@ -74,7 +52,7 @@ Each site's `sitesym` and `locking` carry over from the polyform, while its `sta
 against the polyform by [`siteorbits`](@ref) and [`stabilizerorders`](@ref).
 """
 function MetaParticleSpecies(poly::Polyform; colors=nothing)
-    MetaParticleSpecies(poly, [(r.particle, r.site) for r in exposablesites(poly) if !r.inert]; colors)
+    MetaParticleSpecies(poly, opensitelocs(poly); colors)
 end
 
 function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
@@ -84,7 +62,7 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     n > 0 || throw(ArgumentError("a meta-species needs at least one exposed site"))
     allunique(picks) || throw(ArgumentError("`sites` names the same site twice"))
 
-    exposable = Set((r.particle, r.site) for r in exposablesites(poly))
+    exposable = Set(exposedsitelocs(poly))
     open = map(picks) do (p, k)
         1 <= p <= nparticles(poly) ||
             throw(ArgumentError("`poly` has $(nparticles(poly)) particles, so ($p, $k) is out of range"))
@@ -325,11 +303,11 @@ function metabonds(meta::Polyform)
 end
 
 """
-    exposedsites(meta::Polyform)
+    unwrappedsites(meta::Polyform)
 
 Every site the copies of a meta-polyform expose, in [`unwrap`](@ref)'s numbering.
 
 Includes the ones the meta-polyform's own bonds consume, since a cell built from it needs both
 what it offers and what it has already spent; [`metabonds`](@ref) names the spent ones.
 """
-exposedsites(meta::Polyform) = last(_unwrapparts(meta))
+unwrappedsites(meta::Polyform) = last(_unwrapparts(meta))

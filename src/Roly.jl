@@ -28,6 +28,7 @@ export ncolors, nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, i
 # Polyforms
 export Polyform, nparticles, bindingrules, composition
 export bonds, bondindex, interior_edges, exterior_edges, subpolyform
+export exposedsitelocs, exposedsites, opensitelocs, opensites
 public canonbindingsite, canonbindingsites, rotationcenter
 
 # Environments
@@ -46,7 +47,7 @@ export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
-export MetaParticleSpecies, polyform, exposablesites, metarules, unwrap, metabonds, exposedsites
+export MetaParticleSpecies, polyform, metarules, unwrap, metabonds, unwrappedsites
 
 # Public, but not exported: reach for these as `Roly.faces(p)`, or import them by name.
 # They are stable API, but specific enough to a body, an encoding or a species that putting

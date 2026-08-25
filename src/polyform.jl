@@ -652,26 +652,69 @@ function overlap_and_contacts(poly::Polyform, part::Particle; kwargs...)
     return _overlap_and_contacts(poly.particles, part, bindingrules(poly); kwargs...)
 end
 
-function collect_open_bindingsites!(sites, poly::Polyform)
+# Walk the unbound binding sites of `poly` in canonical order, yielding each one's
+# `(particle, site)` location together with the site itself. The four accessors below project it.
+function _exposed(poly::Polyform)
     rules = bindingrules(poly)
-    empty!(sites)
+    index = Dict(leadingvertex(p) => i for (i, p) in enumerate(poly.particles))
+    out = Tuple{NTuple{2,Int},BindingSite{posetype(rules),numtype(rules)}}[]
     for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
         for k in 1:nsites(part, rules)
-            site = bindingsite(part, rules, k)
-            _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
-            isinert(rules, color(site)) && continue
-            push!(sites, site)
+            s = bindingsite(part, rules, k)
+            _isbound_vertex(poly, part, first(s.vertices); canonidxs=false) && continue
+            push!(out, ((index[leadingvertex(part)], k), s))
         end
     end
-    return sites
+    return out
 end
 
-function collect_open_bindingsites(poly::Polyform)
+"""
+    exposedsitelocs(poly::Polyform)
+
+The `(particle, site)` location of every *unbound* binding site of `poly`, in canonical order.
+
+Bound sites are consumed by the bonds holding `poly` together and are never listed. Sites whose
+color takes part in no rule are listed, even though nothing can attach through them as `poly`
+stands; [`opensitelocs`](@ref) is this list without them.
+
+These are the sites a [`MetaParticleSpecies`](@ref) may expose. It exposes the open ones by
+default, and an inert one becomes usable simply by being named and given a live color.
+
+A location here is `(particle, site)`, not the `(species, site)` of [`BindingSiteLoc`](@ref).
+"""
+exposedsitelocs(poly::Polyform) = [l for (l, _) in _exposed(poly)]
+
+"""
+    exposedsites(poly::Polyform)
+
+Every unbound binding site of `poly`, in canonical order. See [`exposedsitelocs`](@ref).
+"""
+exposedsites(poly::Polyform) = [s for (_, s) in _exposed(poly)]
+
+"""
+    opensitelocs(poly::Polyform)
+
+The `(particle, site)` location of every binding site of `poly` a partner can still attach
+through: the unbound ones whose color some rule uses, in canonical order.
+
+See [`exposedsitelocs`](@ref), which lists the inert ones too.
+"""
+function opensitelocs(poly::Polyform)
     rules = bindingrules(poly)
-    sites = BindingSite{posetype(rules),numtype(rules)}[]
-    return collect_open_bindingsites!(sites, poly)
+    return [l for (l, s) in _exposed(poly) if !isinert(rules, color(s))]
+end
+
+"""
+    opensites(poly::Polyform)
+
+Every binding site of `poly` a partner can still attach through, in canonical order. See
+[`opensitelocs`](@ref).
+"""
+function opensites(poly::Polyform)
+    rules = bindingrules(poly)
+    return [s for (_, s) in _exposed(poly) if !isinert(rules, color(s))]
 end
 
 """

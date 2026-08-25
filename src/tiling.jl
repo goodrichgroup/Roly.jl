@@ -129,7 +129,7 @@ end
 # machinery can build, laid back out as plain particles. `maxorder == 1` needs no special case,
 # since the meta-monomer is `poly` itself.
 function _tilecells(poly::Polyform, maxorder::Integer)
-    inner = collect_open_bindingsites(poly)
+    inner = opensites(poly)
     cells = TileCell{eltype(poly.particles),eltype(inner)}[]
     # With no open site there is nothing for a translate to bond to, and no meta-species to build.
     isempty(inner) && return cells
@@ -419,10 +419,10 @@ end
 
 # Translations that lay an open site onto a compatible, already-aligned partner site. Both signs
 # appear (the site pair swaps), so the shell search only needs non-negative coefficients.
-function _candidatelatticevectors(opensites, rules)
+function _candidatelatticevectors(sites, rules)
     intmat = interactionmatrix(rules)
-    vecs = typeof(first(opensites).pose.x)[]
-    for s1 in opensites, s2 in opensites
+    vecs = typeof(first(sites).pose.x)[]
+    for s1 in sites, s2 in sites
         intmat[color(s1), color(s2)] || continue
         isaligned(s1, s2) || continue
         v = s1.pose.x - s2.pose.x
