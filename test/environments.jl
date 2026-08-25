@@ -38,7 +38,7 @@
     @test nv(envend.graph) == 8
     @test nv(ParticleEnvironment(trimer, end1; depth=2).graph) == 12
 
-    # the same ball reached from a different cluster gives the same class: in the trimer the ball
+    # the same ball reached from a different polyform gives the same class: in the trimer the ball
     # around the species-1 end is the 1-2 dimer with the onward site unresolved, which is the same
     # marked graph as the standalone dimer with that site unbound
     dimer12 = chainstrs[findfirst(s -> composition(s)[1:3] == [1, 1, 0], chainstrs)]
@@ -86,7 +86,7 @@
     @test all(reverse(reverse(b)) == b for b in bes)
     @test bes[1] != bes[2]   # the two chain bonds join different species pairs
 
-    # crop of the full cluster agrees with the crop of the containing particle environment
+    # crop of the full polyform agrees with the crop of the containing particle environment
     b = first(Iterators.filter(b -> mid in (b.first.particle, b.second.particle), bonds(trimer)))
     direct = BondEnvironment(trimer, b; depth=0)
     @test direct in bes || reverse(direct) in bes
@@ -99,13 +99,13 @@
 
     @test_throws ArgumentError bondenvironments(ParticleEnvironment(trimer, mid; depth=0))
 
-    # hierarchy closure: every cluster of the dimer system has radius <= 1, so depth 2 adds nothing
+    # hierarchy closure: every polyform of the dimer system has radius <= 1, so depth 2 adds nothing
     e1 = Set(particleenvironments(dimerrules; depth=1))
     e2 = particleenvironments(dimerrules; depth=2)
     @test length(e2) == 4
     @test Set(PolyformEnvironment(e.graph, e.rootvertices, 1, e.rules) for e in e2) == e1
 
-    # crop reproduces direct extraction at the smaller radius, on every root of every cluster
+    # crop reproduces direct extraction at the smaller radius, on every root of every polyform
     for s in polygen(chainrules; maxsize=5), p in 1:nparticles(s)
         env2 = ParticleEnvironment(s, p; depth=2)
         @test crop(env2, 1) == ParticleEnvironment(s, p; depth=1)

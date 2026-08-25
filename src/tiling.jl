@@ -182,7 +182,7 @@ closes periodically — or `nothing` if none does within `maxlength` particles.
   - other keyword arguments go to [`tilings`](@ref)
 
 A chain that closes proves the rules admit arbitrarily large structures: truncating its periodic
-continuation gives a valid cluster of every length. This is far cheaper than [`cantile`](@ref),
+continuation gives a valid polyform of every length. This is far cheaper than [`cantile`](@ref),
 which sweeps every structure, because chains branch only at their ends, and a system whose
 structures all close runs out of chains on its own well before the bound.
 
@@ -229,7 +229,7 @@ isunbounded(rules::BindingRules; kwargs...) = growthwitness(rules; kwargs...) !=
 """
     growthwitness(rules::BindingRules; maxlength=chainstatebound(rules) + 1)
 
-Find a rigid motion `g` and a cluster `C` such that `C, g(C), g²(C), …` is an infinite valid
+Find a rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
 structure, or `nothing` if none exists.
 
   - returns `(; generator, cell, period)`: the motion, the particles it repeats, and how many

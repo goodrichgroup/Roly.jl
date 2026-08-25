@@ -1,5 +1,5 @@
 @testset "MetaParticleSpecies" begin
-    using Roly: setcolors!, collect_open_bindingsites, overlap, cluster
+    using Roly: setcolors!, collect_open_bindingsites, overlap, polyform
     using Graphs: ne
 
     # one species chaining through opposite sites, so a dimer keeps one open end of each kind
@@ -12,7 +12,7 @@
     mp = MetaParticleSpecies(dimer)
     @test dimension(mp) == 2
     @test nsites(mp) == length(open)
-    @test cluster(mp) == dimer
+    @test polyform(mp) == dimer
     @test [color(bindingsite(mp, i)) for i in 1:nsites(mp)] == [color(s) for s in open]
     @test [bindingsite(mp, i).pose for i in 1:nsites(mp)] == [s.pose for s in open]
     @test bounding_radius(mp) >= maximum(norm(p.pose.x) for p in dimer.particles)
@@ -20,13 +20,13 @@
     @test stabilizerorders(mp) == ones(Int, nsites(mp))
     @test _ndistincttwists(bindingsite(mp, 1), bindingsite(mp, 2)) == 1
 
-    @testset "the encoding is the cluster's own graph" begin
+    @testset "the encoding is the polyform's own graph" begin
         # bound sites stay as interior vertices, so the graph is larger than the site count
         @test nv(graphrep(mp)) == nv(graphrep(dimer))
         @test nv(graphrep(mp)) > nsites(mp)
         @test ne(graphrep(mp)) == ne(graphrep(dimer))
 
-        # a symmetric cluster: two squares joined site1-site1, swapping them is an automorphism
+        # a symmetric polyform: two squares joined site1-site1, swapping them is an automorphism
         selfrules = BindingRules([1 1 1 1; 1 2 1 2], UnitSquare)
         selfstrs = polygen(selfrules; maxsize=2)
         sym = selfstrs[findfirst(s -> nparticles(s) == 2, selfstrs)]
@@ -34,7 +34,7 @@
         nopen = length(collect_open_bindingsites(sym))
         @test nopen == 2
 
-        # the species inherits the cluster's symmetry exactly -- an encoding over the sites alone
+        # the species inherits the polyform's symmetry exactly -- an encoding over the sites alone
         # could not have known it
         @test symmetrynumber(MetaParticleSpecies(sym)) == symmetrynumber(sym)
         @test symmetrynumber(MetaParticleSpecies(sym; colors=fill(9, nopen))) == 2
@@ -66,7 +66,7 @@
         @test [color(bindingsite(mp, i)) for i in 1:nsites(mp)] ==
               [r.color for r in rows if !r.inert]
 
-        # a site that is inert inside the cluster becomes usable by being named and given a
+        # a site that is inert inside the polyform becomes usable by being named and given a
         # colour the new rules speak
         inert = [(r.particle, r.site) for r in rows if r.inert]
         @test !isempty(inert)
@@ -110,7 +110,7 @@
         @test [color(bindingsite(recolored, i)) for i in 1:2] == [4, 9]
         @test_throws DimensionMismatch MetaParticleSpecies(dimer; colors=[1])
 
-        # a saturated cluster exposes nothing: the 1-2-3 chain's ends are inert
+        # a saturated polyform exposes nothing: the 1-2-3 chain's ends are inert
         chain = BindingRules([1 1 2 3; 2 1 3 3], UnitSquare)
         trimer = let strs = polygen(chain; maxsize=3)
             strs[findfirst(s -> nparticles(s) == 3, strs)]
@@ -120,7 +120,7 @@
 
     end
 
-    @testset "3D: symmetry and twist freedom come from the cluster" begin
+    @testset "3D: symmetry and twist freedom come from the polyform" begin
         # every face alike, so a cube is 24-fold and each face 4-fold about its normal
         cube = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
         @test symmetrynumber(cube) == 24
@@ -173,7 +173,7 @@
         @test stabilizerorders(ps) == [1, 1]
         @test_throws ArgumentError setcolors!(ps, [1, 2, 3])
 
-        # equal colors on the two ends make them interchangeable only if the cluster agrees;
+        # equal colors on the two ends make them interchangeable only if the polyform agrees;
         # this chain dimer is not symmetric, so it stays rigid
         setcolors!(ps, [5, 5])
         @test symmetrynumber(ps) == symmetrynumber(dimer)
@@ -199,10 +199,33 @@
 
     @testset "copy is independent" begin
         ps = MetaParticleSpecies(dimer)
+        before = copy(labels(graphrep(ps)))
         cp = copy(ps)
         setcolors!(cp, [11, 12])
         @test [color(bindingsite(ps, i)) for i in 1:2] != [11, 12]
         @test [color(bindingsite(cp, i)) for i in 1:2] == [11, 12]
-        @test labels(graphrep(ps)) != labels(graphrep(cp))
+        @test labels(graphrep(ps)) == before
+    end
+
+    @testset "recoloring tracks the orbits, not the colors" begin
+        # this dimer has no symmetry relating its two open sites, so they sit in different orbits
+        # whatever they are colored, and recoloring cannot move the labeling
+        ps = MetaParticleSpecies(dimer)
+        before = copy(labels(graphrep(ps)))
+        setcolors!(ps, [11, 12])
+        @test labels(graphrep(ps)) == before
+        setcolors!(ps, [7, 7])
+        @test labels(graphrep(ps)) == before
+
+        # where a symmetry does relate the two sites, they share an orbit and a label until a
+        # coloring tells them apart
+        selfrules = BindingRules([1 1 1 1; 1 2 1 2], UnitSquare)
+        sym = polygen(selfrules; maxsize=2)[end]
+        sitelabels(q) = [labels(graphrep(q))[first(bindingsite(q, i).vertices)] for i in 1:nsites(q)]
+        together = MetaParticleSpecies(sym; colors=[9, 9])
+        @test length(unique(sitelabels(together))) == 1
+        setcolors!(together, [4, 5])
+        @test length(unique(sitelabels(together))) == 2
+        @test symmetrynumber(together) == 1
     end
 end
