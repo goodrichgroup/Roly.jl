@@ -5,6 +5,24 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
             PolygonParticleSpecies, species, polygen
 
 @testset "polyform" begin
+    # A bond joins two sites, and `contact_pairing` pairs gcd(k1, k2) of their vertices, so a
+    # dart-encoded bond reaches the graph as several edges. Counting edges would report one
+    # cube-to-cube bond four times, and `composition` would say the same.
+    let cubes = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
+        dimer = first(p for p in polygen(cubes; maxsize=2) if nparticles(p) == 2)
+        @test length(collect(Roly.exterior_edges(dimer))) == 4
+        @test nbonds(dimer) == 1
+        @test length(collect(bonds(dimer))) == 1
+        @test composition(dimer) == [2, 1]
+        # every bond is listed once, and joins two sites nothing else uses
+        for p in polygen(cubes; maxsize=4)
+            bs = collect(bonds(p))
+            @test length(bs) == nbonds(p)
+            @test allunique(bs)
+            @test allunique(reduce(vcat, [[b.first, b.second] for b in bs]; init=[]))
+        end
+    end
+
     rules = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
 
     empty_poly = Polyform(rules)

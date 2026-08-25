@@ -16,6 +16,7 @@ using LinearAlgebra: inv
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
 @testset "PolyhedronParticleSpecies" begin
+    nedges(p) = length(collect(Roly.exterior_edges(p)))
     solids = [
         ("UnitTetrahedron", UnitTetrahedron, Tetrahedron(), 4, 12),
         ("UnitCube", UnitCube, Cube(), 6, 24),
@@ -395,8 +396,10 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         # removal would leave a block hanging off the end.
         blocks = sort(reduce(vcat, [collect(Roly.graphvertices(pt, rules)) for pt in p.particles]))
         @test blocks == 1:nv(graphrep(p))
-        # Each bond joins the vertices of one pair of faces.
-        @test nbonds(p) == 4 * (nparticles(p) - 1) ÷ 1 || nbonds(p) >= nparticles(p) - 1
+        # A connected polyform has at least n-1 bonds, and this cube is cycle-encoded, so each
+        # bond reaches the graph as exactly one edge.
+        @test nbonds(p) >= nparticles(p) - 1
+        @test nedges(p) == nbonds(p)
     end
 
     # Raising then lowering returns the original structure.
@@ -421,9 +424,11 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test mixed isa BindingRules
     same = BindingRules([1 squares[1] 1 squares[2]], prism)
     @test same isa BindingRules
-    # Four dart pairs for a square-to-square bond, one reference pair for the mixed one.
-    @test nbonds(polygen(same; maxsize=2)[end]) == 4
-    @test nbonds(polygen(mixed; maxsize=2)[end]) == 1
+    # Four dart pairs for a square-to-square bond, one reference pair for the mixed one, and
+    # one bond either way.
+    @test nedges(polygen(same; maxsize=2)[end]) == 4
+    @test nedges(polygen(mixed; maxsize=2)[end]) == 1
+    @test nbonds(polygen(same; maxsize=2)[end]) == nbonds(polygen(mixed; maxsize=2)[end]) == 1
 
     # twists
 

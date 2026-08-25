@@ -145,7 +145,10 @@ Return a lazy iterator over the internal particle edges of `graphrep(p)`.
 """
     exterior_edges(p::Polyform)
 
-Return a lazy iterator over the external edges of `graphrep(p)`, corresponding to bonds in `p`.
+Return a lazy iterator over the external edges of `graphrep(p)`, those joining two particles.
+
+A bond contributes *several* of these, one per vertex pair `contact_pairing` makes, so use
+[`bonds`](@ref) to iterate bonds.
 """
 @inline exterior_edges(p::Polyform) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
 
@@ -394,9 +397,28 @@ function _eachpolyformsymmetry(f, p::Polyform)
 end
 
 """
+    _bondedges(p::Polyform)
+
+Return one exterior edge per bond of `p`.
+
+A bond joins two binding sites, and [`contact_pairing`](@ref) pairs `gcd(k₁, k₂)` of their
+vertices, so a bond between two dart-encoded faces reaches `graphrep(p)` as several edges. Two
+sites are joined by at most one bond, so the pair of sites an edge lands on names the bond.
+"""
+function _bondedges(p::Polyform)
+    seen = Set{NTuple{2,NTuple{2,Int}}}()
+    return filter(collect(exterior_edges(p))) do (; src, dst)
+        key = minmax(_vertex_to_particle_site(p, src), _vertex_to_particle_site(p, dst))
+        key in seen && return false
+        push!(seen, key)
+        return true
+    end
+end
+
+"""
     bonds(p::Polyform)
 
-Return a lazy iterator of bonds in `p`. Each element has the form
+Return a lazy iterator of bonds in `p`, each one once. Each element has the form
 
     (particle=i, site=j) => (particle=k, site=l)
 
@@ -410,7 +432,7 @@ function bonds(p::Polyform)
             (p2, s2) = rhs
 
             (particle=p1, site=s1) => (particle=p2, site=s2)
-        end for e in exterior_edges(p)
+        end for e in _bondedges(p)
     )
 end
 
@@ -420,7 +442,7 @@ end
 Return the number of bonds in `p`. Note that `nbonds(::BindingRules)` instead counts how many
 *kinds* of bond a set of rules allows.
 """
-nbonds(p::Polyform) = count(Returns(true), exterior_edges(p))
+nbonds(p::Polyform) = length(_bondedges(p))
 
 """
     composition(p::Polyform)
@@ -439,7 +461,7 @@ function composition(p::Polyform)
         comp[part.speciesindex] += 1
     end
 
-    for (; src, dst) in exterior_edges(p)
+    for (; src, dst) in _bondedges(p)
         i = bondindex(p, src, dst)
         isnothing(i) || (comp[ns + i] += 1)
     end
