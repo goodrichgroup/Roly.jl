@@ -103,9 +103,10 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     # The polyform's graph in its original vertex order, where every particle owns a contiguous
     # block and each site keeps the vertex range it has inside the polyform.
     g = graphrep(poly)[poly.orig2canon]
+
     # `sitesym` and `locking` belong to the site and carry over. The orbits and the stabilizers
     # come from the polyform's own symmetry group.
-    perms = _metasymmetries(poly, rotationgroup(poly), open, cols)
+    perms = _metasymmetries(poly, open, cols)
     orbits, stabs = _metaorbits(perms, n), _metastabs(perms, n)
     metasites = map(1:n) do i
         return BindingSite(
@@ -129,11 +130,10 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
 end
 
 """
-    _metasymmetries(poly, group, sites, colors)
+    _metasymmetries(poly, sites, colors)
 
-The site permutations induced by the rotations in `group` that carry every one of `sites` onto a
-site of `sites` with the same color: the meta-particle's own symmetry group, acting on the sites
-it offers.
+The site permutations induced by the rotations of `poly` that carry every one of `sites` onto a
+site with the same color: the meta-particle's own symmetry group, acting on its exposed sites.
 
 The counterpart of [`_eachsitesymmetry`](@ref) for a meta-species, and the reason that one cannot
 be used directly: it derives the group from the sites alone, but a polyform's shape is not
@@ -141,11 +141,11 @@ determined by its binding sites -- two open sites can sit in symmetric poses wit
 polyforms behind them -- so it would claim symmetries the polyform does not have. The group has
 to come from [`rotationgroup`](@ref rotationgroup(::Polyform))`(poly)` instead.
 
-A rotation carrying an exposed site onto one that was *not* exposed is dropped. Exposing only one
-of two equivalent sites is exactly what costs a meta-species the symmetry that related them.
+A rotation carrying an exposed site onto one that was *not* exposed is dropped.
 """
-function _metasymmetries(poly::Polyform, group, sites, colors)
+function _metasymmetries(poly::Polyform, sites, colors)
     n = length(sites)
+    group = rotationgroup(poly)
     F = numtype(poly)
     centroid = sum(p.pose.x for p in poly.particles) / nparticles(poly)
     xs = [s.pose.x - centroid for s in sites]
@@ -222,7 +222,7 @@ polyform(ps::MetaParticleSpecies) = ps.poly
 function setcolors!(ps::MetaParticleSpecies, colors::AbstractVector{<:Integer})
     n = nsites(ps)
     length(colors) == n || throw(ArgumentError("expected $n colors, got $(length(colors))"))
-    perms = _metasymmetries(ps.poly, rotationgroup(ps.poly), ps.sites, colors)
+    perms = _metasymmetries(ps.poly, ps.sites, colors)
     orbits, stabs = _metaorbits(perms, n), _metastabs(perms, n)
     for i in eachindex(ps.sites)
         ps.sites[i] = setstab(setcolor(ps.sites[i], colors[i]), stabs[i])
