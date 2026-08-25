@@ -695,50 +695,45 @@ function _exposed(poly::Polyform)
 end
 
 """
-    exposedsitelocs(poly::Polyform)
+    exposedsites(poly::Polyform)
+    exposedsites(T, poly::Polyform)
 
-The [`ParticleSite`](@ref) of every *unbound* binding site of `poly`, in canonical order.
+Every *unbound* binding site of `poly`, in canonical order.
 
 Bound sites are consumed by the bonds holding `poly` together and are never listed. Sites whose
 color takes part in no rule are listed, even though nothing can attach through them as `poly`
-stands; [`opensitelocs`](@ref) is this list without them.
+stands; [`opensites`](@ref) is this list without them.
+
+`T` picks the view: `BindingSite`, the default, for the sites themselves, and
+[`ParticleSite`](@ref) for the addresses that name them.
 
 These are the sites a [`MetaParticleSpecies`](@ref) may expose. It exposes the open ones by
 default, and an inert one becomes usable simply by being named and given a live color.
+"""
+exposedsites(::Type{ParticleSite}, poly::Polyform) = [l for (l, _) in _exposed(poly)]
+exposedsites(::Type{BindingSite}, poly::Polyform) = [s for (_, s) in _exposed(poly)]
+exposedsites(poly::Polyform) = exposedsites(BindingSite, poly)
 
 """
-exposedsitelocs(poly::Polyform) = [l for (l, _) in _exposed(poly)]
+    opensites(poly::Polyform)
+    opensites(T, poly::Polyform)
 
+Every binding site of `poly` a partner can still attach through: the unbound ones whose color
+some rule uses, in canonical order.
+
+`T` picks the view, as for [`exposedsites`](@ref), which lists the inert ones too.
 """
-    exposedsites(poly::Polyform)
-
-Every unbound binding site of `poly`, in canonical order. See [`exposedsitelocs`](@ref).
-"""
-exposedsites(poly::Polyform) = [s for (_, s) in _exposed(poly)]
-
-"""
-    opensitelocs(poly::Polyform)
-
-The [`ParticleSite`](@ref) of every binding site of `poly` a partner can still attach through:
-the unbound ones whose color some rule uses, in canonical order.
-
-See [`exposedsitelocs`](@ref), which lists the inert ones too.
-"""
-function opensitelocs(poly::Polyform)
+function opensites(::Type{ParticleSite}, poly::Polyform)
     rules = bindingrules(poly)
     return [l for (l, s) in _exposed(poly) if !isinert(rules, color(s))]
 end
 
-"""
-    opensites(poly::Polyform)
-
-Every binding site of `poly` a partner can still attach through, in canonical order. See
-[`opensitelocs`](@ref).
-"""
-function opensites(poly::Polyform)
+function opensites(::Type{BindingSite}, poly::Polyform)
     rules = bindingrules(poly)
     return [s for (_, s) in _exposed(poly) if !isinert(rules, color(s))]
 end
+
+opensites(poly::Polyform) = opensites(BindingSite, poly)
 
 """
     _deletable_species(poly; target, dist, queue)

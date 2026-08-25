@@ -71,9 +71,8 @@ function BindingRules(bonds, particlespecies::AbstractVector{PS}) where {PS<:Par
         a, b, = bond[1], bond[2]
         sort((color2siteloc[a], color2siteloc[b]))
     end
-    bondedspecies = map(bondedsites) do (sitelocs1, sitelocs2)
-        spc1, spc2 = sitelocs1[1][1], sitelocs2[1][1]
-        (spc1, spc2)
+    bondedspecies = map(bondedsites) do (sites1, sites2)
+        (first(sites1).species, first(sites2).species)
     end
 
     nbonds = (sum(intmat) + sum(diagview(intmat))) ÷ 2
@@ -278,18 +277,18 @@ Return the particle species that contains the binding site with color `color`.
 end
 
 """
-    _first_per_orbit(particlespecies, sitelocs)
+    _first_per_orbit(particlespecies, sites)
 
-Return one site per symmetry orbit of the particle species. Of the entries of `sitelocs` that
+Return one site per symmetry orbit of the particle species. Of the entries of `sites` that
 sit on the same species and carry the same graph label, only the first survives.
 
 This rests on a shared label meaning the sites really are interchangeable, which is what
 [`_check_labeling`](@ref) enforces: a labeling has to be exactly the symmetry orbits.
 """
-function _first_per_orbit(particlespecies::AbstractVector{<:ParticleSpecies}, sitelocs::AbstractVector{SpeciesSite})
+function _first_per_orbit(particlespecies::AbstractVector{<:ParticleSpecies}, sites::AbstractVector{SpeciesSite})
     reps = SpeciesSite[]
     seen = Set{Tuple{Int,Int}}()
-    for (spc, k) in sitelocs
+    for (spc, k) in sites
         orbit = (spc, sitelabel(particlespecies[spc], k))
         orbit in seen && continue
         push!(seen, orbit)

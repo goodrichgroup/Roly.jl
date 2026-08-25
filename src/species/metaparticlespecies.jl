@@ -5,7 +5,7 @@ A `Polyform` wrapped as a `ParticleSpecies`, so that meta-assemblies can be buil
 polyforms.
 
 Chosen unbound sites of the polyform become the species' sites. By default these are every one that is not
-inert, and otherwise exactly those named, see [`exposedsitelocs`](@ref). Geometry is delegated: two
+inert, and otherwise exactly those named, see [`exposedsites`](@ref). Geometry is delegated: two
 meta-particles overlap exactly when any of their constituent particles do.
 
 Meta-species describe *meta*-assembly systems, whose `BindingRules` say how meta-particles
@@ -43,7 +43,7 @@ end
 
 Wrap `poly` as a particle species whose sites are the ones named by `sites`, given as `(particle, site)`
 pairs and exposed in that order. Without them every unbound, non-inert site is exposed, in
-[`exposedsitelocs`](@ref) order.
+[`exposedsites`](@ref) order.
 
   - `colors`: one interaction color per exposed site; by default each keeps the color it has
     inside `poly`
@@ -52,7 +52,7 @@ Each site's `sitesym` and `locking` carry over from the polyform, while its `sta
 against the polyform by [`siteorbits`](@ref) and [`stabilizerorders`](@ref).
 """
 function MetaParticleSpecies(poly::Polyform; colors=nothing)
-    MetaParticleSpecies(poly, opensitelocs(poly); colors)
+    MetaParticleSpecies(poly, opensites(ParticleSite, poly); colors)
 end
 
 function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
@@ -62,7 +62,7 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     n > 0 || throw(ArgumentError("a meta-species needs at least one exposed site"))
     allunique(picks) || throw(ArgumentError("`sites` names the same site twice"))
 
-    exposable = Set(exposedsitelocs(poly))
+    exposable = Set(exposedsites(ParticleSite, poly))
     open = map(picks) do (p, k)
         1 <= p <= nparticles(poly) ||
             throw(ArgumentError("`poly` has $(nparticles(poly)) particles, so ($p, $k) is out of range"))

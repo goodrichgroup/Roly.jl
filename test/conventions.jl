@@ -47,6 +47,11 @@
 
     # `bonds` speaks ParticleSite, the rules speak SpeciesSite
     @test eltype(collect(bonds(dimer))) == Pair{ParticleSite,ParticleSite}
-    @test eltype(opensitelocs(dimer)) == ParticleSite
+    # each accessor is named for what it returns, and the type says which view
+    @test eltype(opensites(dimer)) <: BindingSite
+    @test eltype(opensites(ParticleSite, dimer)) == ParticleSite
+    @test eltype(exposedsites(ParticleSite, dimer)) == ParticleSite
+    @test opensites(dimer) == [bindingsite(dimer, l) for l in opensites(ParticleSite, dimer)]
+    @test exposedsites(dimer) == [bindingsite(dimer, l) for l in exposedsites(ParticleSite, dimer)]
     @test eltype(Roly.possible_attachments(rules, 1)) == SpeciesSite
 end

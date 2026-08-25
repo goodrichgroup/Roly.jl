@@ -143,7 +143,7 @@ using StaticArrays: SVector
     end
 
     # check that representatives are enough, and everything else is just duplicates
-    function children(poly, sitelocs_of)
+    function children(poly, sitesof)
         rules = Roly.bindingrules(poly)
         out = Set{NautyDiGraph}()
         for orig_v in poly.canon2orig
@@ -153,7 +153,7 @@ using StaticArrays: SVector
                 site = bindingsite(part, rules, k)
                 Roly._isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
                 Roly.isinert(rules, color(site)) && continue
-                for siteloc in sitelocs_of(rules, color(site))
+                for siteloc in sitesof(rules, color(site))
                     mate = bindingsite(Roly.species(rules, siteloc.species), siteloc.site)
                     for r in 0:(Roly._ndistincttwists(site, mate) - 1)
                         trial = copy(poly)

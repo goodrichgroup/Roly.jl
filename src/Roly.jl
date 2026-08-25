@@ -30,7 +30,7 @@ public bonded_colors, bonded_sites, bonded_species
 
 # Polyforms
 export Polyform, ParticleSite, nparticles, bindingrules, composition, bonds
-export exposedsitelocs, exposedsites, opensitelocs, opensites
+export exposedsites, opensites
 
 # The graph a polyform carries, and the vertices it is written in, are an implementation detail:
 # every one of these takes or yields bare graph vertices, whose numbering (canonical or original)

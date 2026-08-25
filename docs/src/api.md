@@ -96,6 +96,7 @@ bindingsites
 nsites
 graphrep
 isconvex
+setcolors!
 symmetrynumber
 bounding_radius
 could_contact
@@ -127,6 +128,19 @@ PatchyDisk
 PatchySphere
 ```
 
+### Meta-species
+
+A [`Polyform`](@ref) wrapped as a species, so that assemblies can be built out of assemblies.
+
+```@docs
+MetaParticleSpecies
+polyform
+metarules
+unwrap
+metabonds
+unwrappedsites
+```
+
 ## Binding rules
 
 ```@docs
@@ -153,6 +167,8 @@ bindingrules
 composition
 canonbindingsite
 canonbindingsites
+exposedsites
+opensites
 rotationgroup(::Polyform)
 permutationgroup(::Polyform)
 bonds
