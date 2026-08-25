@@ -254,15 +254,23 @@
         @test persize(keyed(rhombus, facing), 5) ==
               persize(BindingRules([1 1 1 3; 1 2 1 4], UnitSquare), 5) == [1, 2, 6, 19, 63]
 
-        ### six triangles make a hexagon, which tiles like one
+        ### six triangles make a hexagon, which tiles like one under either coloring
         ring = only(p for p in polygen(iamonds; maxsize=6)
                     if nparticles(p) == 6 && length(collect_open_bindingsites(p)) == 6)
-        # fixed polyhexes, https://oeis.org/A001207
+        # a distinct color per site leaves the block no symmetry: fixed polyhexes,
+        # https://oeis.org/A001207
         @test persize(keyed(ring, facing), 4) ==
               persize(BindingRules([1 1 1 4; 1 2 1 5; 1 3 1 6], UnitHexagon), 4) == [1, 3, 11, 44]
+        # the colors it inherits are all one, so it keeps the hexagon's full 6-fold symmetry, and
+        # the counts are one-sided: https://oeis.org/A006535
+        @test symmetrynumber(MetaParticleSpecies(ring)) == 6
+        @test persize(metarules(MetaParticleSpecies(ring)), 5) ==
+              persize(BindingRules([1 1 1 1], PolygonParticleSpecies(6; colors=fill(1, 6))), 5) ==
+              [1, 1, 3, 10, 33]
 
-        ### the same in 3D: six triangular prisms make a hexagonal prism. One color throughout
-        ### here, so these are the free counts the `tiling` tests use
+        ### the same construction in 3D: six triangular prisms make a hexagonal prism, again
+        ### fully symmetric. A reflection of a flat arrangement is a rotation about an in-plane
+        ### axis here, so the very same coloring gives the free counts rather than the one-sided
         sides(p) = [i for i in 1:nfaces(p) if abs(facenormal(p, i)[3]) < 1e-8]
         sticky(shp, s) = PolyhedronParticleSpecies(shp; colors=[i in s ? 1 : 2 for i in 1:nfaces(shp)])
         tri3, hex3 = Prism(3, 1.0; h=2.0), Prism(6, 1.0; h=2.0)
@@ -275,6 +283,12 @@
         @test symmetrynumber(mp3) == symmetrynumber(ring3) == 12
         # free polyhexes, https://oeis.org/A000228
         @test persize(metarules(mp3), 4) == persize(prismrules(hex3), 4) == [1, 1, 3, 7]
+
+        # the same split without a block, on plain squares: one-sided in 2D, free in 3D
+        # https://oeis.org/A000988 and https://oeis.org/A000105
+        @test persize(BindingRules([1 1 1 1], PolygonParticleSpecies(4; colors=fill(1, 4))), 5) ==
+              [1, 1, 2, 7, 18]
+        @test persize(prismrules(Prism(4, 1.0; h=2.0)), 5) == [1, 1, 2, 5, 12]
 
         ### a 2x2 block of squares, whose sides carry two sites each
         sqrules = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
