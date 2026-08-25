@@ -197,6 +197,102 @@
         @test nparticles(triple) * nparticles(dimer) == 6
     end
 
+    @testset "a block assembles like the shape it makes" begin
+        using Roly: metarules, unwrap, metabonds, nbonds, nfaces, facenormal
+
+        persize(rules, K) = [count(p -> nparticles(p) == k, polygen(rules; maxsize=K)) for k in 1:K]
+        # exposed sites whose outward normals point opposite ways: the pairs that carry a lattice
+        opposites(sites) = let dirs = [s.pose.psi * SVector(1.0, 0.0) for s in sites]
+            used = falses(length(sites))
+            pairs = NTuple{2,Int}[]
+            for i in eachindex(dirs)
+                used[i] && continue
+                j = findfirst(k -> !used[k] && k != i && isapprox(dirs[k], -dirs[i]; atol=1e-8),
+                              eachindex(dirs))
+                isnothing(j) && continue
+                used[i] = used[j] = true
+                push!(pairs, (i, j))
+            end
+            pairs
+        end
+        # bond each exposed site to the one across from it, as a square binds its opposite edges
+        function acrossrules(poly)
+            sites = collect_open_bindingsites(poly)
+            ps = MetaParticleSpecies(poly; colors=1:length(sites))
+            return BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in opposites(sites)]), ps)
+        end
+
+        ### wrapping a single particle changes nothing
+        for (rules, K) in ((BindingRules([1 1 1 3; 1 2 1 4], UnitSquare), 5),
+                           (BindingRules([1 1 1 1], PolygonParticleSpecies(3; colors=fill(1, 3))), 5),
+                           (BindingRules([1 1 1 1],
+                                         PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))), 4))
+            wrapped = metarules(MetaParticleSpecies(Polyform(rules, 1)))
+            @test persize(wrapped, K) == persize(rules, K)
+        end
+
+        ### two triangles make a rhombus, which tiles the plane the way a square does
+        iamonds = BindingRules([1 1 1 1], PolygonParticleSpecies(3; colors=fill(1, 3)))
+        rhombus = only(p for p in polygen(iamonds; maxsize=2) if nparticles(p) == 2)
+        @test length(collect_open_bindingsites(rhombus)) == 4
+        @test persize(acrossrules(rhombus), 5) ==
+              persize(BindingRules([1 1 1 3; 1 2 1 4], UnitSquare), 5) == [1, 2, 6, 19, 63]
+
+        ### six triangles make a hexagon, which tiles like one
+        ring = only(p for p in polygen(iamonds; maxsize=6)
+                    if nparticles(p) == 6 && length(collect_open_bindingsites(p)) == 6)
+        @test persize(acrossrules(ring), 4) ==
+              persize(BindingRules([1 1 1 4; 1 2 1 5; 1 3 1 6], UnitHexagon), 4) == [1, 3, 11, 44]
+
+        ### the same in 3D: six triangular prisms make a hexagonal prism
+        sides(p) = [i for i in 1:nfaces(p) if abs(facenormal(p, i)[3]) < 1e-8]
+        sticky(shp, s) = PolyhedronParticleSpecies(shp; colors=[i in s ? 1 : 2 for i in 1:nfaces(shp)])
+        tri3, hex3 = Prism(3, 1.0; h=2.0), Prism(6, 1.0; h=2.0)
+        prismrules(shp) = (s = sides(shp); BindingRules([1 first(s) 1 first(s)], sticky(shp, s)))
+        ring3 = only(p for p in polygen(prismrules(tri3); maxsize=6)
+                     if nparticles(p) == 6 && length(collect_open_bindingsites(p)) == 6)
+        mp3 = MetaParticleSpecies(ring3)
+        @test nsites(mp3) == 6
+        # the ring is as symmetric as the hexagonal prism it makes, D_6 of order 12
+        @test symmetrynumber(mp3) == symmetrynumber(ring3) == 12
+        @test persize(metarules(mp3), 4) == persize(prismrules(hex3), 4) == [1, 1, 3, 7]
+
+        ### a 2x2 block of squares. Every assembly of blocks is an assembly of squares...
+        sqrules = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
+        block = only(p for p in polygen(sqrules; maxsize=4)
+                     if nparticles(p) == 4 && length(collect_open_bindingsites(p)) == 8)
+        blocks = polygen(metarules(MetaParticleSpecies(block)); maxsize=2)
+        direct = Set(graphrep(p) for p in polygen(sqrules; maxsize=8))
+        @test all(graphrep(unwrap(m)) in direct for m in blocks)
+        @test all(nparticles(unwrap(m)) == 4nparticles(m) for m in blocks)
+        @test all(nbonds(unwrap(m)) == 4nparticles(m) + length(metabonds(m)) for m in blocks)
+        # ...but not every one is a square lattice: a block may meet its neighbour half a block
+        # over, sharing one edge instead of two, which no single square can do
+        @test count(m -> nparticles(m) == 2, blocks) > 1
+        @test any(m -> length(metabonds(m)) == 1, blocks)
+
+        ### two species, which must not be conflated when the block is unwrapped
+        two = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
+        direct2 = Set(graphrep(p) for p in polygen(two; maxsize=6))
+        for seed in (p for p in polygen(two; maxsize=2) if nparticles(p) == 2)
+            metas = polygen(metarules(MetaParticleSpecies(seed)); maxsize=3)
+            @test !isempty(metas)
+            @test all(graphrep(unwrap(m)) in direct2 for m in metas)
+            @test all(composition(unwrap(m))[1:2] == nparticles(m) .* composition(seed)[1:2]
+                      for m in metas)
+        end
+
+        ### 3D polycubes, where a block keeps the symmetry of the polyform it wraps
+        cuberules = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
+        direct3 = Set(graphrep(p) for p in polygen(cuberules; maxsize=6))
+        for seed in (p for p in polygen(cuberules; maxsize=3) if nparticles(p) > 1)
+            mp = MetaParticleSpecies(seed)
+            @test symmetrynumber(mp) == symmetrynumber(seed)
+            metas = polygen(metarules(mp); maxsize=nparticles(seed) == 2 ? 3 : 2)
+            @test all(graphrep(unwrap(m)) in direct3 for m in metas)
+        end
+    end
+
     @testset "copy is independent" begin
         ps = MetaParticleSpecies(dimer)
         before = copy(labels(graphrep(ps)))
