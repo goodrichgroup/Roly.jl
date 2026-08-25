@@ -201,25 +201,33 @@
         using Roly: metarules, unwrap, metabonds, nbonds, nfaces, facenormal
 
         persize(rules, K) = [count(p -> nparticles(p) == k, polygen(rules; maxsize=K)) for k in 1:K]
-        # exposed sites whose outward normals point opposite ways: the pairs that carry a lattice
-        opposites(sites) = let dirs = [s.pose.psi * SVector(1.0, 0.0) for s in sites]
-            used = falses(length(sites))
+        outward(s) = s.pose.psi[:, 1]
+        # exposed sites that face opposite ways. Unique when the block has one site per direction,
+        # which is what lets a bond through it fix the neighbour completely
+        function facing(sites)
             pairs = NTuple{2,Int}[]
-            for i in eachindex(dirs)
-                used[i] && continue
-                j = findfirst(k -> !used[k] && k != i && isapprox(dirs[k], -dirs[i]; atol=1e-8),
-                              eachindex(dirs))
-                isnothing(j) && continue
-                used[i] = used[j] = true
+            for i in eachindex(sites), j in eachindex(sites)
+                i < j && isapprox(outward(sites[j]), -outward(sites[i]); atol=1e-8) || continue
                 push!(pairs, (i, j))
             end
-            pairs
+            return pairs
         end
-        # bond each exposed site to the one across from it, as a square binds its opposite edges
-        function acrossrules(poly)
+        # the site directly across the block, with no sideways offset between the two. Needed
+        # where a side carries several sites, so that facing alone leaves a choice
+        function across(sites)
+            return filter(facing(sites)) do (i, j)
+                n = outward(sites[i])
+                d = sites[i].pose.x - sites[j].pose.x
+                return norm(d - dot(d, n) * n) < 1e-8
+            end
+        end
+        # a distinct color per exposed site, bonding only the given pairs
+        function keyed(poly, pairing)
             sites = collect_open_bindingsites(poly)
             ps = MetaParticleSpecies(poly; colors=1:length(sites))
-            return BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in opposites(sites)]), ps)
+            pairs = pairing(sites)
+            @test sort(collect(Iterators.flatten(pairs))) == 1:length(sites)
+            return BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in pairs]), ps)
         end
 
         ### wrapping a single particle changes nothing
@@ -231,20 +239,30 @@
             @test persize(wrapped, K) == persize(rules, K)
         end
 
+        # Which lattice-animal count a system gives is set by its coloring and its dimension. A
+        # distinct color on every site leaves the tile no symmetry, so structures are counted up
+        # to translation alone -- the *fixed* sequences. One color throughout leaves the tile its
+        # own symmetry; in 2D the encoding is a digraph, so a reflection is not an automorphism
+        # and the counts are *one-sided*, while in 3D flipping a flat arrangement over is a proper
+        # rotation, which makes them *free*. All four below extend correctly by one more term.
+
         ### two triangles make a rhombus, which tiles the plane the way a square does
         iamonds = BindingRules([1 1 1 1], PolygonParticleSpecies(3; colors=fill(1, 3)))
         rhombus = only(p for p in polygen(iamonds; maxsize=2) if nparticles(p) == 2)
         @test length(collect_open_bindingsites(rhombus)) == 4
-        @test persize(acrossrules(rhombus), 5) ==
+        # fixed polyominoes, https://oeis.org/A001168
+        @test persize(keyed(rhombus, facing), 5) ==
               persize(BindingRules([1 1 1 3; 1 2 1 4], UnitSquare), 5) == [1, 2, 6, 19, 63]
 
         ### six triangles make a hexagon, which tiles like one
         ring = only(p for p in polygen(iamonds; maxsize=6)
                     if nparticles(p) == 6 && length(collect_open_bindingsites(p)) == 6)
-        @test persize(acrossrules(ring), 4) ==
+        # fixed polyhexes, https://oeis.org/A001207
+        @test persize(keyed(ring, facing), 4) ==
               persize(BindingRules([1 1 1 4; 1 2 1 5; 1 3 1 6], UnitHexagon), 4) == [1, 3, 11, 44]
 
-        ### the same in 3D: six triangular prisms make a hexagonal prism
+        ### the same in 3D: six triangular prisms make a hexagonal prism. One color throughout
+        ### here, so these are the free counts the `tiling` tests use
         sides(p) = [i for i in 1:nfaces(p) if abs(facenormal(p, i)[3]) < 1e-8]
         sticky(shp, s) = PolyhedronParticleSpecies(shp; colors=[i in s ? 1 : 2 for i in 1:nfaces(shp)])
         tri3, hex3 = Prism(3, 1.0; h=2.0), Prism(6, 1.0; h=2.0)
@@ -255,21 +273,26 @@
         @test nsites(mp3) == 6
         # the ring is as symmetric as the hexagonal prism it makes, D_6 of order 12
         @test symmetrynumber(mp3) == symmetrynumber(ring3) == 12
+        # free polyhexes, https://oeis.org/A000228
         @test persize(metarules(mp3), 4) == persize(prismrules(hex3), 4) == [1, 1, 3, 7]
 
-        ### a 2x2 block of squares. Every assembly of blocks is an assembly of squares...
+        ### a 2x2 block of squares, whose sides carry two sites each
         sqrules = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
         block = only(p for p in polygen(sqrules; maxsize=4)
                      if nparticles(p) == 4 && length(collect_open_bindingsites(p)) == 8)
-        blocks = polygen(metarules(MetaParticleSpecies(block)); maxsize=2)
+        # keeping the colors it inherits lets a block meet its neighbour half a block over,
+        # sharing one edge instead of two, which no single square can do
+        loose = polygen(metarules(MetaParticleSpecies(block)); maxsize=2)
+        @test count(m -> nparticles(m) == 2, loose) > 1
+        @test any(m -> length(metabonds(m)) == 1, loose)
+        # every one of them is still an assembly of squares
         direct = Set(graphrep(p) for p in polygen(sqrules; maxsize=8))
-        @test all(graphrep(unwrap(m)) in direct for m in blocks)
-        @test all(nparticles(unwrap(m)) == 4nparticles(m) for m in blocks)
-        @test all(nbonds(unwrap(m)) == 4nparticles(m) + length(metabonds(m)) for m in blocks)
-        # ...but not every one is a square lattice: a block may meet its neighbour half a block
-        # over, sharing one edge instead of two, which no single square can do
-        @test count(m -> nparticles(m) == 2, blocks) > 1
-        @test any(m -> length(metabonds(m)) == 1, blocks)
+        @test all(graphrep(unwrap(m)) in direct for m in loose)
+        @test all(nparticles(unwrap(m)) == 4nparticles(m) for m in loose)
+        @test all(nbonds(unwrap(m)) == 4nparticles(m) + length(metabonds(m)) for m in loose)
+        # giving the two sites of a side different colors leaves the offset nothing to bond to,
+        # and the block tiles exactly as a square does
+        @test persize(keyed(block, across), 5) == [1, 2, 6, 19, 63]
 
         ### two species, which must not be conflated when the block is unwrapped
         two = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
