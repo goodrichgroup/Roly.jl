@@ -171,6 +171,13 @@ Return the `i`th particle species of the assembly system `rules`.
 @inline species(rules::BindingRules, i::Integer) = rules.particlespecies[i]
 
 """
+    bindingsite(rules::BindingRules, loc::SpeciesSite)
+
+The binding site `loc` names: site `loc.site` of species `loc.species` of `rules`.
+"""
+@inline bindingsite(rules::BindingRules, loc::SpeciesSite) = bindingsite(species(rules, loc.species), loc.site)
+
+"""
     nspecies(rules::BindingRules)
 
 Return the number of particle species of the assembly system `rules`.

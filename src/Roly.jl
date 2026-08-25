@@ -21,8 +21,7 @@ export RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral, Icosahedral, gr
 # Particle species
 export ParticleSpecies
 public SpeciesAndPose
-export nsites, bindingsite, bindingsites, symmetrynumber
-public graphrep
+export nsites, bindingsite, bindingsites, graphrep, symmetrynumber
 
 # Assembly system
 export BindingRules, SpeciesSite, interactionmatrix

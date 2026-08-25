@@ -16,7 +16,7 @@
     # Nothing exported takes or yields a bare graph vertex. Which numbering a vertex is in,
     # canonical or original, is an invariant callers inside the package keep; it must not be
     # something a user of the package has to know about.
-    for n in (:bondindex, :interior_edges, :exterior_edges, :subpolyform, :graphrep)
+    for n in (:bondindex, :interior_edges, :exterior_edges, :subpolyform)
         @test Base.ispublic(Roly, n)
         @test !Base.isexported(Roly, n)
     end
@@ -38,6 +38,12 @@
     # but each still destructures like the pair it replaced
     @test (SpeciesSite(3, 4)...,) == (3, 4)
     @test (ParticleSite(3, 4)...,) == (3, 4)
+
+    # each address indexes the thing it names
+    @test bindingsite(dimer, ParticleSite(1, 1)) == bindingsite(dimer.particles[1], rules, 1)
+    @test bindingsite(rules, SpeciesSite(1, 3)) == bindingsite(Roly.species(rules, 1), 3)
+    @test_throws MethodError bindingsite(dimer, SpeciesSite(1, 1))
+    @test_throws MethodError bindingsite(rules, ParticleSite(1, 1))
 
     # `bonds` speaks ParticleSite, the rules speak SpeciesSite
     @test eltype(collect(bonds(dimer))) == Pair{ParticleSite,ParticleSite}

@@ -178,7 +178,7 @@ function BondEnvironment(poly::Polyform, bond::Pair; depth::Integer, bufs=Enviro
     p1 == p2 && throw(ArgumentError("bond endpoints must be distinct particles"))
 
     dist = _particledists!(bufs, poly, (p1, p2); maxdepth=depth)
-    sitevertex(p, s) = first(bindingsite(particles(poly, p), rules, s).vertices)
+    sitevertex(p, s) = first(bindingsite(poly, ParticleSite(p, s)).vertices)
     hm, rootvertices = _envgraph(poly, dist, depth, (p1, p2),
         (sitevertex(p1, s1), sitevertex(p2, s2)))
     return PolyformEnvironment(hm, rootvertices, Int(depth), rules)

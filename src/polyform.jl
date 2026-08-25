@@ -229,12 +229,9 @@ one that `graphrep(poly)` and its `edges` are in, and `false` for the stable ori
 `BindingSite.vertices` and `Particle.leadingvertex` are in.
 """
 function bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs::Bool=true)
-    rules = bindingrules(poly)
-    p1, b1 = _vertex_to_particle_site(poly, src; canonidxs)
-    p2, b2 = _vertex_to_particle_site(poly, dst; canonidxs)
-    c1 = color(bindingsite(particles(poly, p1), rules, b1))
-    c2 = color(bindingsite(particles(poly, p2), rules, b2))
-    return findfirst(==(minmax(c1, c2)), bonded_colors(rules))
+    c1 = color(bindingsite(poly, _vertex_to_particle_site(poly, src; canonidxs)))
+    c2 = color(bindingsite(poly, _vertex_to_particle_site(poly, dst; canonidxs)))
+    return findfirst(==(minmax(c1, c2)), bonded_colors(bindingrules(poly)))
 end
 
 # Map a graph vertex back to (particleindex, siteindex).
@@ -248,6 +245,15 @@ function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool)
         end
     end
     return nothing
+end
+
+"""
+    bindingsite(p::Polyform, loc::ParticleSite)
+
+The binding site `loc` names: site `loc.site` of particle `loc.particle` of `p`.
+"""
+@inline function bindingsite(p::Polyform, loc::ParticleSite)
+    return bindingsite(particles(p, loc.particle), bindingrules(p), loc.site)
 end
 
 """
@@ -809,7 +815,7 @@ function collect_attachments!(attachments, poly::Polyform)
                 # The new particle is always removable, so `lower!` stops at its label class
                 # unless a higher one survives.
                 siteloc.species < deletable && continue
-                mate = bindingsite(species(rules, siteloc.species), siteloc.site)
+                mate = bindingsite(rules, siteloc)
                 for t in 0:(_ndistincttwists(site, mate) - 1)
                     push!(attachments, (site, siteloc, t))
                 end
