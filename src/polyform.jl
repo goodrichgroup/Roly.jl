@@ -283,6 +283,16 @@ Return a lazy iterator over all binding sites of `p` in canonical order.
 canonbindingsites(p::Polyform) = (canonbindingsite(p, i) for i in 1:nsites(p))
 
 """
+    rotationcenter(p::Polyform)
+
+The point every rotational symmetry of `p` fixes: the centroid of its particle positions.
+
+A symmetry permutes the particles, so it fixes their centroid, and [`rotationgroup`](@ref
+rotationgroup(::Polyform)) turns about this point rather than about `p`'s pose origin.
+"""
+rotationcenter(p::Polyform) = sum(pt.pose.x for pt in p.particles) / nparticles(p)
+
+"""
     permutationgroup(p::Polyform)
 
 Return the rotational symmetry group of `p` as particle permutations: one permutation per
@@ -347,8 +357,7 @@ function _eachpolyformsymmetry(f, p::Polyform)
     spcs = [speciesindex(pt) for pt in p.particles]
     own = Dict(s => rotationgroup(species(rules, s)) for s in unique(spcs))
 
-    centroid = sum(q.x for q in poses) / n
-    xs = [q.x - centroid for q in poses]
+    xs = [q.x - rotationcenter(p) for q in poses]
     tol = sqrt(eps(F))
     atol = tol * max(one(F), maximum(norm, xs))
 

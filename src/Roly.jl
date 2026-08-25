@@ -28,7 +28,7 @@ export ncolors, nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, i
 # Polyforms
 export Polyform, nparticles, bindingrules, composition
 export bonds, bondindex, interior_edges, exterior_edges, subpolyform
-public canonbindingsite, canonbindingsites
+public canonbindingsite, canonbindingsites, rotationcenter
 
 # Environments
 export PolyformEnvironment, ParticleEnvironment, BondEnvironment

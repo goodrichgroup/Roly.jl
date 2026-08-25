@@ -208,19 +208,28 @@
     end
 
     @testset "the encoding is checked like any other species" begin
-        # `check_encoding` runs in the constructor now, against the polyform's own rotation group
-        # rather than one derived from the sites, which is what `rotationgroup` reports here
+        # `check_encoding` runs in the constructor now, against the polyform's own rotations
+        # rather than a group derived from the sites, which could not see the polyform behind them
         @test Roly.check_encoding(mp) === mp
-        @test length(Roly.rotationgroup(mp)) == length(Roly.rotationgroup(dimer))
         @test length(Roly.permutationgroup(mp)) == symmetrynumber(mp)
 
         selfrules = BindingRules([1 1 1 1; 1 2 1 2], UnitSquare)
         sym = polygen(selfrules; maxsize=2)[end]
-        for ps in (MetaParticleSpecies(sym), MetaParticleSpecies(sym; colors=[9, 9]),
-                   MetaParticleSpecies(sym; colors=[4, 5]))
+        @test length(Roly.rotationgroup(sym)) == 2
+
+        # the polyform's rotations are only the candidates. Coloring the two exposed sites apart
+        # costs the meta-species a symmetry the polyform keeps, so its group is a subgroup
+        for (cols, order) in (([9, 9], 2), ([4, 5], 1))
+            ps = MetaParticleSpecies(sym; colors=cols)
             @test Roly.check_encoding(ps) === ps
-            @test length(Roly.permutationgroup(ps)) == symmetrynumber(ps)
+            @test length(Roly.rotationgroup(ps)) == order
+            @test length(Roly.permutationgroup(ps)) == symmetrynumber(ps) == order
         end
+
+        # and so does exposing only one of the two
+        row = first(exposablesites(sym))
+        one = MetaParticleSpecies(sym, [(row.particle, row.site)])
+        @test length(Roly.rotationgroup(one)) == symmetrynumber(one) == 1
     end
 
     @testset "recoloring tracks the orbits, not the colors" begin

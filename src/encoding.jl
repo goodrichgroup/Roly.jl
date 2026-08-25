@@ -870,7 +870,8 @@ The counterpart of [`rotationgroup`](@ref), which returns the same group as rota
 """
 function permutationgroup(ps::ParticleSpecies)
     perms = Vector{Int}[]
-    _eachsitesymmetry((_, perm) -> push!(perms, perm), _sitegeometry(ps)...)
+    _eachsitesymmetry((_, perm) -> push!(perms, perm), _sitegeometry(ps)...;
+                      group=_rotationcandidates(ps))
     return perms
 end
 
@@ -886,9 +887,21 @@ permutations.
 """
 function rotationgroup(ps::ParticleSpecies)
     rots = _rotationtype(posetype(ps))[]
-    _eachsitesymmetry((Q, _) -> push!(rots, Q), _sitegeometry(ps)...)
+    _eachsitesymmetry((Q, _) -> push!(rots, Q), _sitegeometry(ps)...; group=_rotationcandidates(ps))
     return rots
 end
+
+"""
+    _rotationcandidates(ps::ParticleSpecies)
+
+The rotations to test when asking for `ps`'s symmetry group, or `nothing` to derive them from its
+sites; the `group` argument of [`_eachsitesymmetry`](@ref).
+
+Only ever a *superset* of the answer, since every consumer drops the ones that move a site. A
+species whose sites do not determine it overrides this, see the warning on
+[`_eachsitesymmetry`](@ref).
+"""
+_rotationcandidates(::ParticleSpecies) = nothing
 
 _rotationtype(::Type{<:Pose{D,F,R}}) where {D,F,R} = R
 
@@ -1135,7 +1148,7 @@ function _check_labeling(ps::ParticleSpecies)
     end
 
     labeling = _canonicalpartition([sitelabel(ps, i) for i in 1:nsites(ps)])
-    orbits = siteorbits(_sitegeometry(ps)...; group=rotationgroup(ps))
+    orbits = siteorbits(_sitegeometry(ps)...; group=_rotationcandidates(ps))
     labeling == orbits || throw(
         ArgumentError(
             "This labeling groups the sites as $labeling, but the rotations preserving it group " *
@@ -1170,7 +1183,7 @@ labels by hand instead of deriving them with [`siteorbits`](@ref).
 """
 function check_encoding(ps::ParticleSpecies)
     _check_labeling(ps)
-    geom, group = _sitegeometry(ps), rotationgroup(ps)
+    geom, group = _sitegeometry(ps), _rotationcandidates(ps)
     geometric = _eachsitesymmetry(Returns(nothing), geom...; group)
     # Not `canonize`: a species' graph must stay in construction order, see `symmetrynumber`.
     _, autg = nauty(graphrep(ps))

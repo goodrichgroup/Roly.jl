@@ -110,7 +110,8 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     # are the ordinary ones, measured against the polyform's own symmetry group rather than one
     # derived from the sites, which cannot see the polyform behind them.
     group = rotationgroup(poly)
-    poses, sitesyms = _metageometry(poly, open)
+    c = rotationcenter(poly)
+    poses, sitesyms = [s.pose + (-c) for s in open], [s.sitesym for s in open]
     orbits = siteorbits(poses, sitesyms, cols; group)
     stabs = stabilizerorders(poses, sitesyms, cols; group)
     metasites = map(1:n) do i
@@ -136,30 +137,19 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     )
 end
 
-"""
-    _metageometry(poly, sites)
-
-The site geometry of a meta-species in the frame its symmetries turn about: `(poses, sitesyms)`
-with the poses shifted so that the centroid of `poly`'s particles, which every rotation of `poly`
-fixes, sits at the origin.
-
-[`siteorbits`](@ref) and [`stabilizerorders`](@ref) measure rotations about the origin of the
-poses they are handed, so this is what pairs with `rotationgroup(poly)`.
-"""
-function _metageometry(poly::Polyform, sites)
-    centroid = sum(p.pose.x for p in poly.particles) / nparticles(poly)
-    return [s.pose + (-centroid) for s in sites], [s.sitesym for s in sites]
-end
-
 # The two hooks `check_encoding` and its helpers reach through. A meta-species' symmetries are
-# its polyform's, turning about the polyform's centroid rather than about the species' pose
-# origin, so both the group and the frame the site poses are given in have to be overridden
-# together.
-rotationgroup(ps::MetaParticleSpecies) = rotationgroup(polyform(ps))
+# among its polyform's, turning about `rotationcenter` rather than about the species' pose origin,
+# so the candidates and the frame the site poses are given in are overridden together.
+#
+# Candidates, not the group: exposing only some of the polyform's open sites, or coloring two of
+# them apart, costs the meta-species symmetries the polyform still has. Every consumer filters,
+# so `rotationgroup(ps)` is the subgroup that survives.
+_rotationcandidates(ps::MetaParticleSpecies) = rotationgroup(polyform(ps))
 
 function _sitegeometry(ps::MetaParticleSpecies)
-    poses, sitesyms = _metageometry(polyform(ps), ps.sites)
-    return poses, sitesyms, [sitelabel(ps, i) for i in 1:nsites(ps)]
+    c = rotationcenter(polyform(ps))
+    return ([s.pose + (-c) for s in ps.sites], [s.sitesym for s in ps.sites],
+            [sitelabel(ps, i) for i in 1:nsites(ps)])
 end
 
 # Label every open-site vertex by its symmetry orbit, placed above every interior label.
@@ -202,8 +192,8 @@ polyform(ps::MetaParticleSpecies) = ps.poly
 function setcolors!(ps::MetaParticleSpecies, colors::AbstractVector{<:Integer})
     n = nsites(ps)
     length(colors) == n || throw(ArgumentError("expected $n colors, got $(length(colors))"))
-    group = rotationgroup(ps.poly)
-    poses, sitesyms = _metageometry(ps.poly, ps.sites)
+    poses, sitesyms, _ = _sitegeometry(ps)
+    group = rotationgroup(ps)
     orbits = siteorbits(poses, sitesyms, colors; group)
     stabs = stabilizerorders(poses, sitesyms, colors; group)
     for i in eachindex(ps.sites)
