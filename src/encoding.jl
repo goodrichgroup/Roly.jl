@@ -902,7 +902,7 @@ function _sitegeometry(ps::ParticleSpecies)
 end
 
 """
-    _eachsitesymmetry(f, poses, sitesyms, sitelabels)
+    _eachsitesymmetry(f, poses, sitesyms, sitelabels; group=nothing)
 
 Call `f(Q, perm)` on every rotation `Q` about the particle (= site poses, syms, and labels) origin that carries each site onto
 one with the same `sitelabels` entry, matching position and orientation, together with the site
@@ -911,17 +911,24 @@ permutation `perm` it induces. Return how many there were.
 `sitelabels` is whatever a symmetry has to preserve: graph labels when asking what the graph
 claims, colors when asking what the arrangement is. Pass `f = Returns(nothing)` to only count.
 
-The candidates are enumerated by orbit and stabilizer: a rotation is fixed by where it sends
-site 1's frame, it must send site 1 to a site of the same label, and it may leave the frame in
-any of that site's `sitesym` equivalent turns. Every group element appears exactly once, since
-the outer loop runs over site 1's orbit and the inner one over its stabilizer.
+`group` is where the candidate rotations come from. Given one, each of its elements is tried once
+and those moving a site off the set are dropped, which is how a caller holding the particle's
+symmetry group by other means reaches the same permutations.
 
-!!! warning "Particles only"
-    This rests on a particle's sites having *distinct positions*, which makes a rotation
-    determined by where it sends site 1, and makes the site map injective for free. Neither
-    holds for an assembled [`Polyform`](@ref).
+Given `nothing`, the candidates are derived from the sites, by orbit and stabilizer: a rotation
+is fixed by where it sends site 1's frame, it must send site 1 to a site of the same label, and
+it may leave the frame in any of that site's `sitesym` equivalent turns. Every group element
+appears exactly once, since the outer loop runs over site 1's orbit and the inner one over its
+stabilizer.
+
+!!! warning "When the group has to be supplied"
+    Deriving it rests on two things. The sites must have *distinct positions*, which makes a
+    rotation determined by where it sends site 1 and the site map injective for free. And the
+    sites must determine the body, which an assembled [`Polyform`](@ref) does not: two open sites
+    can sit in symmetric poses with different structures behind them. A
+    [`MetaParticleSpecies`](@ref) fails both and supplies its `Polyform`'s own group instead.
 """
-function _eachsitesymmetry(f, poses, sitesyms, sitelabels)
+function _eachsitesymmetry(f, poses, sitesyms, sitelabels; group=nothing)
     n = length(poses)
     tol = sqrt(eps(eltype(typeof(first(poses)))))
     atol = tol * maximum(norm(p.x) for p in poses)
@@ -941,6 +948,16 @@ function _eachsitesymmetry(f, poses, sitesyms, sitelabels)
     end
 
     count = 0
+    if group !== nothing
+        for Q in group
+            perm = permutation(Q)
+            isnothing(perm) && continue
+            f(Q, perm)
+            count += 1
+        end
+        return count
+    end
+
     for a in 1:n
         sitelabels[a] == sitelabels[1] || continue
         for psi in _sitetwists(poses[a].psi, sitesyms[a])
@@ -959,14 +976,14 @@ function _eachsitesymmetry(f, poses, sitesyms, sitelabels)
 end
 
 """
-    _sitesymmetries(poses, sitesyms, sitelabels)
+    _sitesymmetries(poses, sitesyms, sitelabels; group=nothing)
 
 Return the site permutations of [`_eachsitesymmetry`](@ref), for callers that hold the site
 geometry rather than a [`ParticleSpecies`](@ref).
 """
-function _sitesymmetries(poses, sitesyms, sitelabels)
+function _sitesymmetries(poses, sitesyms, sitelabels; group=nothing)
     perms = Vector{Int}[]
-    _eachsitesymmetry((_, perm) -> push!(perms, perm), poses, sitesyms, sitelabels)
+    _eachsitesymmetry((_, perm) -> push!(perms, perm), poses, sitesyms, sitelabels; group)
     return perms
 end
 
@@ -1006,15 +1023,15 @@ function _graphsiteorbits(ps::ParticleSpecies, vertexorbits)
 end
 
 """
-    siteorbits(poses, sitesyms, colors)
+    siteorbits(poses, sitesyms, colors; group=nothing)
 
 Group the sites into the orbits of the rotations that preserve the colored arrangement, and
 return one orbit index per site.
 """
-function siteorbits(poses, sitesyms, colors)
+function siteorbits(poses, sitesyms, colors; group=nothing)
     n = length(poses)
     orbit = collect(1:n)
-    for perm in _sitesymmetries(poses, sitesyms, colors)
+    for perm in _sitesymmetries(poses, sitesyms, colors; group)
         for i in 1:n
             lo, hi = minmax(orbit[i], orbit[perm[i]])
             hi == lo && continue
@@ -1038,13 +1055,13 @@ symmetries leave the site where it is.
 stabilizerorders(ps::ParticleSpecies) = [bindingsite(ps, i).stab for i in 1:nsites(ps)]
 
 """
-    stabilizerorders(poses, sitesyms, sitelabels)
+    stabilizerorders(poses, sitesyms, sitelabels; group=nothing)
 
 Return the order of each site's stabilizer: how many of the particle's own
 symmetries leave the site where it is.
 """
-function stabilizerorders(poses, sitesyms, sitelabels)
-    perms = _sitesymmetries(poses, sitesyms, sitelabels)
+function stabilizerorders(poses, sitesyms, sitelabels; group=nothing)
+    perms = _sitesymmetries(poses, sitesyms, sitelabels; group)
     return [count(perm -> perm[i] == i, perms) for i in eachindex(poses)]
 end
 
@@ -1118,7 +1135,7 @@ function _check_labeling(ps::ParticleSpecies)
     end
 
     labeling = _canonicalpartition([sitelabel(ps, i) for i in 1:nsites(ps)])
-    orbits = siteorbits(_sitegeometry(ps)...)
+    orbits = siteorbits(_sitegeometry(ps)...; group=rotationgroup(ps))
     labeling == orbits || throw(
         ArgumentError(
             "This labeling groups the sites as $labeling, but the rotations preserving it group " *
@@ -1153,7 +1170,8 @@ labels by hand instead of deriving them with [`siteorbits`](@ref).
 """
 function check_encoding(ps::ParticleSpecies)
     _check_labeling(ps)
-    geometric = _eachsitesymmetry(Returns(nothing), _sitegeometry(ps)...)
+    geom, group = _sitegeometry(ps), rotationgroup(ps)
+    geometric = _eachsitesymmetry(Returns(nothing), geom...; group)
     # Not `canonize`: a species' graph must stay in construction order, see `symmetrynumber`.
     _, autg = nauty(graphrep(ps))
     graph = convert(Int, autg.n)
@@ -1172,7 +1190,7 @@ function check_encoding(ps::ParticleSpecies)
         ),
     )
 
-    orbits = siteorbits(_sitegeometry(ps)...)
+    orbits = siteorbits(geom...; group)
     fromgraph = _graphsiteorbits(ps, autg.orbits)
     orbits == fromgraph || throw(
         ArgumentError(

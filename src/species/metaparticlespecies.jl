@@ -22,11 +22,13 @@ meta-assembly is the graph its particles would have formed directly. Bound sites
 graph as interior vertices; only the open ones are sites, which is why `nv(graphrep(ps))` exceeds
 `nsites(ps)`, as it does for a 3D dart encoding.
 
-Open-site vertices are relabeled by color, above every interior label, so that automorphisms have
-to preserve the colors a bond can see while interior structure keeps its own distinctions.
-[`setcolors!`](@ref) maintains that and is not the generic method, which would re-derive the
-labeling from the site poses; [`check_encoding`](@ref) is likewise not run, since it compares the
-graph against those same poses.
+Open-site vertices are relabeled by their symmetry orbit, above every interior label, so that
+automorphisms have to preserve what a bond can see while interior structure keeps its own
+distinctions. The orbits come from the polyform's own [`rotationgroup`](@ref
+rotationgroup(::Polyform)), which is also what [`rotationgroup`](@ref
+rotationgroup(::ParticleSpecies)) reports for the species: deriving a group from the sites would
+claim symmetries the polyform does not have. [`setcolors!`](@ref) maintains the labeling and is
+not the generic method, which would re-derive it from the site poses alone.
 """
 struct MetaParticleSpecies{D,F,B<:BindingSite,G<:AbstractNautyGraph,PF} <: ParticleSpecies{D,B}
     g::G
@@ -69,7 +71,7 @@ pairs and exposed in that order. Without them every unbound, non-inert site is e
     inside `poly`
 
 Each site's `sitesym` and `locking` carry over from the polyform, while its `stab` is recomputed
-against the polyform by [`_metasymmetries`](@ref).
+against the polyform by [`siteorbits`](@ref) and [`stabilizerorders`](@ref).
 """
 function MetaParticleSpecies(poly::Polyform; colors=nothing)
     MetaParticleSpecies(poly, [(r.particle, r.site) for r in exposablesites(poly) if !r.inert]; colors)
@@ -105,9 +107,12 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     g = graphrep(poly)[poly.orig2canon]
 
     # `sitesym` and `locking` belong to the site and carry over. The orbits and the stabilizers
-    # come from the polyform's own symmetry group.
-    perms = _metasymmetries(poly, open, cols)
-    orbits, stabs = _metaorbits(perms, n), _metastabs(perms, n)
+    # are the ordinary ones, measured against the polyform's own symmetry group rather than one
+    # derived from the sites, which cannot see the polyform behind them.
+    group = rotationgroup(poly)
+    poses, sitesyms = _metageometry(poly, open)
+    orbits = siteorbits(poses, sitesyms, cols; group)
+    stabs = stabilizerorders(poses, sitesyms, cols; group)
     metasites = map(1:n) do i
         return BindingSite(
             open[i].pose,
@@ -126,61 +131,36 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     rmax = maximum(poly.particles; init=zero(F)) do part
         norm(part.pose.x) + bounding_radius(species(rules, speciesindex(part)))
     end
-    return MetaParticleSpecies{D,F,eltype(metasites),typeof(g),typeof(poly)}(g, metasites, copy(poly), convert(F, rmax))
+    return check_encoding(
+        MetaParticleSpecies{D,F,eltype(metasites),typeof(g),typeof(poly)}(g, metasites, copy(poly), convert(F, rmax))
+    )
 end
 
 """
-    _metasymmetries(poly, sites, colors)
+    _metageometry(poly, sites)
 
-The site permutations induced by the rotations of `poly` that carry every one of `sites` onto a
-site with the same color: the meta-particle's own symmetry group, acting on its exposed sites.
+The site geometry of a meta-species in the frame its symmetries turn about: `(poses, sitesyms)`
+with the poses shifted so that the centroid of `poly`'s particles, which every rotation of `poly`
+fixes, sits at the origin.
 
-The counterpart of [`_eachsitesymmetry`](@ref) for a meta-species, and the reason that one cannot
-be used directly: it derives the group from the sites alone, but a polyform's shape is not
-determined by its binding sites -- two open sites can sit in symmetric poses with different
-polyforms behind them -- so it would claim symmetries the polyform does not have. The group has
-to come from [`rotationgroup`](@ref rotationgroup(::Polyform))`(poly)` instead.
-
-A rotation carrying an exposed site onto one that was *not* exposed is dropped.
+[`siteorbits`](@ref) and [`stabilizerorders`](@ref) measure rotations about the origin of the
+poses they are handed, so this is what pairs with `rotationgroup(poly)`.
 """
-function _metasymmetries(poly::Polyform, sites, colors)
-    n = length(sites)
-    group = rotationgroup(poly)
-    F = numtype(poly)
+function _metageometry(poly::Polyform, sites)
     centroid = sum(p.pose.x for p in poly.particles) / nparticles(poly)
-    xs = [s.pose.x - centroid for s in sites]
-    tol = sqrt(eps(F))
-    atol = tol * max(one(F), maximum(norm, xs; init=one(F)))
-
-    perms = Vector{Int}[]
-    for Q in group
-        perm = map(1:n) do i
-            findfirst(1:n) do j
-                colors[j] == colors[i] &&
-                    isapprox(Q * xs[i], xs[j]; atol) &&
-                    any(psi -> isapprox(Q * sites[i].pose.psi, psi; atol=tol),
-                        _sitetwists(sites[j].pose.psi, sites[j].sitesym))
-            end
-        end
-        any(isnothing, perm) || push!(perms, collect(Int, perm))
-    end
-    return perms
+    return [s.pose + (-centroid) for s in sites], [s.sitesym for s in sites]
 end
 
-# Orbits of the exposed sites, as `siteorbits` reports them for a rigid species.
-function _metaorbits(perms, n::Integer)
-    orbit = collect(1:n)
-    for perm in perms, i in 1:n
-        lo, hi = minmax(orbit[i], orbit[perm[i]])
-        hi == lo || replace!(orbit, hi => lo)
-    end
-    return _canonicalpartition(orbit)
-end
+# The two hooks `check_encoding` and its helpers reach through. A meta-species' symmetries are
+# its polyform's, turning about the polyform's centroid rather than about the species' pose
+# origin, so both the group and the frame the site poses are given in have to be overridden
+# together.
+rotationgroup(ps::MetaParticleSpecies) = rotationgroup(polyform(ps))
 
-# Stabilizer orders of the exposed sites, as `stabilizerorders` reports them for a rigid species.
-# A rotation fixing a site fixes the centroid too, so it turns about the line through both, which
-# is the site's normal; each such rotation realizes a distinct one of the site's `sitesym` turns.
-_metastabs(perms, n::Integer) = [count(perm -> perm[i] == i, perms) for i in 1:n]
+function _sitegeometry(ps::MetaParticleSpecies)
+    poses, sitesyms = _metageometry(polyform(ps), ps.sites)
+    return poses, sitesyms, [sitelabel(ps, i) for i in 1:nsites(ps)]
+end
 
 # Label every open-site vertex by its symmetry orbit, placed above every interior label.
 #
@@ -222,8 +202,10 @@ polyform(ps::MetaParticleSpecies) = ps.poly
 function setcolors!(ps::MetaParticleSpecies, colors::AbstractVector{<:Integer})
     n = nsites(ps)
     length(colors) == n || throw(ArgumentError("expected $n colors, got $(length(colors))"))
-    perms = _metasymmetries(ps.poly, ps.sites, colors)
-    orbits, stabs = _metaorbits(perms, n), _metastabs(perms, n)
+    group = rotationgroup(ps.poly)
+    poses, sitesyms = _metageometry(ps.poly, ps.sites)
+    orbits = siteorbits(poses, sitesyms, colors; group)
+    stabs = stabilizerorders(poses, sitesyms, colors; group)
     for i in eachindex(ps.sites)
         ps.sites[i] = setstab(setcolor(ps.sites[i], colors[i]), stabs[i])
     end

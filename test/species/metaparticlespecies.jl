@@ -207,6 +207,22 @@
         @test labels(graphrep(ps)) == before
     end
 
+    @testset "the encoding is checked like any other species" begin
+        # `check_encoding` runs in the constructor now, against the polyform's own rotation group
+        # rather than one derived from the sites, which is what `rotationgroup` reports here
+        @test Roly.check_encoding(mp) === mp
+        @test length(Roly.rotationgroup(mp)) == length(Roly.rotationgroup(dimer))
+        @test length(Roly.permutationgroup(mp)) == symmetrynumber(mp)
+
+        selfrules = BindingRules([1 1 1 1; 1 2 1 2], UnitSquare)
+        sym = polygen(selfrules; maxsize=2)[end]
+        for ps in (MetaParticleSpecies(sym), MetaParticleSpecies(sym; colors=[9, 9]),
+                   MetaParticleSpecies(sym; colors=[4, 5]))
+            @test Roly.check_encoding(ps) === ps
+            @test length(Roly.permutationgroup(ps)) == symmetrynumber(ps)
+        end
+    end
+
     @testset "recoloring tracks the orbits, not the colors" begin
         # this dimer has no symmetry relating its two open sites, so they sit in different orbits
         # whatever they are colored, and recoloring cannot move the labeling
