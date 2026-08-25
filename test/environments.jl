@@ -1,4 +1,6 @@
 @testset "environments" begin
+    using Roly: subpolyform
+
     # 1-2 dimer: one active site per species
     dimerrules = BindingRules([1 1 2 1], UnitSquare)
     # 1-2-3 chain of squares

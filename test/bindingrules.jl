@@ -151,7 +151,7 @@ using StaticArrays: SVector
             isnothing(part) && continue
             for k in 1:Roly.nsites(part, rules)
                 site = bindingsite(part, rules, k)
-                Roly._isbound_vertex(poly, part, first(site.vertices)) && continue
+                Roly._isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
                 Roly.isinert(rules, color(site)) && continue
                 for siteloc in sitelocs_of(rules, color(site))
                     mate = bindingsite(Roly.species(rules, siteloc.species), siteloc.site)

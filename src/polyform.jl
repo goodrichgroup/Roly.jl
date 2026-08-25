@@ -175,13 +175,15 @@ A bond contributes *several* of these, one per vertex pair `contact_pairing` mak
 @inline exterior_edges(p::Polyform) = (e for e in _filter_edges(p, Val(true)) if e.src < e.dst)
 
 """
-    _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs=true)
+    _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs)
 
 Return `true` if the graph vertices `u` and `v` belong to the same particle.
 
-`canonidxs` says which numbering `u` and `v` are in.
+`canonidxs` says which numbering `u` and `v` are in, and has no default: a caller that does not
+say is a caller that has not thought about it, which is how a bond scan once read canonical
+indices as original ones and silently lost a class of environment.
 """
-@inline function _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs::Bool=true)
+@inline function _same_particle(p::Polyform, u::Integer, v::Integer; canonidxs::Bool)
     # Each particle owns a contiguous block of original vertices starting at its leading vertex, so
     # `u` and `v` are split apart exactly when some leading vertex falls between them.
     canonidxs && ((u, v) = (toorig(p, u), toorig(p, v)))
@@ -192,13 +194,13 @@ end
 # An edge is a bond exactly when its endpoints belong to different particles
 function _filter_edges(p::Polyform, ::Val{exterior}) where {exterior}
     return Iterators.filter(edges(graphrep(p))) do (; src, dst)
-        same = _same_particle(p, src, dst)
+        same = _same_particle(p, src, dst; canonidxs=true)
         return exterior ? !same : same
     end
 end
 
 """
-    _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs=true)
+    _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs)
 
 Return `true` if the graph vertex `v` of particle `part` is bonded to another particle, i.e. if
 it has a neighbor outside `part`'s own block of vertices.
@@ -206,7 +208,7 @@ it has a neighbor outside `part`'s own block of vertices.
 `canonidxs` says which numbering `v` is in, the same way it does for [`bondindex`](@ref) and
 [`_same_particle`](@ref).
 """
-function _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs::Bool=true)
+function _isbound_vertex(p::Polyform, part::Particle, v::Integer; canonidxs::Bool)
     own = graphvertices(part, bindingrules(p))
     neighs = NautyGraphs.adjrow(graphrep(p), canonidxs ? v : tocanon(p, v))
     for w in eachindex(neighs)
@@ -236,7 +238,7 @@ function bondindex(poly::Polyform, src::Integer, dst::Integer; canonidxs::Bool=t
 end
 
 # Map a graph vertex back to (particleindex, siteindex).
-function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool=true)
+function _vertex_to_particle_site(p::Polyform, v::Integer; canonidxs::Bool)
     rules = bindingrules(p)
     orig_v = canonidxs ? toorig(p, v) : v
     for (i, part) in enumerate(p.particles)
@@ -430,7 +432,8 @@ sites are joined by at most one bond, so the pair of sites an edge lands on name
 function _bondedges(p::Polyform)
     seen = Set{NTuple{2,ParticleSite}}()
     return filter(collect(exterior_edges(p))) do (; src, dst)
-        key = minmax(_vertex_to_particle_site(p, src), _vertex_to_particle_site(p, dst))
+        key = minmax(_vertex_to_particle_site(p, src; canonidxs=true),
+                     _vertex_to_particle_site(p, dst; canonidxs=true))
         key in seen && return false
         push!(seen, key)
         return true
@@ -444,7 +447,8 @@ Return a lazy iterator of bonds in `p`, each one once, as [`ParticleSite`](@ref)
 """
 function bonds(p::Polyform)
     return (
-        let (lhs, rhs) = minmax(_vertex_to_particle_site(p, e.src), _vertex_to_particle_site(p, e.dst))
+        let (lhs, rhs) = minmax(_vertex_to_particle_site(p, e.src; canonidxs=true),
+                                _vertex_to_particle_site(p, e.dst; canonidxs=true))
             lhs => rhs
         end for e in _bondedges(p)
     )
