@@ -29,6 +29,45 @@
     polys2d = polygen(sys2d; maxsize=3)
     @test render(polys2d[end]) isa Figure
 
+    ### a meta-particle draws as the polyform it wraps
+    metaseed = first(p for p in polys if nparticles(p) == 2)
+    mp = MetaParticleSpecies(metaseed)
+    @test render(mp) isa Figure
+    @test render(mp; bindingrules=Roly.metarules(mp)) isa Figure
+    # and a whole meta-assembly draws too
+    @test render(polygen(Roly.metarules(mp); maxsize=2)[end]) isa Figure
+
+    # its exposed sites keep their colors; everything else is one wash of the species color
+    si, exposed = ext._metasites(mp, nothing, nothing, nothing)
+    @test length(exposed) == nsites(mp)
+    @test Set(keys(exposed)) == Set(Roly.opensitelocs(metaseed))
+    parts = ext._metaparts(mp, Roly.Pose{3,Float64}(), nothing, nothing, nothing, nothing)
+    @test length(parts) == nparticles(metaseed)
+    wash = ext._tint(ext.species_basecolor(si), ext.BODY_TINT)
+    for (p, (_, _, _, sitecolor)) in enumerate(parts), k in 1:nsites(cube)
+        want = get(exposed, ParticleSite(p, k), wash)
+        @test sitecolor(0, k) == want
+    end
+    # the sites a bond inside the cluster consumes are exactly the washed ones
+    @test count(((p, k),) -> get(exposed, ParticleSite(p, k), wash) == wash,
+                [(p, k) for p in 1:nparticles(metaseed) for k in 1:nsites(cube)]) ==
+          nparticles(metaseed) * nsites(cube) - nsites(mp)
+
+    # a site the *new* rules leave inert is drawn inert, whatever it was inside the polyform.
+    # The default colors repeat across the two copies, so naming one site makes every site
+    # sharing its color live -- colors are the whole interface to the rules.
+    onebond = BindingRules([1 1 1 2], mp)
+    _, inertexposed = ext._metasites(mp, 1, onebond, nothing)
+    inertcount = count(i -> Roly.isinert(onebond, SpeciesSite(1, i)), 1:nsites(mp))
+    @test 0 < inertcount < nsites(mp)
+    @test count(==(ext.INERT_COLOR), values(inertexposed)) == inertcount
+
+    # the merged mesh is the constituents' meshes, and nothing else
+    geom = ext.particlemesh(mp)
+    one = ext.particlemesh(cube)
+    @test length(geom[1]) == nparticles(metaseed) * length(one[1])
+    @test length(geom[2]) == nparticles(metaseed) * length(one[2])
+
     # An explicitly passed `speciesindex` picks the palette instead of being overridden by
     # the default of 1.
     _, _, colors1, bonding1 = ext._resolve_colors(cube, 1, nothing, nothing)
