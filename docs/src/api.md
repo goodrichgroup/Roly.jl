@@ -191,6 +191,23 @@ PolyformCount
 An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
 A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
 
+## Tilings and unbounded growth
+
+Whether a rule set admits arbitrarily large structures, and the repeat unit when it does.
+See [Bounded and unbounded rules](growth.md).
+
+```@docs
+isunbounded
+growthwitness
+chainstatebound
+canchain
+tilings
+Tiling
+isunitcell
+tilelatticevectors
+cantile
+```
+
 ## Visualization
 
 Provided by the Makie extension, so a backend has to be loaded.

@@ -212,7 +212,7 @@ Lift the interactions of the wrapped polyforms to the meta-species themselves: t
 which two meta-particles bond exactly where the sites they expose would have bonded as ordinary
 sites, across the species as well as within each.
 
-Only meaningful while the meta-species still carry the colors they inherited from their
+Only works if the meta-species still carry the colors they inherited from their
 polyforms, which is the default. All of them must wrap polyforms built under the same rules.
 """
 function BindingRules(pss::AbstractVector{<:MetaParticleSpecies})
@@ -249,6 +249,7 @@ end
 function _underlyingcolors(ps::MetaParticleSpecies)
     poly = polyform(ps)
     return map(1:nsites(ps)) do i
+        # look up the original polyform binding site through the graph vertex of the species' site
         v = first(bindingsite(ps, i).vertices)
         return color(bindingsite(poly, _vertex_to_particle_site(poly, v; canonidxs=false)))
     end
@@ -257,33 +258,31 @@ end
 """
     inducedrules(rules::BindingRules)
 
-The rules a meta system induces on its particles: the rules its polyforms were built under, plus
-a bond for every bond `rules` offers, between the colors its two sites carry inside their
-polyforms.
+"Project" the meta-rules `rules` to down to the original binding rules of the underlying particles.
+Returns the binding rules of the original particles with additional bonds that make all contacts in the meta-polyform
+valid.
 
 Meta rules bond by colors of the meta-species' own choosing, which need not stand for a bond the
-underlying particles can make. Rather than refuse those, this reads them as a statement about the
-particles -- if two meta-sites bond, the sites they stand for bond -- and hands back the system in
-which that is true. Sites the underlying rules leave inert become active that way, and the new
-bonds are bond types of their own, so [`composition`](@ref) counts them apart from the old ones.
-
-The target [`recast`](@ref) usually wants, though nothing obliges it to be: any rules over the
-same species will do, and the underlying rules themselves are the other obvious choice.
+underlying particles can make. Rather than refuse those, this adds these to the original binding rules as additional
+bond types between the underlying particle species.
 """
 function inducedrules(rules::BindingRules)
     spcs = _metaspecies(rules)
-    base = bindingrules(polyform(first(spcs)))
-    all(ps -> bindingrules(polyform(ps)) === base, spcs) || throw(
-        ArgumentError("these meta-species wrap polyforms built under different rules, so there are none to project onto"),
+    origrules = bindingrules(polyform(first(spcs)))
+    all(ps -> bindingrules(polyform(ps)) === origrules, spcs) || throw(
+        ArgumentError("The meta-species wrap polyforms built under different binding rules."),
     )
 
-    intmat = Matrix(interactionmatrix(base))
+    intmat = Matrix(interactionmatrix(origrules))
     cols = map(_underlyingcolors, spcs)
-    for (group1, group2) in rules._bonded_sites, l1 in group1, l2 in group2
-        c1, c2 = cols[l1.species][l1.site], cols[l2.species][l2.site]
-        intmat[c1, c2] = intmat[c2, c1] = true
+    # add bonds to the original binding rules
+    for (sites1, sites2) in bonded_sites(rules)
+        for l1 in sites1, l2 in sites2
+            c1, c2 = cols[l1.species][l1.site], cols[l2.species][l2.site]
+            intmat[c1, c2] = intmat[c2, c1] = true
+        end
     end
-    return BindingRules(intmat, species(base))
+    return BindingRules(intmat, species(origrules))
 end
 
 # What one particle of `ps` is replaced by: a polyform, whose particles are placed at the poses
@@ -293,14 +292,12 @@ function _substitution(ps::ParticleSpecies, i::Integer, rules::BindingRules, giv
     isnothing(given) || return given
     ps isa MetaParticleSpecies && return polyform(ps)
     i <= nspecies(rules) ||
-        throw(ArgumentError("`rules` has no species $i for species $i of `poly` to stand for"))
+        throw(ArgumentError("`rules` has no species $i that could correspond to species $i of `poly`."))
     return Polyform(rules, i)
 end
 
 # The particles of a substitution carry species indices of its own rules, and those indices are
-# what `rules` is indexed by, so matching species are the ones at the same position. Comparing
-# them any other way would rest on the labels and colors `BindingRules` rewrites when it takes a
-# species in. The sizes are checked because a mismatch there is a mistake, not a convention.
+# what `rules` is indexed by, so matching species are the ones at the same position.
 function _checkspecies(from::BindingRules, rules::BindingRules)
     from === rules && return rules
     ok = nspecies(from) <= nspecies(rules) && all(1:nspecies(from)) do i
