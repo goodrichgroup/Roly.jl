@@ -78,12 +78,19 @@
         @test nsites(activated) == 2
         @test [color(bindingsite(activated, i)) for i in 1:2] == [1, 2]
         # and those sites really do bind under rules written over the new colors
+        # `exposeinert` names the same set without spelling it out
+        @test nsites(MetaParticleSpecies(dimer; exposeinert=true)) == length(exposedsites(dimer))
+        @test nsites(MetaParticleSpecies(dimer)) == length(opensites(dimer))
+
         activerules = BindingRules([1 1 1 2], activated)
         @test [polyenum(activerules; maxsize=k)[1] for k in 1:3] == [1, 2, 3]
-        # but the squares behind those sites cannot meet, so nothing built under such rules
-        # unwraps -- not even the lone copy, which uses no meta bond at all
-        @test_throws ArgumentError unwrap(polygen(activerules; maxsize=2)[end])
-        @test_throws ArgumentError unwrap(Polyform(activerules, 1))
+        # the squares behind those sites cannot meet under `chainlike`, so flattening onto it
+        # fails; projecting the meta rules instead bonds the pair they stand for, and it works
+        activepair = polygen(activerules; maxsize=2)[end]
+        @test_throws ArgumentError flatten(activepair, chainlike)
+        projected = flatten(activerules)
+        @test nbonds(projected) == nbonds(chainlike) + 1
+        @test nparticles(flatten(activepair, projected)) == 2nparticles(dimer)
 
         # exposure order is the caller's
         pair = opensites(dimer)
@@ -206,7 +213,7 @@
     end
 
     @testset "a block assembles like the shape it makes" begin
-        using Roly: unwrap, metabonds, nbonds, nfaces, facenormal
+        using Roly: metabonds, nbonds, nfaces, facenormal
 
         persize(rules, K) = [count(p -> nparticles(p) == k, polygen(rules; maxsize=K)) for k in 1:K]
         outward(s) = s.pose.psi[:, 1]
@@ -246,12 +253,15 @@
         metas = polygen(both; maxsize=2)
         # a chain of squares either way, and a meta-pair holds as many squares as its copies do
         chains = Set(graphrep(p) for p in polygen(chainlike; maxsize=4))
-        @test all(graphrep(unwrap(m)) in chains for m in metas)
-        @test all(m -> nparticles(unwrap(m)) ==
-                       sum(nparticles(polyform(species(both, p.speciesindex))) for p in m.particles),
-                  metas)
+        flat = [flatten(m, chainlike) for m in metas]
+        @test all(graphrep(f) in chains for f in flat)
+        @test all(zip(metas, flat)) do (m, f)
+            nparticles(f) == sum(nparticles(polyform(species(both, p.speciesindex))) for p in m.particles)
+        end
         # 3 squares can only be a monomer bonded to a dimer, so the lift crossed the two species
-        @test sort(unique(nparticles(unwrap(m)) for m in metas)) == [1, 2, 3, 4]
+        @test sort(unique(nparticles.(flat))) == [1, 2, 3, 4]
+        # a lifted system flattens onto the rules it was lifted from, so those are the projection
+        @test interactionmatrix(flatten(both)) == interactionmatrix(chainlike)
 
         # there is nothing to lift when the polyforms were built under different rules
         @test_throws ArgumentError BindingRules([mono, MetaParticleSpecies(Polyform(BindingRules([1 1 1 1],
@@ -330,35 +340,51 @@
         @test any(m -> length(metabonds(m)) == 1, loose)
         # every one of them is still an assembly of squares
         direct = Set(graphrep(p) for p in polygen(sqrules; maxsize=8))
-        @test all(graphrep(unwrap(m)) in direct for m in loose)
-        @test all(nparticles(unwrap(m)) == 4nparticles(m) for m in loose)
-        @test all(nbonds(unwrap(m)) == 4nparticles(m) + length(metabonds(m)) for m in loose)
+        flatloose = [flatten(m, sqrules) for m in loose]
+        @test all(graphrep(f) in direct for f in flatloose)
+        @test all(nparticles(f) == 4nparticles(m) for (m, f) in zip(loose, flatloose))
+        @test all(nbonds(f) == 4nparticles(m) + length(metabonds(m)) for (m, f) in zip(loose, flatloose))
         # giving the two sites of a side different colors leaves the offset nothing to bond to,
         # and the block tiles exactly as a square does
         @test persize(keyed(block, across), 5) == [1, 2, 6, 19, 63]
 
         # meta rules need not stand for bonds of the underlying rules. these bond a west site to
-        # a north one, which no two squares can do, so the assembly exists but does not unwrap
+        # a north one, which no two squares can do under `sqrules`
         bent = MetaParticleSpecies(block)
         west, north = findfirst(i -> color(bindingsite(bent, i)) == 2, 1:nsites(bent)),
         findfirst(i -> color(bindingsite(bent, i)) == 3, 1:nsites(bent))
         pair = first(p for p in polygen(BindingRules([1 west 1 north], bent); maxsize=2)
                      if nparticles(p) == 2)
-        @test_throws ArgumentError unwrap(pair)
-        @test occursin("do not bond under the rules", sprint(showerror, try
-            unwrap(pair)
-        catch e
-            e
-        end))
+        @test_throws ArgumentError flatten(pair, sqrules)
+        # projecting says what the meta bond claims about squares, and then it flattens
+        bentrules = flatten(bindingrules(pair))
+        @test nbonds(bentrules) == nbonds(sqrules) + 1
+        @test nparticles(flatten(pair, bentrules)) == 8
 
-        ### two species, which must not be conflated when the block is unwrapped
+        ### flattening is a change of lens, not something meta-particles own: a polyform reads
+        ### under any rules that permit it, and refuses under rules that do not
+        chain3 = only(p for p in polygen(chainlike; maxsize=3) if nparticles(p) == 3)
+        wider = flatten(chain3, sqrules)
+        @test nparticles(wider) == 3
+        @test graphrep(wider) in Set(graphrep(p) for p in polygen(sqrules; maxsize=3))
+        @test nbonds(wider) == nbonds(chain3) == 2
+        # the block bonds two squares side by side, which `chainlike` leaves inert
+        @test_throws ArgumentError flatten(block, chainlike)
+
+        ### a substitution replaces a species by a polyform, meta-species or not
+        @test nparticles(flatten(Polyform(chainlike, 1), chainlike;
+                                 substitutions=Dict(1 => dimer))) == 2
+        @test graphrep(flatten(Polyform(chainlike, 1), chainlike;
+                               substitutions=Dict(1 => dimer))) == graphrep(dimer)
+
+        ### two species, which must not be conflated when the block is flattened
         two = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
         direct2 = Set(graphrep(p) for p in polygen(two; maxsize=6))
         for seed in (p for p in polygen(two; maxsize=2) if nparticles(p) == 2)
             metas = polygen(BindingRules(MetaParticleSpecies(seed)); maxsize=3)
             @test !isempty(metas)
-            @test all(graphrep(unwrap(m)) in direct2 for m in metas)
-            @test all(composition(unwrap(m))[1:2] == nparticles(m) .* composition(seed)[1:2]
+            @test all(graphrep(flatten(m, two)) in direct2 for m in metas)
+            @test all(composition(flatten(m, two))[1:2] == nparticles(m) .* composition(seed)[1:2]
                       for m in metas)
         end
 
@@ -369,7 +395,7 @@
             mp = MetaParticleSpecies(seed)
             @test symmetrynumber(mp) == symmetrynumber(seed)
             metas = polygen(BindingRules(mp); maxsize=nparticles(seed) == 2 ? 3 : 2)
-            @test all(graphrep(unwrap(m)) in direct3 for m in metas)
+            @test all(graphrep(flatten(m, cuberules)) in direct3 for m in metas)
         end
     end
 

@@ -137,9 +137,9 @@ MetaParticleSpecies
 BindingRules(::MetaParticleSpecies)
 BindingRules(::AbstractVector{<:MetaParticleSpecies})
 polyform
-unwrap
+flatten
 metabonds
-unwrappedsites
+flattenedsites
 ```
 
 ## Binding rules

@@ -54,7 +54,7 @@ export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
-export MetaParticleSpecies, polyform, unwrap, metabonds, unwrappedsites
+export MetaParticleSpecies, polyform, flatten, metabonds, flattenedsites
 
 # Public, but not exported: reach for these as `Roly.faces(p)`, or import them by name.
 # They are stable API, but specific enough to a body, an encoding or a species that putting
