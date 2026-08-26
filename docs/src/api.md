@@ -134,8 +134,9 @@ A [`Polyform`](@ref) wrapped as a species, so that assemblies can be built out o
 
 ```@docs
 MetaParticleSpecies
+BindingRules(::MetaParticleSpecies)
+BindingRules(::AbstractVector{<:MetaParticleSpecies})
 polyform
-metarules
 unwrap
 metabonds
 unwrappedsites

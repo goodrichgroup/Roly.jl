@@ -33,9 +33,9 @@
     metaseed = first(p for p in polys if nparticles(p) == 2)
     mp = MetaParticleSpecies(metaseed)
     @test render(mp) isa Figure
-    @test render(mp; bindingrules=Roly.metarules(mp)) isa Figure
+    @test render(mp; bindingrules=BindingRules(mp)) isa Figure
     # and a whole meta-assembly draws too
-    @test render(polygen(Roly.metarules(mp); maxsize=2)[end]) isa Figure
+    @test render(polygen(BindingRules(mp); maxsize=2)[end]) isa Figure
 
     # its exposed sites keep their colors; everything else is one wash of the species color
     si, exposed = ext._metasites(mp, nothing, nothing, nothing)

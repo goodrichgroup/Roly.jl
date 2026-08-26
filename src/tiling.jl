@@ -134,7 +134,7 @@ function _tilecells(poly::Polyform, maxorder::Integer)
     # With no open site there is nothing for a translate to bond to, and no meta-species to build.
     isempty(opensites(poly)) && return cells
 
-    for meta in polygen(metarules(MetaParticleSpecies(poly)); maxsize=maxorder)
+    for meta in polygen(BindingRules(MetaParticleSpecies(poly)); maxsize=maxorder)
         parts, _, sites = _unwrapparts(meta)
         push!(cells, TileCell(parts, sites, metabonds(meta), nparticles(meta)))
     end

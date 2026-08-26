@@ -201,28 +201,46 @@ function overlap(p1::SpeciesAndPose{<:MetaParticleSpecies}, p2::SpeciesAndPose{<
 end
 
 """
-    metarules(ps::MetaParticleSpecies)
+    BindingRules(ps::MetaParticleSpecies)
 
-Lift the interactions of `ps`' polyform to `ps` itself: the [`BindingRules`](@ref) under which two
-copies of `ps` bond exactly where the sites they expose would have bonded as ordinary sites.
+Lift the interactions of the wrapped polyform to the meta-species itself: the rules under which
+two meta-particles bond exactly where the sites they expose would have bonded as ordinary sites.
 
-Only meaningful while `ps` still carries the colors it inherited from the polyform, which is the
-default; a recoloring is a statement that the meta-assembly follows rules of its own, and those
-have to be written out.
+Only meaningful while the meta-species still carries the colors it inherited from its polyform,
+which is the default.
 """
-function metarules(ps::MetaParticleSpecies)
-    rules = bindingrules(polyform(ps))
-    intmat = interactionmatrix(rules)
-    cols = [color(bindingsite(ps, i)) for i in 1:nsites(ps)]
-    all(c -> 1 <= c <= ncolors(rules), cols) || throw(
+BindingRules(ps::MetaParticleSpecies) = BindingRules([ps])
+
+"""
+    BindingRules(pss::AbstractVector{<:MetaParticleSpecies})
+
+Lift the interactions of the wrapped polyforms to the meta-species themselves: the rules under
+which two meta-particles bond exactly where the sites they expose would have bonded as ordinary
+sites, across the species as well as within each.
+
+Only meaningful while the meta-species still carry the colors they inherited from their
+polyforms, which is the default. All of them must wrap polyforms built under the same rules.
+"""
+function BindingRules(pss::AbstractVector{<:MetaParticleSpecies})
+    isempty(pss) && throw(ArgumentError("The list of particle species is empty."))
+    base = bindingrules(polyform(first(pss)))
+    all(ps -> bindingrules(polyform(ps)) === base, pss) || throw(
+        ArgumentError("The meta particle species wrap polyforms built under different binding rules."),
+    )
+
+    intmat = interactionmatrix(base)
+    cols = [[color(bindingsite(ps, i)) for i in 1:nsites(ps)] for ps in pss]
+    all(c -> 1 <= c <= ncolors(base), Iterators.flatten(cols)) || throw(
         ArgumentError(
-            "`ps` carries colors the polyform's rules do not have, so its interactions cannot be " *
-            "lifted from them. Write the meta rules out instead.",
+            "These meta particle species carry colors the original polyforms' rules do not have.",
         ),
     )
-    rows = [[1, i, 1, j] for i in eachindex(cols) for j in i:length(cols) if intmat[cols[i], cols[j]]]
+
+    # Each unordered pair of sites once: within a species from `i` on, across species all of them.
+    rows = [[a, i, b, j] for a in eachindex(pss) for i in eachindex(cols[a]) for b in a:length(pss)
+            for j in (a == b ? i : 1):length(cols[b]) if intmat[cols[a][i], cols[b][j]]]
     bonds = isempty(rows) ? zeros(Int, 0, 4) : permutedims(reduce(hcat, rows))
-    return BindingRules(bonds, [ps])
+    return BindingRules(bonds, pss)
 end
 
 function _metaspecies(meta::Polyform)
@@ -267,8 +285,8 @@ function _checkmetalift(meta::Polyform)
                 "$(l2.site) of meta-species $(l2.species), but the sites those stand for do not " *
                 "bond under the rules their polyforms were built under. A meta-system offering a " *
                 "bond its particles cannot make is not a system of those particles, so nothing " *
-                "built under it unwraps, this polyform included. `metarules` builds the rules " *
-                "that lift.",
+                "built under it unwraps, this polyform included. `BindingRules(species)` " *
+                "builds the rules that lift.",
             ),
         )
     end
@@ -321,7 +339,7 @@ function _unwrapfailed(parts, part, rules)
             "this meta-polyform does not unwrap: two of its copies $why, so the particles could " *
             "never have assembled into this arrangement on their own. Meta rules bond by the " *
             "meta-species' own colors, which need not stand for a bond of the underlying rules; " *
-            "`metarules` builds the ones that do.",
+            "`BindingRules(species)` builds the ones that do.",
         ),
     )
 end

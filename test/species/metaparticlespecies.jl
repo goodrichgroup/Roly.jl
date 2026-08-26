@@ -206,7 +206,7 @@
     end
 
     @testset "a block assembles like the shape it makes" begin
-        using Roly: metarules, unwrap, metabonds, nbonds, nfaces, facenormal
+        using Roly: unwrap, metabonds, nbonds, nfaces, facenormal
 
         persize(rules, K) = [count(p -> nparticles(p) == k, polygen(rules; maxsize=K)) for k in 1:K]
         outward(s) = s.pose.psi[:, 1]
@@ -238,12 +238,33 @@
             return BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in pairs]), ps)
         end
 
+        ### several meta-species lifted together, bonding across each other as well as within
+        mono = MetaParticleSpecies(Polyform(chainlike, 1))
+        di = MetaParticleSpecies(dimer)
+        both = BindingRules([mono, di])
+        @test nspecies(both) == 2
+        metas = polygen(both; maxsize=2)
+        # a chain of squares either way, and a meta-pair holds as many squares as its copies do
+        chains = Set(graphrep(p) for p in polygen(chainlike; maxsize=4))
+        @test all(graphrep(unwrap(m)) in chains for m in metas)
+        @test all(m -> nparticles(unwrap(m)) ==
+                       sum(nparticles(polyform(species(both, p.speciesindex))) for p in m.particles),
+                  metas)
+        # 3 squares can only be a monomer bonded to a dimer, so the lift crossed the two species
+        @test sort(unique(nparticles(unwrap(m)) for m in metas)) == [1, 2, 3, 4]
+
+        # there is nothing to lift when the polyforms were built under different rules
+        @test_throws ArgumentError BindingRules([mono, MetaParticleSpecies(Polyform(BindingRules([1 1 1 1],
+                                                                                                UnitSquare), 1))])
+        # nor when a recoloring has taken the sites out of the underlying rules' vocabulary
+        @test_throws ArgumentError BindingRules(MetaParticleSpecies(dimer; colors=[99, 100]))
+
         ### wrapping a single particle changes nothing
         for (rules, K) in ((BindingRules([1 1 1 3; 1 2 1 4], UnitSquare), 5),
                            (BindingRules([1 1 1 1], PolygonParticleSpecies(3; colors=fill(1, 3))), 5),
                            (BindingRules([1 1 1 1],
                                          PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))), 4))
-            wrapped = metarules(MetaParticleSpecies(Polyform(rules, 1)))
+            wrapped = BindingRules(MetaParticleSpecies(Polyform(rules, 1)))
             @test persize(wrapped, K) == persize(rules, K)
         end
 
@@ -272,7 +293,7 @@
         # the colors it inherits are all one, so it keeps the hexagon's full 6-fold symmetry, and
         # the counts are one-sided: https://oeis.org/A006535
         @test symmetrynumber(MetaParticleSpecies(ring)) == 6
-        @test persize(metarules(MetaParticleSpecies(ring)), 5) ==
+        @test persize(BindingRules(MetaParticleSpecies(ring)), 5) ==
               persize(BindingRules([1 1 1 1], PolygonParticleSpecies(6; colors=fill(1, 6))), 5) ==
               [1, 1, 3, 10, 33]
 
@@ -290,7 +311,7 @@
         # the ring is as symmetric as the hexagonal prism it makes, D_6 of order 12
         @test symmetrynumber(mp3) == symmetrynumber(ring3) == 12
         # free polyhexes, https://oeis.org/A000228
-        @test persize(metarules(mp3), 4) == persize(prismrules(hex3), 4) == [1, 1, 3, 7]
+        @test persize(BindingRules(mp3), 4) == persize(prismrules(hex3), 4) == [1, 1, 3, 7]
 
         # the same split without a block, on plain squares: one-sided in 2D, free in 3D
         # https://oeis.org/A000988 and https://oeis.org/A000105
@@ -304,7 +325,7 @@
                      if nparticles(p) == 4 && length(opensites(p)) == 8)
         # keeping the colors it inherits lets a block meet its neighbour half a block over,
         # sharing one edge instead of two, which no single square can do
-        loose = polygen(metarules(MetaParticleSpecies(block)); maxsize=2)
+        loose = polygen(BindingRules(MetaParticleSpecies(block)); maxsize=2)
         @test count(m -> nparticles(m) == 2, loose) > 1
         @test any(m -> length(metabonds(m)) == 1, loose)
         # every one of them is still an assembly of squares
@@ -334,7 +355,7 @@
         two = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
         direct2 = Set(graphrep(p) for p in polygen(two; maxsize=6))
         for seed in (p for p in polygen(two; maxsize=2) if nparticles(p) == 2)
-            metas = polygen(metarules(MetaParticleSpecies(seed)); maxsize=3)
+            metas = polygen(BindingRules(MetaParticleSpecies(seed)); maxsize=3)
             @test !isempty(metas)
             @test all(graphrep(unwrap(m)) in direct2 for m in metas)
             @test all(composition(unwrap(m))[1:2] == nparticles(m) .* composition(seed)[1:2]
@@ -347,7 +368,7 @@
         for seed in (p for p in polygen(cuberules; maxsize=3) if nparticles(p) > 1)
             mp = MetaParticleSpecies(seed)
             @test symmetrynumber(mp) == symmetrynumber(seed)
-            metas = polygen(metarules(mp); maxsize=nparticles(seed) == 2 ? 3 : 2)
+            metas = polygen(BindingRules(mp); maxsize=nparticles(seed) == 2 ? 3 : 2)
             @test all(graphrep(unwrap(m)) in direct3 for m in metas)
         end
     end
