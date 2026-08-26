@@ -312,6 +312,20 @@
         # and the block tiles exactly as a square does
         @test persize(keyed(block, across), 5) == [1, 2, 6, 19, 63]
 
+        # meta rules need not stand for bonds of the underlying rules. these bond a west site to
+        # a north one, which no two squares can do, so the assembly exists but does not unwrap
+        bent = MetaParticleSpecies(block)
+        west, north = findfirst(i -> color(bindingsite(bent, i)) == 2, 1:nsites(bent)),
+        findfirst(i -> color(bindingsite(bent, i)) == 3, 1:nsites(bent))
+        pair = first(p for p in polygen(BindingRules([1 west 1 north], bent); maxsize=2)
+                     if nparticles(p) == 2)
+        @test_throws ArgumentError unwrap(pair)
+        @test occursin("leave inert", sprint(showerror, try
+            unwrap(pair)
+        catch e
+            e
+        end))
+
         ### two species, which must not be conflated when the block is unwrapped
         two = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
         direct2 = Set(graphrep(p) for p in polygen(two; maxsize=6))

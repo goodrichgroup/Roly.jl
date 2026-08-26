@@ -1044,6 +1044,7 @@ return one orbit index per site.
 function siteorbits(poses, sitesyms, colors; group=nothing)
     n = length(poses)
     orbit = collect(1:n)
+    # we need sitesyms to quotient out the site symmetry groups
     for perm in _sitesymmetries(poses, sitesyms, colors; group)
         for i in 1:n
             lo, hi = minmax(orbit[i], orbit[perm[i]])

@@ -245,8 +245,7 @@ function _unwrapparts(meta::Polyform)
         for p in cl.particles
             sp = P(mpart.pose * p.pose, p.leadingvertex + off, p.speciesindex)
             ov, cts = _overlap_and_contacts(parts, sp, rules)
-            # A valid meta-assembly never overlaps: its own `overlap` already ruled that out.
-            ov && error("Internal error: a meta-assembly unwrapped to overlapping particles. Please file an issue.")
+            ov && _unwrapfailed(parts, sp, rules)
             append!(contacts, cts)
             push!(parts, sp)
         end
@@ -254,6 +253,28 @@ function _unwrapparts(meta::Polyform)
         off += nv(graphrep(ps))
     end
     return parts, contacts, sites
+end
+
+# `_overlap_and_contacts` refuses for three different reasons and reports all of them the same
+# way, so ask it again to find out which. Only ever reached on the way to an error.
+function _unwrapfailed(parts, part, rules)
+    refuses(; kwargs...) = first(_overlap_and_contacts(parts, part, rules; kwargs...))
+    # A meta-assembly's own `overlap` already ruled overlap out, so this one is ours.
+    refuses(; allow_noninteracting=true, allow_misaligned=true) &&
+        error("Internal error: a meta-assembly unwrapped to overlapping particles. Please file an issue.")
+    why = if refuses(; allow_noninteracting=true)
+        "meet at a twist the underlying rules do not allow"
+    else
+        "meet through a pair of sites the underlying rules leave inert"
+    end
+    return throw(
+        ArgumentError(
+            "this meta-polyform does not unwrap: two of its copies $why, so the particles could " *
+            "never have assembled into this arrangement on their own. Meta rules bond by the " *
+            "meta-species' own colors, which need not stand for a bond of the underlying rules; " *
+            "`metarules` builds the ones that do.",
+        ),
+    )
 end
 
 """
@@ -264,14 +285,18 @@ Read a meta-polyform as an ordinary [`Polyform`](@ref) over the species its poly
 Every copy of every polyform becomes a particle in its own right, and every bond becomes a bond:
 those the polyforms already carried and those the meta-assembly added. The result is the polyform
 the particles would have formed had they been placed one at a time.
+
+Not every meta-polyform is one of those. Meta rules bond by the meta-species' own colors, and a
+[`MetaParticleSpecies`](@ref) is free to recolor the sites it exposes, so a meta bond need not
+stand for a bond the underlying rules allow. Throws an `ArgumentError` when it does not.
 """
 function unwrap(meta::Polyform{D}) where {D}
     parts, contacts, _ = _unwrapparts(meta)
-    rules = bindingrules(polyform(species(bindingrules(meta), 1)))
+    original_rules = bindingrules(polyform(species(bindingrules(meta), 1)))
 
     g = NautyDiGraph(0)
     for part in parts
-        blockdiag!(g, graphrep(species(rules, speciesindex(part))))
+        blockdiag!(g, graphrep(species(original_rules, speciesindex(part))))
     end
     for (vs1, vs2, t, ntwists) in contacts
         for (v1, v2) in contact_pairing(vs1, vs2, t, ntwists)
@@ -284,7 +309,7 @@ function unwrap(meta::Polyform{D}) where {D}
     perm, autg = nauty(g; canonize=true)
     cvs = collect(Int, perm)
     P = eltype(parts)
-    return Polyform{D,P,typeof(rules),typeof(g)}(g, convert(Int, autg.n), cvs, invperm(cvs), parts, rules)
+    return Polyform{D,P,typeof(original_rules),typeof(g)}(g, convert(Int, autg.n), cvs, invperm(cvs), parts, original_rules)
 end
 
 """
