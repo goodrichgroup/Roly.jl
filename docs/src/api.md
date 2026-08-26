@@ -137,9 +137,10 @@ MetaParticleSpecies
 BindingRules(::MetaParticleSpecies)
 BindingRules(::AbstractVector{<:MetaParticleSpecies})
 polyform
-flatten
+inducedrules
+recast
 metabonds
-flattenedsites
+recastsites
 ```
 
 ## Binding rules

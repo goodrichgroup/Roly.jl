@@ -135,7 +135,7 @@ function _tilecells(poly::Polyform, maxorder::Integer)
     isempty(opensites(poly)) && return cells
 
     for meta in polygen(BindingRules(MetaParticleSpecies(poly)); maxsize=maxorder)
-        parts, sites = _flattenparts(meta)
+        parts, sites = _recastparts(meta)
         push!(cells, TileCell(parts, sites, metabonds(meta), nparticles(meta)))
     end
     return cells

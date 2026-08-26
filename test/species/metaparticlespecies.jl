@@ -84,13 +84,13 @@
 
         activerules = BindingRules([1 1 1 2], activated)
         @test [polyenum(activerules; maxsize=k)[1] for k in 1:3] == [1, 2, 3]
-        # the squares behind those sites cannot meet under `chainlike`, so flattening onto it
-        # fails; projecting the meta rules instead bonds the pair they stand for, and it works
+        # the squares behind those sites cannot meet under `chainlike`, so recasting onto it
+        # fails; the rules those meta bonds induce bond the pair they stand for, and it works
         activepair = polygen(activerules; maxsize=2)[end]
-        @test_throws ArgumentError flatten(activepair, chainlike)
-        projected = flatten(activerules)
+        @test_throws ArgumentError recast(activepair, chainlike)
+        projected = inducedrules(activerules)
         @test nbonds(projected) == nbonds(chainlike) + 1
-        @test nparticles(flatten(activepair, projected)) == 2nparticles(dimer)
+        @test nparticles(recast(activepair, projected)) == 2nparticles(dimer)
 
         # exposure order is the caller's
         pair = opensites(dimer)
@@ -253,15 +253,15 @@
         metas = polygen(both; maxsize=2)
         # a chain of squares either way, and a meta-pair holds as many squares as its copies do
         chains = Set(graphrep(p) for p in polygen(chainlike; maxsize=4))
-        flat = [flatten(m, chainlike) for m in metas]
+        flat = [recast(m, chainlike) for m in metas]
         @test all(graphrep(f) in chains for f in flat)
         @test all(zip(metas, flat)) do (m, f)
             nparticles(f) == sum(nparticles(polyform(species(both, p.speciesindex))) for p in m.particles)
         end
         # 3 squares can only be a monomer bonded to a dimer, so the lift crossed the two species
         @test sort(unique(nparticles.(flat))) == [1, 2, 3, 4]
-        # a lifted system flattens onto the rules it was lifted from, so those are the projection
-        @test interactionmatrix(flatten(both)) == interactionmatrix(chainlike)
+        # a lifted system induces the rules it was lifted from, and nothing more
+        @test interactionmatrix(inducedrules(both)) == interactionmatrix(chainlike)
 
         # there is nothing to lift when the polyforms were built under different rules
         @test_throws ArgumentError BindingRules([mono, MetaParticleSpecies(Polyform(BindingRules([1 1 1 1],
@@ -340,7 +340,7 @@
         @test any(m -> length(metabonds(m)) == 1, loose)
         # every one of them is still an assembly of squares
         direct = Set(graphrep(p) for p in polygen(sqrules; maxsize=8))
-        flatloose = [flatten(m, sqrules) for m in loose]
+        flatloose = [recast(m, sqrules) for m in loose]
         @test all(graphrep(f) in direct for f in flatloose)
         @test all(nparticles(f) == 4nparticles(m) for (m, f) in zip(loose, flatloose))
         @test all(nbonds(f) == 4nparticles(m) + length(metabonds(m)) for (m, f) in zip(loose, flatloose))
@@ -355,36 +355,36 @@
         findfirst(i -> color(bindingsite(bent, i)) == 3, 1:nsites(bent))
         pair = first(p for p in polygen(BindingRules([1 west 1 north], bent); maxsize=2)
                      if nparticles(p) == 2)
-        @test_throws ArgumentError flatten(pair, sqrules)
-        # projecting says what the meta bond claims about squares, and then it flattens
-        bentrules = flatten(bindingrules(pair))
+        @test_throws ArgumentError recast(pair, sqrules)
+        # the induced rules say what the meta bond claims about squares, and then it recasts
+        bentrules = inducedrules(bindingrules(pair))
         @test nbonds(bentrules) == nbonds(sqrules) + 1
-        @test nparticles(flatten(pair, bentrules)) == 8
+        @test nparticles(recast(pair, bentrules)) == 8
 
-        ### flattening is a change of lens, not something meta-particles own: a polyform reads
+        ### recasting is a change of lens, not something meta-particles own: a polyform reads
         ### under any rules that permit it, and refuses under rules that do not
         chain3 = only(p for p in polygen(chainlike; maxsize=3) if nparticles(p) == 3)
-        wider = flatten(chain3, sqrules)
+        wider = recast(chain3, sqrules)
         @test nparticles(wider) == 3
         @test graphrep(wider) in Set(graphrep(p) for p in polygen(sqrules; maxsize=3))
         @test nbonds(wider) == nbonds(chain3) == 2
         # the block bonds two squares side by side, which `chainlike` leaves inert
-        @test_throws ArgumentError flatten(block, chainlike)
+        @test_throws ArgumentError recast(block, chainlike)
 
         ### a substitution replaces a species by a polyform, meta-species or not
-        @test nparticles(flatten(Polyform(chainlike, 1), chainlike;
+        @test nparticles(recast(Polyform(chainlike, 1), chainlike;
                                  substitutions=Dict(1 => dimer))) == 2
-        @test graphrep(flatten(Polyform(chainlike, 1), chainlike;
+        @test graphrep(recast(Polyform(chainlike, 1), chainlike;
                                substitutions=Dict(1 => dimer))) == graphrep(dimer)
 
-        ### two species, which must not be conflated when the block is flattened
+        ### two species, which must not be conflated when the block is recast
         two = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
         direct2 = Set(graphrep(p) for p in polygen(two; maxsize=6))
         for seed in (p for p in polygen(two; maxsize=2) if nparticles(p) == 2)
             metas = polygen(BindingRules(MetaParticleSpecies(seed)); maxsize=3)
             @test !isempty(metas)
-            @test all(graphrep(flatten(m, two)) in direct2 for m in metas)
-            @test all(composition(flatten(m, two))[1:2] == nparticles(m) .* composition(seed)[1:2]
+            @test all(graphrep(recast(m, two)) in direct2 for m in metas)
+            @test all(composition(recast(m, two))[1:2] == nparticles(m) .* composition(seed)[1:2]
                       for m in metas)
         end
 
@@ -395,7 +395,7 @@
             mp = MetaParticleSpecies(seed)
             @test symmetrynumber(mp) == symmetrynumber(seed)
             metas = polygen(BindingRules(mp); maxsize=nparticles(seed) == 2 ? 3 : 2)
-            @test all(graphrep(flatten(m, cuberules)) in direct3 for m in metas)
+            @test all(graphrep(recast(m, cuberules)) in direct3 for m in metas)
         end
     end
 

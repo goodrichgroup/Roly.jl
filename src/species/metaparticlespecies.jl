@@ -255,10 +255,11 @@ function _underlyingcolors(ps::MetaParticleSpecies)
 end
 
 """
-    flatten(rules::BindingRules)
+    inducedrules(rules::BindingRules)
 
-Project meta rules onto the rules their polyforms were built under: those rules, plus a bond for
-every bond `rules` offers, between the colors its two sites carry inside their polyforms.
+The rules a meta system induces on its particles: the rules its polyforms were built under, plus
+a bond for every bond `rules` offers, between the colors its two sites carry inside their
+polyforms.
 
 Meta rules bond by colors of the meta-species' own choosing, which need not stand for a bond the
 underlying particles can make. Rather than refuse those, this reads them as a statement about the
@@ -266,10 +267,10 @@ particles -- if two meta-sites bond, the sites they stand for bond -- and hands 
 which that is true. Sites the underlying rules leave inert become active that way, and the new
 bonds are bond types of their own, so [`composition`](@ref) counts them apart from the old ones.
 
-The target `flatten(meta, rules)` wants, though nothing obliges it to be: any rules over the same
-species will do, and the underlying rules themselves are the other obvious choice.
+The target [`recast`](@ref) usually wants, though nothing obliges it to be: any rules over the
+same species will do, and the underlying rules themselves are the other obvious choice.
 """
-function flatten(rules::BindingRules)
+function inducedrules(rules::BindingRules)
     spcs = _metaspecies(rules)
     base = bindingrules(polyform(first(spcs)))
     all(ps -> bindingrules(polyform(ps)) === base, spcs) || throw(
@@ -312,8 +313,8 @@ end
 
 # Lay a meta-polyform's copies out as plain particles, renumbering each copy's vertices so that
 # every site keeps a range of its own. Returns the particles and the sites each copy exposes,
-# both in the numbering [`flatten`](@ref) gives them.
-function _flattenparts(meta::Polyform)
+# both in the numbering [`recast`](@ref) gives them.
+function _recastparts(meta::Polyform)
     spcs = _metaspecies(bindingrules(meta))
     P = eltype(polyform(first(spcs)).particles)
     parts, sites, off = P[], eltype(first(spcs).sites)[], 0
@@ -329,9 +330,9 @@ function _flattenparts(meta::Polyform)
 end
 
 """
-    flatten(poly::Polyform, rules::BindingRules; substitutions=Dict())
+    recast(poly::Polyform, rules::BindingRules; substitutions=Dict())
 
-Read `poly` as a [`Polyform`](@ref) of `rules`, replacing every particle by the polyform its
+Recast `poly` as a [`Polyform`](@ref) of `rules`, replacing every particle by the polyform its
 species stands for.
 
 `substitutions` maps a species index of `poly`'s own rules to the `Polyform` that species is
@@ -344,7 +345,7 @@ The bonds are every contact `rules` bonds, not only the ones `poly` recorded -- 
 that touch have no say in the matter. Throws an `ArgumentError` if two of them overlap or touch
 at a pair `rules` leaves inert, since then no polyform of `rules` occupies that space.
 """
-function flatten(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) where {D}
+function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) where {D}
     src = bindingrules(poly)
     subs = [_substitution(ps, i, rules, get(substitutions, i, nothing)) for (i, ps) in enumerate(species(src))]
     foreach(s -> _checkspecies(bindingrules(s), rules), subs)
@@ -359,7 +360,7 @@ function flatten(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) w
             si = speciesindex(q)
             sp = P(part.pose * q.pose, nv(g) + 1, si)
             ov, cts = _overlap_and_contacts(parts, sp, rules)
-            ov && _flattenfailed(parts, sp, rules)
+            ov && _recastfailed(parts, sp, rules)
             append!(contacts, cts)
             push!(parts, sp)
             blockdiag!(g, graphrep(species(rules, si)))
@@ -381,10 +382,10 @@ end
 
 # `_overlap_and_contacts` refuses for three different reasons and reports all of them the same
 # way, so ask it again to find out which. Only ever reached on the way to an error.
-function _flattenfailed(parts, part, rules)
+function _recastfailed(parts, part, rules)
     refuses(; kwargs...) = first(_overlap_and_contacts(parts, part, rules; kwargs...))
     refuses(; allow_noninteracting=true, allow_misaligned=true) &&
-        throw(ArgumentError("two of the particles overlap, so flattening does not result in a polyform valid under `rules`"))
+        throw(ArgumentError("two of the particles overlap, so recasting does not result in a polyform valid under `rules`"))
     why = if refuses(; allow_noninteracting=true)
         "at a twist `rules` does not allow"
     else
@@ -392,7 +393,7 @@ function _flattenfailed(parts, part, rules)
     end
     return throw(
         ArgumentError(
-            "Two of the particles touch $why, so flattening does not result in a polyform valid under `rules`",
+            "Two of the particles touch $why, so recasting does not result in a polyform valid under `rules`",
         ),
     )
 end
@@ -400,15 +401,15 @@ end
 """
     metabonds(meta::Polyform)
 
-The bonds a meta-polyform adds, as pairs of binding site vertex ranges in [`flatten`](@ref)'s
+The bonds a meta-polyform adds, as pairs of binding site vertex ranges in [`recast`](@ref)'s
 numbering.
 
 These are the bonds between copies. The ones inside a copy came with its polyform, so
-`bonds(flatten(meta, rules))` is the two sets together, plus whatever else `rules` bonds.
+`bonds(recast(meta, rules))` is the two sets together, plus whatever else `rules` bonds.
 """
 function metabonds(meta::Polyform)
     rules = bindingrules(meta)
-    _, sites = _flattenparts(meta)
+    _, sites = _recastparts(meta)
     counts = [nsites(species(rules, speciesindex(p))) for p in meta.particles]
     starts = cumsum([0; counts[1:(end - 1)]])
     at(l) = sites[starts[l.particle] + l.site].vertices
@@ -416,11 +417,11 @@ function metabonds(meta::Polyform)
 end
 
 """
-    flattenedsites(meta::Polyform)
+    recastsites(meta::Polyform)
 
-Every site the copies of a meta-polyform expose, in [`flatten`](@ref)'s numbering.
+Every site the copies of a meta-polyform expose, in [`recast`](@ref)'s numbering.
 
 Includes the ones the meta-polyform's own bonds consume, since a cell built from it needs both
 what it offers and what it has already spent; [`metabonds`](@ref) names the spent ones.
 """
-flattenedsites(meta::Polyform) = last(_flattenparts(meta))
+recastsites(meta::Polyform) = last(_recastparts(meta))
