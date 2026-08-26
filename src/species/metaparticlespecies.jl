@@ -233,11 +233,13 @@ function _metaspecies(meta::Polyform)
 end
 
 # The color each site of `ps` carries inside the polyform it was taken from. A site keeps the
-# vertex range it has there whatever it is recolored to, so that is what matches the two up.
+# vertex range it has there whatever it is recolored to, so any one of its vertices names it.
 function _underlyingcolors(ps::MetaParticleSpecies)
     poly = polyform(ps)
-    known = Dict(first(bindingsite(poly, l).vertices) => color(bindingsite(poly, l)) for l in exposedsites(poly))
-    return [known[first(bindingsite(ps, i).vertices)] for i in 1:nsites(ps)]
+    return map(1:nsites(ps)) do i
+        v = first(bindingsite(ps, i).vertices)
+        return color(bindingsite(poly, _vertex_to_particle_site(poly, v; canonidxs=false)))
+    end
 end
 
 # Whether the rules `meta` was built under lift the rules its polyforms were built under: every
