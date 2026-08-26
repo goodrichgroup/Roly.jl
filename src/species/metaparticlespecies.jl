@@ -225,13 +225,60 @@ function metarules(ps::MetaParticleSpecies)
     return BindingRules(bonds, [ps])
 end
 
+function _metaspecies(meta::Polyform)
+    spcs = species(bindingrules(meta))
+    first(spcs) isa MetaParticleSpecies ||
+        throw(ArgumentError("`meta` is not an assembly of meta-particles"))
+    return spcs
+end
+
+# The color each site of `ps` carries inside the polyform it was taken from. A site keeps the
+# vertex range it has there whatever it is recolored to, so that is what matches the two up.
+function _underlyingcolors(ps::MetaParticleSpecies)
+    poly = polyform(ps)
+    known = Dict(first(bindingsite(poly, l).vertices) => color(bindingsite(poly, l)) for l in exposedsites(poly))
+    return [known[first(bindingsite(ps, i).vertices)] for i in 1:nsites(ps)]
+end
+
+# Whether the rules `meta` was built under lift the rules its polyforms were built under: every
+# bond they offer between copies has to stand for a bond the underlying particles can make.
+#
+# This asks about the rules, not about `meta`. A system that offers a bond its particles cannot
+# make is not a system of those particles, and the polyforms that happen to avoid that bond are
+# no more unwrappable for it -- they are structures of a different system that merely look
+# familiar. Deciding it per polyform would make unwrapping a property of the sample rather than
+# of the system.
+function _checkmetalift(meta::Polyform)
+    spcs = _metaspecies(meta)
+    base = bindingrules(polyform(first(spcs)))
+    all(ps -> bindingrules(polyform(ps)) === base, spcs) || throw(
+        ArgumentError("these meta-species wrap polyforms built under different rules, so there are none to unwrap into"),
+    )
+
+    intmat = interactionmatrix(base)
+    cols = [_underlyingcolors(ps) for ps in spcs]
+    for (group1, group2) in bindingrules(meta)._bonded_sites, l1 in group1, l2 in group2
+        intmat[cols[l1.species][l1.site], cols[l2.species][l2.site]] && continue
+        throw(
+            ArgumentError(
+                "these meta rules bond site $(l1.site) of meta-species $(l1.species) to site " *
+                "$(l2.site) of meta-species $(l2.species), but the sites those stand for do not " *
+                "bond under the rules their polyforms were built under. A meta-system offering a " *
+                "bond its particles cannot make is not a system of those particles, so nothing " *
+                "built under it unwraps, this polyform included. `metarules` builds the rules " *
+                "that lift.",
+            ),
+        )
+    end
+    return meta
+end
+
 # Lay a meta-polyform's copies out as plain particles, renumbering each copy's vertices so that
 # every site keeps a range of its own. Returns the particles, every contact between them (in
 # `_overlap_and_contacts` form), and the sites each copy exposes, all in the new numbering.
 function _unwrapparts(meta::Polyform)
     metarules = bindingrules(meta)
-    first(species(metarules)) isa MetaParticleSpecies ||
-        throw(ArgumentError("`meta` is not an assembly of meta-particles"))
+    _metaspecies(meta)
     rules = bindingrules(polyform(species(metarules, 1)))
 
     P = eltype(polyform(species(metarules, 1)).particles)
@@ -288,9 +335,12 @@ the particles would have formed had they been placed one at a time.
 
 Not every meta-polyform is one of those. Meta rules bond by the meta-species' own colors, and a
 [`MetaParticleSpecies`](@ref) is free to recolor the sites it exposes, so a meta bond need not
-stand for a bond the underlying rules allow. Throws an `ArgumentError` when it does not.
+stand for a bond the underlying rules allow. Throws an `ArgumentError` when any bond the rules
+offer does not, whether or not `meta` itself uses that bond, and when two copies are brought into
+contact through sites their species does not expose and the underlying rules do not bond.
 """
 function unwrap(meta::Polyform{D}) where {D}
+    _checkmetalift(meta)
     parts, contacts, _ = _unwrapparts(meta)
     original_rules = bindingrules(polyform(species(bindingrules(meta), 1)))
 

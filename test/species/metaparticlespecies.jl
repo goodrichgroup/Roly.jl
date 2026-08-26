@@ -78,8 +78,12 @@
         @test nsites(activated) == 2
         @test [color(bindingsite(activated, i)) for i in 1:2] == [1, 2]
         # and those sites really do bind under rules written over the new colors
-        @test [polyenum(BindingRules([1 1 1 2], activated); maxsize=k)[1] for k in 1:3] ==
-              [1, 2, 3]
+        activerules = BindingRules([1 1 1 2], activated)
+        @test [polyenum(activerules; maxsize=k)[1] for k in 1:3] == [1, 2, 3]
+        # but the squares behind those sites cannot meet, so nothing built under such rules
+        # unwraps -- not even the lone copy, which uses no meta bond at all
+        @test_throws ArgumentError unwrap(polygen(activerules; maxsize=2)[end])
+        @test_throws ArgumentError unwrap(Polyform(activerules, 1))
 
         # exposure order is the caller's
         pair = opensites(dimer)
@@ -320,7 +324,7 @@
         pair = first(p for p in polygen(BindingRules([1 west 1 north], bent); maxsize=2)
                      if nparticles(p) == 2)
         @test_throws ArgumentError unwrap(pair)
-        @test occursin("leave inert", sprint(showerror, try
+        @test occursin("do not bond under the rules", sprint(showerror, try
             unwrap(pair)
         catch e
             e
