@@ -50,8 +50,11 @@ export polyenum, polygen, countpolyforms, PolyformCount
 
 # Species
 export PolygonParticleSpecies, UnitNgon, UnitTriangle, UnitSquare, UnitHexagon
+export SymmetricUnitTriangle, SymmetricUnitSquare, SymmetricUnitHexagon
 export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
+export SymmetricUnitTetrahedron, SymmetricUnitCube, SymmetricUnitOctahedron
+export SymmetricUnitDodecahedron, SymmetricUnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
 export MetaParticleSpecies, polyform, inducedrules, recast

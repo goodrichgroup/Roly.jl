@@ -497,4 +497,20 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0.0, 1.0])
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); locking=[true, false])
+
+    # the symmetric counterparts differ from the defaults in coloring alone: one color throughout,
+    # so the body keeps its rotation group where a color per face leaves it none
+    for (plain, sym, sigma) in ((UnitTetrahedron, SymmetricUnitTetrahedron, 12),
+                                (UnitCube, SymmetricUnitCube, 24),
+                                (UnitOctahedron, SymmetricUnitOctahedron, 24),
+                                (UnitDodecahedron, SymmetricUnitDodecahedron, 60),
+                                (UnitIcosahedron, SymmetricUnitIcosahedron, 60))
+        n = nsites(plain)
+        @test nsites(sym) == n
+        @test [color(bindingsite(plain, i)) for i in 1:n] == 1:n
+        @test [color(bindingsite(sym, i)) for i in 1:n] == fill(1, n)
+        @test [bindingsite(plain, i).pose for i in 1:n] == [bindingsite(sym, i).pose for i in 1:n]
+        @test symmetrynumber(plain) == 1
+        @test symmetrynumber(sym) == sigma
+    end
 end

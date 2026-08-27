@@ -116,6 +116,9 @@ UnitNgon
 UnitTriangle
 UnitSquare
 UnitHexagon
+SymmetricUnitTriangle
+SymmetricUnitSquare
+SymmetricUnitHexagon
 PolyhedronParticleSpecies
 polyhedron
 UnitTetrahedron
@@ -123,6 +126,11 @@ UnitCube
 UnitOctahedron
 UnitDodecahedron
 UnitIcosahedron
+SymmetricUnitTetrahedron
+SymmetricUnitCube
+SymmetricUnitOctahedron
+SymmetricUnitDodecahedron
+SymmetricUnitIcosahedron
 UnitPyramid
 UnitPrism
 UnitAntiprism

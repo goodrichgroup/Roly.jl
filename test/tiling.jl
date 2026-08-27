@@ -110,7 +110,7 @@
     end
 
     @testset "3D" begin
-        using Roly: nfaces, facenormal
+        using Roly: nfaces, facenormal, twistfreedom
 
         # every face binds every face, so the cube monomer is a unit cell of space itself
         cubic = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
@@ -133,9 +133,56 @@
         @test length(opensites(colmono)) == 2
         @test all(t -> t.complete && length(t.vectors) == 1, tilings(colmono))
 
-        # a distinctly colored cube bonding opposite faces does not tile by translation: its faces
-        # are locking with a trivial stabilizer, so the single twist a bond admits turns the
-        # neighbour a quarter turn, and no translation carries the cube onto a bonded copy
+        # distinct colors do not stop a particle tiling, as long as its sites mate square-on. Both
+        # species take a twist per site, and turning one member of each opposite pair by a quarter
+        # turn lines the frames up, so every bond becomes a pure translation
+        quarters = [0.0, 0.0, 0.0, pi / 2, pi / 2, pi / 2]
+        pure(rules) = all(polygen(rules; maxsize=2)) do p
+            nparticles(p) < 2 && return true
+            g = p.particles[2].pose * inv(p.particles[1].pose)
+            return isapprox(rem(rotation_angle(g.psi), 2pi, RoundNearest), 0; atol=1e-8)
+        end
+        opposites = [1 1 1 6; 1 2 1 5; 1 3 1 4]
+        keyedcube = BindingRules(opposites, PolyhedronParticleSpecies(Cube(); twists=quarters))
+        @test pure(keyedcube)
+        kcube = filter(t -> t.complete, tilings(first(polygen(keyedcube; maxsize=1))))
+        @test !isempty(kcube)
+        # the lattice is the three unit axes, and each bond type is spent once -- where the
+        # one-color cube spends its single type three times
+        @test all(t -> sort(norm.(t.vectors)) ≈ [1, 1, 1], kcube)
+        @test all(t -> sort(t.bondtypes) == [1, 2, 3], kcube)
+
+        # those twists are not free: they mark the faces, so a cube colored alike loses the
+        # symmetry they break -- one member of each pair is turned and the other is not
+        @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))) == 24
+        @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6), twists=quarters)) == 3
+
+        # unkeyed faces reach the same lattice without marking anything. A non-locking site admits
+        # every twist its own symmetry allows, four for a square face, and the translation is among
+        # them, so the cube tiles with its symmetry untouched
+        free = PolyhedronParticleSpecies(Cube(); locking=false)
+        @test twistfreedom(bindingsite(free, 1), bindingsite(free, 6)) == 4
+        @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6), locking=false)) == 24
+        freerules = BindingRules(opposites, free)
+        @test count(p -> nparticles(p) == 2, polygen(freerules; maxsize=2)) == 12
+        @test isunitcell(first(polygen(freerules; maxsize=1)))
+
+        # and patches say the same thing as faces, with the twist named directly
+        axes = [SVector(-0.5, 0.0, 0.0), SVector(0.0, -0.5, 0.0), SVector(0.0, 0.0, -0.5),
+                SVector(0.0, 0.0, 0.5), SVector(0.0, 0.5, 0.0), SVector(0.5, 0.0, 0.0)]
+        keyed = PatchyParticleSpecies(NautyDiGraph(6), 0.5, axes, [0.0, 0.0, 0.0, pi, 0.0, 0.0]; colors=1:6)
+        keyedpatches = BindingRules(opposites, keyed)
+        @test allunique(color(bindingsite(keyed, i)) for i in 1:6)
+        @test pure(keyedpatches)
+        kpatch = filter(t -> t.complete, tilings(first(polygen(keyedpatches; maxsize=1))))
+        @test !isempty(kpatch)
+        @test all(t -> sort(norm.(t.vectors)) ≈ [1, 1, 1], kpatch)
+        @test all(t -> sort(t.bondtypes) == [1, 2, 3], kpatch)
+
+        # the same cube from `PolyhedronParticleSpecies` does not tile, and the colors are not why.
+        # Its faces are locking with a trivial stabilizer, so a bond admits one twist, and the
+        # frames `Cube()` gives its faces make that twist a quarter turn: face 1 takes +y as its
+        # reference and face 6 takes +z, so no translation carries the cube onto a bonded copy
         opposite(i) = findfirst(j -> isapprox(dot(facenormal(Cube(), i), facenormal(Cube(), j)), -1;
                                               atol=1e-8), 1:nfaces(Cube()))
         pairs = unique([minmax(i, opposite(i)) for i in 1:6])
