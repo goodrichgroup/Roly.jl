@@ -344,6 +344,30 @@
         @test all(graphrep(f) in direct for f in flatloose)
         @test all(nparticles(f) == 4nparticles(m) for (m, f) in zip(loose, flatloose))
         @test all(nbonds(f) == 4nparticles(m) + length(metabonds(m)) for (m, f) in zip(loose, flatloose))
+
+        ### the numbering: a meta-polyform's own vertices are already the recast polyform's, which
+        ### is what lets `metabonds` and the tiling cells name sites without renumbering anything
+        for (m, f) in zip(loose, flatloose)
+            @test nv(graphrep(f)) == nv(graphrep(m))
+            # every vertex range a meta-site occupies is the range of a site of the recast polyform
+            recastranges = Set(bindingsite(f, ParticleSite(p, k)).vertices
+                               for p in 1:nparticles(f) for k in 1:nsites(f.particles[p], sqrules))
+            @test all(bindingsite(m, i).vertices in recastranges for i in 1:nsites(m))
+            # each copy's first particle starts where that copy's own vertex block starts
+            underlying = Roly._underlying_particles(m)
+            @test issubset([q.leadingvertex for q in m.particles], [q.leadingvertex for q in underlying])
+            @test [q.leadingvertex for q in underlying] == [q.leadingvertex for q in f.particles]
+            # and the bonds between copies are bonds of the recast polyform, by the same ranges
+            recastbonds = Set{NTuple{2,UnitRange{Int}}}()
+            for (a, b) in bonds(f)
+                r1, r2 = bindingsite(f, a).vertices, bindingsite(f, b).vertices
+                push!(recastbonds, (r1, r2))
+                push!(recastbonds, (r2, r1))
+            end
+            @test length(metabonds(m)) == nbonds(m)
+            @test all(mb in recastbonds for mb in metabonds(m))
+        end
+
         # giving the two sites of a side different colors leaves the offset nothing to bond to,
         # and the block tiles exactly as a square does
         @test persize(keyed(block, across), 5) == [1, 2, 6, 19, 63]
