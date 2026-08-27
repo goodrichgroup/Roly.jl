@@ -418,21 +418,13 @@ numbering.
 These are the bonds between copies. The ones inside a copy came with its polyform, so
 `bonds(recast(meta, rules))` is the two sets together, plus whatever else `rules` bonds.
 """
-function metabonds(meta::Polyform)
+metabonds(meta::Polyform) = _metabonds(meta, last(_recastparts(meta)))
+
+# Takes the sites, so a caller that has already laid the copies out does not lay them out again.
+function _metabonds(meta::Polyform, sites)
     rules = bindingrules(meta)
-    _, sites = _recastparts(meta)
     counts = [nsites(species(rules, speciesindex(p))) for p in meta.particles]
     starts = cumsum([0; counts[1:(end - 1)]])
     at(l) = sites[starts[l.particle] + l.site].vertices
     return [(at(a), at(b)) for (a, b) in bonds(meta)]
 end
-
-"""
-    recastsites(meta::Polyform)
-
-Every site the copies of a meta-polyform expose, in [`recast`](@ref)'s numbering.
-
-Includes the ones the meta-polyform's own bonds consume, since a cell built from it needs both
-what it offers and what it has already spent; [`metabonds`](@ref) names the spent ones.
-"""
-recastsites(meta::Polyform) = last(_recastparts(meta))
