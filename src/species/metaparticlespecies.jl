@@ -260,52 +260,68 @@ function inducedrules(rules::MetaBindingRules)
     return BindingRules(intmat, species(origrules))
 end
 
-# Check that the species `poly` is made of can correspond to the species of `rules`, in the same order.
-function _checkspecies(poly::Polyform, rules::BindingRules)
-    from = bindingrules(poly)
-    from === rules && return rules
-    for q in poly.particles
-        i = speciesindex(q)
-        a = species(from, i)
+# Species `i` of `from` and species `i` of `rules` should be a "compatible" species. What that means exactly can be
+# refined later. Right now, we check the vertex count and site poses.
+# TODO: this is overly restrictive
+function _checkspecies(from::BindingRules, rules::BindingRules, i::Integer)
+    ok = i <= nspecies(rules)
+    if ok
+        a, b = species(from, i), species(rules, i)
         ok =
-            i <= nspecies(rules) &&
-            nsites(a) == nsites(species(rules, i)) &&
-            nv(graphrep(a)) == nv(graphrep(species(rules, i)))
-        ok || throw(
-            ArgumentError(
-                "the particle species of `rules` are incompatible with the original binding rules. Make sure that corresponding species are defined in the same order.",
-            ),
-        )
+            nsites(a) == nsites(b) &&
+            nv(graphrep(a)) == nv(graphrep(b)) &&
+            all(k -> _siteoverlap(bindingsite(a, k), bindingsite(b, k)), 1:nsites(a))
     end
-    return rules
+    ok || throw(
+        ArgumentError(
+            "species $i of `rules` is not the species that would stand in its place. `rules` has " *
+            "to list the corresponding species in the same order.",
+        ),
+    )
+    return nothing
 end
 
-# What one particle of `ps` is replaced by: a polyform, whose particles are placed at the poses
-# they have inside it, relative to the particle they replace. A meta-species records its own; any
-# other species stands for itself, as the monomer of whichever species of `rules` it equals.
-function _substitution(::ParticleSpecies, ::Integer, rules::BindingRules, given::Polyform)
-    bindingrules(given) === rules || throw(ArgumentError("A substitution has to be a polyform of `rules`."))
-    return given
+# Check every species of `poly`, against the ones `rules` has in those places.
+function _checkspecies(poly::Polyform, rules::BindingRules)
+    foreach(q -> _checkspecies(bindingrules(poly), rules, speciesindex(q)), poly.particles)
+    return poly
 end
 
-# A meta-species is the one substitution that cannot be a polyform of `rules`: it wraps a polyform
-# of the rules it was lifted from, which `inducedrules` extends rather than reuses. Those rules
-# keep the species list in order, which is what `_checkspecies` holds `rules` to.
-_substitution(ps::MetaParticleSpecies, ::Integer, ::BindingRules, ::Nothing) = polyform(ps)
+# check if the sites are at the same location and pose
+function _siteoverlap(sa::BindingSite, sb::BindingSite)
+    return isapprox(sa.pose.x, sb.pose.x; atol=sa.touching_tolerance + sb.touching_tolerance, rtol=0) &&
+           isapprox(sa.pose.psi, sb.pose.psi; atol=sa.alignment_tolerance + sb.alignment_tolerance, rtol=0)
+end
 
-# Any other species stands for itself, as the monomer of the species `rules` has in its place.
-function _substitution(::ParticleSpecies, i::Integer, rules::BindingRules, ::Nothing)
-    i <= nspecies(rules) ||
-        throw(ArgumentError("`rules` has no species $i that could correspond to species $i of `poly`."))
-    return Polyform(rules, i)
+# The polyform each species of `src` is replaced by, one per species, as a polyform of `rules`:
+# the one `given` names for it, the one a meta-species wraps, or the species itself as a monomer.
+#
+# Each answers to `rules` in its own way, so each is checked against the species it will be read
+# as wearing -- a different pair every time, the same question every time.
+function _substitutions(src::BindingRules, rules::BindingRules, given)
+    return map(collect(enumerate(species(src)))) do (i, ps)
+        sub = get(given, i, nothing)
+        # written by hand: a polyform of `rules` already, so its particles wear its own species
+        if !isnothing(sub)
+            bindingrules(sub) === rules || throw(ArgumentError("A substitution has to be a polyform of `rules`."))
+            return sub
+        end
+        # a meta-species: a polyform of the rules it was lifted from, which `inducedrules` extends
+        # rather than reuses, so its particles' species have to line up with `rules`
+        ps isa MetaParticleSpecies && return _checkspecies(polyform(ps), rules)
+        # standing for itself: `rules` has to have that same species in that same place
+        _checkspecies(src, rules, i)
+        return Polyform(rules, i)
+    end
 end
 
 # Expand the meta-species; return all underyling particles of the underlying binding rules
 function _underlying_particles(meta::MetaPolyform)
-    return _substitute_particles(meta, [polyform(ps) for ps in species(bindingrules(meta))])
+    subs = [polyform(ps) for ps in species(bindingrules(meta))]
+    return _substitute_particles(meta, subs)
 end
 
-# Substitute every particle of `poly` of species `i` with the particles of polyform `subs[i]`
+# Substitute every particle of `poly` of species `i` with the particles of polyform `subs[i]`.
 function _substitute_particles(poly::Polyform, subs)
     P = particletype(first(subs))
     parts = P[]
@@ -341,8 +357,7 @@ at a pair `rules` leaves inert, since then no polyform of `rules` occupies that 
 """
 function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) where {D}
     src = bindingrules(poly)
-    subs = [_substitution(ps, i, rules, get(substitutions, i, nothing)) for (i, ps) in enumerate(species(src))]
-    foreach(s -> _checkspecies(s, rules), subs)
+    subs = _substitutions(src, rules, substitutions)
 
     parts = _substitute_particles(poly, subs)
     contacts = Contact[]
@@ -375,9 +390,8 @@ end
 function _recastfailed(parts, part, rules)
     refuses(; kwargs...) = first(_overlap_and_contacts(parts, part, rules; kwargs...))
 
-    refuses(; allow_noninteracting=true, allow_misaligned=true) && throw(
-        ArgumentError("two of the particles overlap, the recast polyform is invalid."),
-    )
+    refuses(; allow_noninteracting=true, allow_misaligned=true) &&
+        throw(ArgumentError("two of the particles overlap, the recast polyform is invalid."))
     why = if refuses(; allow_noninteracting=true)
         "at a twist `rules` does not allow"
     else

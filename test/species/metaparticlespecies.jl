@@ -394,6 +394,9 @@
         @test nbonds(wider) == nbonds(chain3) == 2
         # the block bonds two squares side by side, which `chainlike` leaves inert
         @test_throws ArgumentError recast(block, chainlike)
+        # and a species standing for itself has to be the species the target has in its place:
+        # squares do not become triangles just because both systems have a species 1
+        @test_throws ArgumentError recast(chain3, BindingRules([1 1 1 2], PolygonParticleSpecies(3)))
 
         ### a substitution replaces a species by a polyform, meta-species or not
         @test nparticles(recast(Polyform(chainlike, 1), chainlike;
