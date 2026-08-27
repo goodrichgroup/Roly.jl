@@ -32,6 +32,7 @@ twistfreedom(::BindingSite)
 twistfreedom(::BindingSite, ::BindingSite)
 twist
 standard_twist
+Contact
 contact_pairing
 ```
 
@@ -141,7 +142,6 @@ BindingRules(::AbstractVector{<:MetaParticleSpecies})
 polyform
 inducedrules
 recast
-metabonds
 ```
 
 ## Binding rules

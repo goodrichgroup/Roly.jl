@@ -54,7 +54,7 @@ export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
-export MetaParticleSpecies, polyform, inducedrules, recast, metabonds
+export MetaParticleSpecies, polyform, inducedrules, recast
 
 # Public, but not exported: reach for these as `Roly.faces(p)`, or import them by name.
 # They are stable API, but specific enough to a body, an encoding or a species that putting
@@ -71,7 +71,7 @@ public rotationgroup, faceorbits, facesym, siteorbits, stabilizerorders, sitelab
 public permutationgroup, check_encoding
 
 # What a bond fixes about relative orientation
-public contact_pairing, standard_twist, twistfreedom, twist
+public contact_pairing, standard_twist, twistfreedom, twist, Contact
 
 # The `ParticleSpecies` interface, implemented rather than called
 public isconvex, bounding_radius, could_contact, overlap

@@ -213,7 +213,7 @@
     end
 
     @testset "a block assembles like the shape it makes" begin
-        using Roly: metabonds, nbonds, nfaces, facenormal
+        using Roly: nbonds, nfaces, facenormal
 
         persize(rules, K) = [count(p -> nparticles(p) == k, polygen(rules; maxsize=K)) for k in 1:K]
         outward(s) = s.pose.psi[:, 1]
@@ -337,16 +337,16 @@
         # sharing one edge instead of two, which no single square can do
         loose = polygen(BindingRules(MetaParticleSpecies(block)); maxsize=2)
         @test count(m -> nparticles(m) == 2, loose) > 1
-        @test any(m -> length(metabonds(m)) == 1, loose)
+        @test any(m -> nbonds(m) == 1, loose)
         # every one of them is still an assembly of squares
         direct = Set(graphrep(p) for p in polygen(sqrules; maxsize=8))
         flatloose = [recast(m, sqrules) for m in loose]
         @test all(graphrep(f) in direct for f in flatloose)
         @test all(nparticles(f) == 4nparticles(m) for (m, f) in zip(loose, flatloose))
-        @test all(nbonds(f) == 4nparticles(m) + length(metabonds(m)) for (m, f) in zip(loose, flatloose))
+        @test all(nbonds(f) == 4nparticles(m) + nbonds(m) for (m, f) in zip(loose, flatloose))
 
         ### the numbering: a meta-polyform's own vertices are already the recast polyform's, which
-        ### is what lets `metabonds` and the tiling cells name sites without renumbering anything
+        ### is what lets the tiling cells name sites without renumbering anything
         for (m, f) in zip(loose, flatloose)
             @test nv(graphrep(f)) == nv(graphrep(m))
             # every vertex range a meta-site occupies is the range of a site of the recast polyform
@@ -364,8 +364,8 @@
                 push!(recastbonds, (r1, r2))
                 push!(recastbonds, (r2, r1))
             end
-            @test length(metabonds(m)) == nbonds(m)
-            @test all(mb in recastbonds for mb in metabonds(m))
+            @test all((bindingsite(m, a).vertices, bindingsite(m, b).vertices) in recastbonds
+                      for (a, b) in bonds(m))
         end
 
         # giving the two sites of a side different colors leaves the offset nothing to bond to,

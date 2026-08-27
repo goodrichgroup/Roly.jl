@@ -304,6 +304,16 @@ binding sites in canonical order.
 bindingsites(p::Polyform) = (bindingsite(p, i) for i in 1:nsites(p))
 
 """
+    siteindex(p::Polyform, siteloc::ParticleSite)
+
+Return the index `i` of site `siteloc`, inverting `bindingsite(p, i)`.
+"""
+function siteindex(p::Polyform, siteloc::ParticleSite)
+    rules = bindingrules(p)
+    return sum(nsites(p.particles[q], rules) for q in 1:(siteloc.particle - 1); init=0) + siteloc.site
+end
+
+"""
     canonbindingsite(p::Polyform, i::Integer)
 
 Return the `i`-th binding site of `p` in canonical order, which follows the canonical graph
@@ -518,15 +528,14 @@ Returns `poly` on success, or `missing` if the attachment is geometrically forbi
 """
 function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSite, t::Integer=0; kwargs...)
     rules = bindingrules(poly)
-    speciesindex, siteindex = loc
-    particle_species = species(rules, speciesindex)
+    particle_species = species(rules, loc.species)
     leadingvertex = nv(graphrep(poly)) + 1
-    mate = bindingsite(particle_species, siteindex)
+    mate = bindingsite(particle_species, loc.site)
     particle_pose = standard_twist(site, t, twistfreedom(site, mate)) * inv(mate.pose)
-    attached_particle = Particle(particle_pose, leadingvertex, speciesindex)
+    attached_particle = Particle(particle_pose, leadingvertex, loc.species)
 
-    has_overlap, contacting_vertices = overlap_and_contacts(poly, attached_particle; kwargs...)
-    has_overlap && return missing
+    overlap, contacts = overlap_and_contacts(poly, attached_particle; kwargs...)
+    overlap && return missing
 
     push!(poly.particles, attached_particle)
 
@@ -536,9 +545,9 @@ function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSite, t::Integer=
         add_edge!(graphrep(poly), src + leadingvertex - 1, dst + leadingvertex - 1)
     end
 
-    # Every contact is paired in the twist it was found in, not the one this call
-    for (vs1, vs2, twst, ntwists) in contacting_vertices
-        for (v1, v2) in contact_pairing(vs1, vs2, twst, ntwists)
+    for contact in contacts
+        for (v1, v2) in contact_pairing(contact)
+            # the vertices corresponding to the particles on poly need to be transformed to canonical order
             add_edge!(graphrep(poly), tocanon(poly, v1), v2)
             add_edge!(graphrep(poly), v2, tocanon(poly, v1))
         end
@@ -669,7 +678,7 @@ function _overlap_and_contacts(
     kwargs...,
 )
     intmat = interactionmatrix(rules)
-    contacts = Tuple{UnitRange{Int},UnitRange{Int},Int,Int}[]
+    contacts = Contact[]
 
     for polypart in polyparticles
         could_contact(polypart, part, rules) || continue
@@ -681,7 +690,7 @@ function _overlap_and_contacts(
             !allow_noninteracting && !interacting && return true, nothing
             twst = twist(b1, b2)
             !allow_misaligned && isnothing(twst) && return true, nothing
-            push!(contacts, (b1.vertices, b2.vertices, something(twst, 0), twistfreedom(b1, b2)))
+            push!(contacts, Contact(b1.vertices, b2.vertices, something(twst, 0), twistfreedom(b1, b2)))
         end
     end
     return false, contacts

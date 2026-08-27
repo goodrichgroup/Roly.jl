@@ -345,18 +345,18 @@ function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) wh
     foreach(s -> _checkspecies(s, rules), subs)
 
     parts = _substitute_particles(poly, subs)
-    contacts = Tuple{UnitRange{Int},UnitRange{Int},Int,Int}[]
+    contacts = Contact[]
     g = NautyDiGraph(0)
     for (i, sp) in enumerate(parts)
         placed = view(parts, 1:(i - 1))
-        ov, cts = _overlap_and_contacts(placed, sp, rules)
-        ov && _recastfailed(placed, sp, rules)
+        overlap, cts = _overlap_and_contacts(placed, sp, rules)
+        overlap && _recastfailed(placed, sp, rules)
         append!(contacts, cts)
         blockdiag!(g, graphrep(species(rules, speciesindex(sp))))
     end
 
-    for (vs1, vs2, t, ntwists) in contacts
-        for (v1, v2) in contact_pairing(vs1, vs2, t, ntwists)
+    for contact in contacts
+        for (v1, v2) in contact_pairing(contact)
             add_edge!(g, v1, v2)
             add_edge!(g, v2, v1)
         end
@@ -365,16 +365,18 @@ function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) wh
     # `g` is built in original vertex order, so the canonical permutation is `canon2orig` itself.
     perm, autg = nauty(g; canonize=true)
     cvs = collect(Int, perm)
-    return Polyform{D,particletype(rules),typeof(rules),typeof(g)}(g, convert(Int, autg.n), cvs,
-                                                                   invperm(cvs), parts, rules)
+    return Polyform{D,particletype(rules),typeof(rules),typeof(g)}(
+        g, convert(Int, autg.n), cvs, invperm(cvs), parts, rules
+    )
 end
 
 # `_overlap_and_contacts` refuses for three different reasons and reports all of them the same
 # way, so ask it again to find out which. Only ever reached on the way to an error.
 function _recastfailed(parts, part, rules)
     refuses(; kwargs...) = first(_overlap_and_contacts(parts, part, rules; kwargs...))
+
     refuses(; allow_noninteracting=true, allow_misaligned=true) && throw(
-        ArgumentError("two of the particles overlap, so recasting does not result in a polyform valid under `rules`"),
+        ArgumentError("two of the particles overlap, the recast polyform is invalid."),
     )
     why = if refuses(; allow_noninteracting=true)
         "at a twist `rules` does not allow"
@@ -386,15 +388,3 @@ function _recastfailed(parts, part, rules)
     )
 end
 
-"""
-    metabonds(meta::MetaPolyform)
-
-The bonds a meta-polyform adds, as pairs of binding site vertex ranges in [`recast`](@ref)'s
-numbering.
-
-These are the bonds between copies. The ones inside a copy came with its polyform, so
-`bonds(recast(meta, rules))` is the two sets together, plus whatever else `rules` bonds.
-"""
-function metabonds(meta::MetaPolyform)
-    return [(bindingsite(meta, a).vertices, bindingsite(meta, b).vertices) for (a, b) in bonds(meta)]
-end

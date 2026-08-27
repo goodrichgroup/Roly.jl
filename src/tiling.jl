@@ -61,7 +61,7 @@ particles.
 
   - `particles`: every particle of every copy, in one numbering
   - `sites`: every site those copies expose, spent ones included
-  - `metabonds`: the sites already joined to each other inside the cell
+  - `metabonds`: pairs of indices into `sites`, the sites already joined inside the cell
   - `order`: how many copies of the polyform the cell holds
 
 Both site lists are needed. The bonds count towards the cell's composition, and their endpoints
@@ -70,7 +70,7 @@ are spent, so only the remaining sites can carry the lattice.
 struct TileCell{P,S}
     particles::Vector{P}
     sites::Vector{S}
-    metabonds::Vector{NTuple{2,UnitRange{Int}}}
+    metabonds::Vector{NTuple{2,Int}}
     order::Int
 end
 
@@ -80,44 +80,54 @@ struct _ShellSearch{P,S,R,V}
     cell::TileCell{P,S}
     rules::R
     vectors::Vector{V}
-    siteof::Dict{UnitRange{Int},S}
+    ofvertex::Vector{Int}              # first vertex of a site -> its index in `cell.sites`, else 0
     nreps::Int
-    consumed::Set{UnitRange{Int}}                 # site ranges a bond has already closed
-    contacts::Vector{NTuple{2,UnitRange{Int}}}    # bonds the placed shells have formed
-    placed::Vector{Vector{P}}                     # one shell of copies per chosen vector
-    chosen::Vector{Int}                           # indices into `vectors`
+    consumed::BitVector                # which of `cell.sites` a bond has already closed
+    contacts::Vector{NTuple{2,Int}}    # bonds the placed shells have formed, as site indices
+    placed::Vector{Vector{P}}          # one shell of copies per chosen vector
+    chosen::Vector{Int}                # indices into `vectors`
 end
 
-function _addtilings!(out, cell::TileCell, rules, nreps::Integer)
-    consumed = Set{UnitRange{Int}}()
-    for (r1, r2) in cell.metabonds
-        push!(consumed, r1)
-        push!(consumed, r2)
+# A contact comes back as the vertex range its site occupies, and a translated copy keeps the
+# ranges of the cell it was translated from, so the first vertex identifies the site. An array
+# rather than a `Dict`: the vertices are a contiguous range, so indexing is the whole lookup.
+function _siteofvertex(cell::TileCell)
+    ofvertex = zeros(Int, maximum(s -> last(s.vertices), cell.sites; init=0))
+    for (i, s) in enumerate(cell.sites)
+        ofvertex[first(s.vertices)] = i
     end
-    free = [s for s in cell.sites if s.vertices ∉ consumed]
+    return ofvertex
+end
+_lookup(s::_ShellSearch, vs) = first(vs) <= length(s.ofvertex) ? s.ofvertex[first(vs)] : 0
+
+function _addtilings!(out, cell::TileCell, rules, nreps::Integer)
+    consumed = falses(length(cell.sites))
+    for (i, j) in cell.metabonds
+        consumed[i] = consumed[j] = true
+    end
+    free = [s for (i, s) in enumerate(cell.sites) if !consumed[i]]
     isempty(free) && return out
     vectors = _candidatelatticevectors(free, rules)
     isempty(vectors) && return out
 
-    siteof = Dict(s.vertices => s for s in cell.sites)
     search = _ShellSearch(
         cell,
         rules,
         vectors,
-        siteof,
+        _siteofvertex(cell),
         Int(nreps),
         consumed,
-        NTuple{2,UnitRange{Int}}[],
+        NTuple{2,Int}[],
         Vector{eltype(cell.particles)}[],
         Int[],
     )
-    spent = [_bondtype(rules, siteof, c) for c in cell.metabonds]
+    spent = [_bondtype(rules, cell.sites, c) for c in cell.metabonds]
     record!() = push!(
         out,
         Tiling(
             vectors[search.chosen],
-            vcat(spent, [_bondtype(rules, siteof, c) for c in search.contacts]),
-            length(search.consumed) == length(siteof),
+            vcat(spent, [_bondtype(rules, cell.sites, c) for c in search.contacts]),
+            all(search.consumed),
             cell.order,
         ),
     )
@@ -136,7 +146,8 @@ function _tilecells(poly::Polyform, maxorder::Integer)
 
     for meta in polygen(BindingRules(MetaParticleSpecies(poly)); maxsize=maxorder)
         parts, sites = _underlying_particles(meta), collect(bindingsites(meta))
-        push!(cells, TileCell(parts, sites, metabonds(meta), nparticles(meta)))
+        joined = [(siteindex(meta, a), siteindex(meta, b)) for (a, b) in bonds(meta)]
+        push!(cells, TileCell(parts, sites, joined, nparticles(meta)))
     end
     return cells
 end
@@ -411,8 +422,8 @@ end
 
 # Every recorded contact joins two sites that interact -- `_overlap_and_contacts` refuses the
 # others before they reach here -- so their color pair is always in the bond list.
-function _bondtype(rules, siteof, (r1, r2))
-    i = findfirst(==(minmax(color(siteof[r1]), color(siteof[r2]))), bonded_colors(rules))
+function _bondtype(rules, sites, (i1, i2))
+    i = findfirst(==(minmax(color(sites[i1]), color(sites[i2]))), bonded_colors(rules))
     isnothing(i) && error("Internal error: a recorded contact has no bond type. Please file an issue.")
     return i
 end
@@ -446,7 +457,7 @@ function _tilings!(record!::F, s::_ShellSearch, maxvecs::Integer, from::Integer)
             _tilings!(record!, s, maxvecs, idx + 1)
         end
         if added !== nothing
-            foreach(r -> delete!(s.consumed, r), added)
+            foreach(i -> s.consumed[i] = false, added)
             resize!(s.contacts, n0)
             pop!(s.placed)
         end
@@ -458,14 +469,15 @@ end
 # Place every copy whose coefficient on the newest vector is positive (earlier-vector shells were
 # placed by earlier stages). Returns the newly consumed site ranges, or `nothing` on an overlap,
 # an invalid or bound-site contact, or a doubly-consumed site — with all bookkeeping undone.
+# Returns the indices of the sites it consumed.
 function _placeshell!(s::_ShellSearch)
     parts = s.cell.particles
     k = length(s.chosen)
     n0 = length(s.contacts)
-    added = UnitRange{Int}[]
+    added = Int[]
     shell = eltype(parts)[]
     function fail()
-        foreach(r -> delete!(s.consumed, r), added)
+        foreach(i -> s.consumed[i] = false, added)
         resize!(s.contacts, n0)
         return nothing
     end
@@ -480,18 +492,19 @@ function _placeshell!(s::_ShellSearch)
             first(_overlap_and_contacts(shell, sp, s.rules)) === true && return fail()
             ov, cts = _overlap_and_contacts(parts, sp, s.rules)
             ov && return fail()
-            for (r1, r2) in cts
-                # both endpoints must be open sites of the cell, each closed at most once
-                (haskey(s.siteof, r1) && haskey(s.siteof, r2)) || return fail()
-                r1 in s.consumed && return fail()
-                push!(s.consumed, r1)
-                push!(added, r1)
-                if r2 != r1
-                    r2 in s.consumed && return fail()
-                    push!(s.consumed, r2)
-                    push!(added, r2)
+            for (; vs1, vs2) in cts
+                # both endpoints must be sites of the cell, each closed at most once
+                i1, i2 = _lookup(s, vs1), _lookup(s, vs2)
+                (i1 == 0 || i2 == 0) && return fail()
+                s.consumed[i1] && return fail()
+                s.consumed[i1] = true
+                push!(added, i1)
+                if i2 != i1
+                    s.consumed[i2] && return fail()
+                    s.consumed[i2] = true
+                    push!(added, i2)
                 end
-                push!(s.contacts, (r1, r2))
+                push!(s.contacts, (i1, i2))
             end
             push!(shell, sp)
         end
