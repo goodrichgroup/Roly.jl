@@ -1,8 +1,3 @@
-# Periodic witnesses: translated copies of a polyform closing open binding sites into valid
-# bonds realize an infinite chain or crystal, whose per-cell composition no finite structure
-# reaches. A tiling need not close every site — an infinite chain of squares closes one axis and
-# leaves the other open — so partial closures are enumerated too, with completeness a property.
-
 """
     Tiling{V}
 

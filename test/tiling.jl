@@ -108,4 +108,54 @@
             @test all(length(t.bondtypes) == t.order for t in ts)
         end
     end
+
+    @testset "3D" begin
+        using Roly: nfaces, facenormal
+
+        # every face binds every face, so the cube monomer is a unit cell of space itself
+        cubic = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
+        cubemono = first(polygen(cubic; maxsize=1))
+        @test isunitcell(cubemono)
+        @test length(tilelatticevectors(cubemono)) == 3
+        cts = tilings(cubemono)
+        # a complete tiling closes all three axes, each through the system's one bond type
+        complete = filter(t -> t.complete, cts)
+        @test !isempty(complete)
+        @test all(t -> length(t.vectors) == 3 && t.bondtypes == [1, 1, 1], complete)
+        # the partial closures come back alongside: a column with one vector, a sheet with two
+        @test sort(unique(length(t.vectors) for t in cts)) == [1, 2, 3]
+        @test all(!t.complete for t in cts if length(t.vectors) < 3)
+        @test all(t.order == 1 for t in cts)
+
+        # four inert sides leave one axis to close, and one vector closes it
+        column = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=[1, 2, 2, 2, 2, 1]))
+        colmono = first(polygen(column; maxsize=1))
+        @test length(opensites(colmono)) == 2
+        @test all(t -> t.complete && length(t.vectors) == 1, tilings(colmono))
+
+        # a distinctly colored cube bonding opposite faces does not tile by translation: its faces
+        # are locking with a trivial stabilizer, so the single twist a bond admits turns the
+        # neighbour a quarter turn, and no translation carries the cube onto a bonded copy
+        opposite(i) = findfirst(j -> isapprox(dot(facenormal(Cube(), i), facenormal(Cube(), j)), -1;
+                                              atol=1e-8), 1:nfaces(Cube()))
+        pairs = unique([minmax(i, opposite(i)) for i in 1:6])
+        turned = BindingRules(reduce(vcat, [[1 a 1 b] for (a, b) in pairs]), PolyhedronParticleSpecies(Cube()))
+        @test all(polygen(turned; maxsize=2)) do p
+            nparticles(p) < 2 && return true
+            g = p.particles[2].pose * inv(p.particles[1].pose)
+            return isapprox(rotation_angle(g.psi), pi / 2; atol=1e-8)
+        end
+        turnedmono = first(polygen(turned; maxsize=1))
+        @test !isunitcell(turnedmono)
+        @test isempty(tilings(turnedmono))
+        # nor with a cell of up to four copies, though partial closures do turn up there
+        fourfold = tilings(turnedmono; maxorder=4)
+        @test !isempty(fourfold)
+        @test all(t -> !t.complete && t.order == 4, fourfold)
+
+        # supercells behave as they do in the plane
+        @test sort(unique(t.order for t in tilings(cubemono; maxorder=2))) == [1, 2]
+        @test cantile(cubic; maxtilesize=1) !== nothing
+        @test cantile(turned; maxtilesize=2) === nothing
+    end
 end
