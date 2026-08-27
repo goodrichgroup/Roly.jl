@@ -152,10 +152,17 @@
         @test all(t -> sort(norm.(t.vectors)) ≈ [1, 1, 1], kcube)
         @test all(t -> sort(t.bondtypes) == [1, 2, 3], kcube)
 
-        # those twists are not free: they mark the faces, so a cube colored alike loses the
-        # symmetry they break -- one member of each pair is turned and the other is not
+        # for the cube those twists are free: a quarter turn is a whole turn of a square face's
+        # own symmetry, so it carries the frame onto an equivalent one and the body keeps its group
         @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))) == 24
-        @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6), twists=quarters)) == 3
+        @test symmetrynumber(PolyhedronParticleSpecies(Cube(); colors=fill(1, 6), twists=quarters)) == 24
+        # a solid whose opposite faces are anti-aligned cannot have both. Mating two triangles takes
+        # half a turn of their threefold symmetry, which no rotation of the face can absorb, so the
+        # twist marks it and the octahedron pays for the mating in symmetry
+        @test paralleltwists(Octahedron())[end] * 3 / (2pi) ≈ -0.5
+        @test symmetrynumber(PolyhedronParticleSpecies(Octahedron(); colors=fill(1, 8))) == 24
+        @test symmetrynumber(PolyhedronParticleSpecies(Octahedron(); colors=fill(1, 8),
+                                                       twists=paralleltwists(Octahedron()))) == 4
 
         # unkeyed faces reach the same lattice without marking anything. A non-locking site admits
         # every twist its own symmetry allows, four for a square face, and the translation is among

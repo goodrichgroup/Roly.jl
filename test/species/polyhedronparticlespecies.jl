@@ -450,11 +450,22 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test counts(BindingRules([1 first(sides) 1 first(sides)], ps)) == [1, 2, 3, 6, 10]
     end
 
-    # Turning one face of an orbit differently is a deliberate break, and the labeling has to
-    # record it or the graph would keep claiming a symmetry the frames no longer have. The twist
-    # is folded into the key `siteorbits` groups by, so the orbit splits.
+    # A side of this prism is square, so a quarter turn carries its frame onto an equivalent one
+    # and marks nothing, however alone it stands. A whole 2pi turn least of all: it is the
+    # identity, and reading it as a mark would cost the body symmetry it plainly has.
+    for t in (π/2, π, 3π/2, 2π)
+        whole = PolyhedronParticleSpecies(shp; colors,
+                                          twists=[i == first(sides) ? t : 0.0 for i in 1:nfaces(shp)])
+        @test symmetrynumber(whole) == 6
+        @test length(unique(Roly.labels(graphrep(whole)))) == 2
+    end
+
+    # What the face's own symmetry cannot absorb does mark it, and then turning one face of an
+    # orbit differently is a deliberate break that the labeling has to record, or the graph would
+    # keep claiming a symmetry the frames no longer have. The twist is folded into the key
+    # `siteorbits` groups by, so the orbit splits.
     split = PolyhedronParticleSpecies(shp; colors,
-                                      twists=[i == first(sides) ? π/2 : 0.0 for i in 1:nfaces(shp)])
+                                      twists=[i == first(sides) ? π/4 : 0.0 for i in 1:nfaces(shp)])
     @test symmetrynumber(split) == length(permutationgroup(split)) == 2
     @test length(unique(Roly.labels(graphrep(split)))) == 3
     @test symmetrynumber(PolyhedronParticleSpecies(shp; colors)) == 6

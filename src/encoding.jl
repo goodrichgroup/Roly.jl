@@ -668,6 +668,20 @@ A face's first corner is its site's twist reference, and settling it takes three
 [`siteorbits`](@ref) groups by, alongside the color, so that giving two faces of one orbit
 different twists splits the orbit.
 """
+# What a twist marks a face with, for the labels to tell faces apart by.
+#
+# A turn by the site's own symmetry angle carries its frame onto an equivalent one, so it marks
+# nothing and has to reduce away: without this a face turned by a whole `2π` -- the identity --
+# would read as distinct from its neighbours and cost the body symmetry it has. What survives the
+# reduction is the part the face's own symmetry cannot absorb, which does mark it.
+function _twistmarks(twists, sitesyms, ::Type{F}) where {F}
+    return map(zip(twists, sitesyms)) do (t, sitesym)
+        step = 2F(π) / sitesym
+        r = mod(F(t), step)
+        return min(r, abs(r - step)) < sqrt(eps(F)) ? zero(F) : r
+    end
+end
+
 function _facesites(
     p::Polyhedron{F},
     poseof,
@@ -680,7 +694,7 @@ function _facesites(
 ) where {F}
     n = nfaces(p)
     sitesyms = facesym(p)
-    labels = siteorbits(poseof(faces(p)), sitesyms, collect(zip(colors, twists)))
+    labels = siteorbits(poseof(faces(p)), sitesyms, collect(zip(colors, _twistmarks(twists, sitesyms, F))))
 
     fs = _propagate_faces(corners(p), faces(p), labels)
     # A twist is an angle about the site's own normal. Whole dart steps are taken by rotating
