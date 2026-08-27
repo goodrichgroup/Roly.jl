@@ -221,19 +221,23 @@ face's starting corner from that face alone, which leaves two faces that face ea
 wherever their own geometry says, and a bond between them turning the neighbour by whatever their
 two references happen to differ by.
 
-Only turns by a whole step of the face's own symmetry are taken. Those carry a frame onto an
-equivalent one, so they mark nothing and cost the body no symmetry, and they are also the only
-turns that keep the reference on the edge class the first half chose. What that buys depends on
-the face:
+Call the face's own symmetry angle, `2π/sitesym`, one step. Only turns by a whole number of steps
+are taken: those carry a frame onto an equivalent one, so they mark nothing and cost the body no
+symmetry, and they are the only turns that keep the reference on the edge class the first half
+chose. Everything below turns on whether an angle is a whole or a half-integer number of them.
 
-  - where the turn that makes bonded copies *translates* of each other is itself a whole step, it
-    is taken, and rules over those faces can tile by translation. Cubes and prisms
-  - where that turn is half a step and the face's symmetry is odd, a further half turn makes it
-    whole, and is taken instead. Bonded copies then meet turned by 180 degrees about the bond
-    rather than translated -- square, but not a translation lattice. Octahedra, dodecahedra,
-    icosahedra, odd antiprisms
-  - where neither is a whole step, the face is left as it was, rather than made to mate at the
-    cost of symmetry the body has. Only the caps of an even antiprism land here
+What a whole step buys depends on the face:
+
+  - the turn that makes bonded copies *translates* of each other is a whole number of steps: take
+    it, and rules over those faces can tile by translation. Cubes and prisms
+  - that turn is a half-integer number of steps, and the face's symmetry is odd: half a turn is
+    then itself a half-integer number of steps (`sitesym/2`), so adding it lands on a whole
+    number. Take that instead, and bonded copies meet turned by 180 degrees about the bond --
+    square, but not translates, so no lattice. Octahedra, dodecahedra, icosahedra, odd antiprisms
+  - neither is whole: leave the face as it was, rather than mate it at the cost of symmetry the
+    body has. Only the caps of an even antiprism land here, staggered by half of their own
+    symmetry angle, where adding half a turn moves by a whole number of steps and so cannot
+    repair a half-integer one
 """
 function _mateopposing(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     tol = sqrt(eps(F)) * maximum(norm, cs)
