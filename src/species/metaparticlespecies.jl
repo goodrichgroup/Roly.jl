@@ -293,12 +293,9 @@ function _siteoverlap(sa::BindingSite, sb::BindingSite)
            isapprox(sa.pose.psi, sb.pose.psi; atol=sa.alignment_tolerance + sb.alignment_tolerance, rtol=0)
 end
 
-# The polyform each species of `src` is replaced by, one per species, as a polyform of `rules`:
-# the one `given` names for it, the one a meta-species wraps, or the species itself as a monomer.
-#
-# Each answers to `rules` in its own way, so each is checked against the species it will be read
-# as wearing -- a different pair every time, the same question every time.
-function _substitutions(src::BindingRules, rules::BindingRules, given)
+# Return the polyforms each species of `src` is replaced by, one per species, as a polyform of `rules`.
+# Return `given` if present, return the underlying polyform of a meta species, or simply return the corresponding species.
+function _resolvesubstitutions(src::BindingRules, rules::BindingRules, given)
     return map(collect(enumerate(species(src)))) do (i, ps)
         sub = get(given, i, nothing)
         # written by hand: a polyform of `rules` already, so its particles wear its own species
@@ -341,23 +338,17 @@ end
 """
     recast(poly::Polyform, rules::BindingRules; substitutions=Dict())
 
-Recast `poly` as a [`Polyform`](@ref) of `rules`, replacing every particle by the polyform its
-species stands for.
+Recast `poly` as a [`Polyform`](@ref) of `rules`, substituting every particle with one or multiple particles
+from `rules`.
 
 `substitutions` maps a species index of `poly`'s own rules to the `Polyform` that species is
-replaced by, one copy per particle wearing it, placed at that particle's pose. It has to be a
-polyform of `rules`. A
-[`MetaParticleSpecies`](@ref) records the polyform it wraps and needs no entry; any other species
-stands for itself unless named, and only the rules change. The species that come out are matched
-into `rules` by equality.
-
-The bonds are every contact `rules` bonds, not only the ones `poly` recorded -- two particles
-that touch have no say in the matter. Throws an `ArgumentError` if two of them overlap or touch
-at a pair `rules` leaves inert, since then no polyform of `rules` occupies that space.
+replaced by. It has to be a polyform of `rules`. A [`MetaParticleSpecies`](@ref) is substituted by the polyform it
+wraps and needs no entry. Any other species type not in `substitutions`is relplaced by the species of `rules`
+with the same species index.
 """
 function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) where {D}
     src = bindingrules(poly)
-    subs = _substitutions(src, rules, substitutions)
+    subs = _resolvesubstitutions(src, rules, substitutions)
 
     parts = _substitute_particles(poly, subs)
     contacts = Contact[]
