@@ -26,6 +26,15 @@ function Base.show(io::Core.IO, t::Tiling)
     return print(io, "Tiling[d=$(length(t.vectors)), order=$(t.order)", t.complete ? ", complete]" : "]")
 end
 
+function Base.:(==)(a::Tiling, b::Tiling)
+    (iscomplete(a) == iscomplete(b) && tilingorder(a) == tilingorder(b)) || return false
+    unitcell(a) == unitcell(b) || return false
+    sort(bondtypes(a)) == sort(bondtypes(b)) || return false
+    va, vb = latticevectors(a), latticevectors(b)
+    length(va) == length(vb) || return false
+    return all(v -> any(w -> _orient(v) ≈ _orient(w), vb), va)
+end
+
 """
     unitcell(t::Tiling)
 
@@ -54,7 +63,7 @@ bondtypes(t::Tiling) = t.bondtypes
     iscomplete(t::Tiling)
 
 Whether `t` leaves no open site: every site of the cell is closed by one of its translates. A
-tiling that is not complete closes along fewer directions than the space has.
+tiling that is not complete closes along fewer directions than the space has, i.e. a 1d line in the 2d plane.
 """
 iscomplete(t::Tiling) = t.complete
 
@@ -93,39 +102,25 @@ puts the turn inside the cell, leaving a lattice that is a pure translation agai
 function tilings(poly::Polyform; nreps::Integer=2, maxorder::Integer=1)
     rules = bindingrules(poly)
     out = Tiling{typeof(poly),SVector{dimension(rules),numtype(rules)}}[]
-    for cell in _tilecells(poly, maxorder)
-        _addtilings!(out, cell, rules, nreps)
+    cells, metarules = _tilecells(poly, maxorder)
+    for cell in cells
+        # the cell is carried through the search as a meta-polyform and read back as a polyform
+        # of `rules` once, here, rather than once per candidate
+        _addtilings!(out, cell, metarules, rules, recast(cell.meta, rules), nreps)
     end
-    return _distinct(out)
+    return unique!(out)
 end
 
-# One entry per lattice, rather than one per way the search reached it. A lattice does not care
-# which order its generators were chosen in, nor which way round each one points, so a tiling
-# that differs only in those is the same tiling found again -- and there are `2^d * d!` ways to
-# find each, which is eight of every one in space.
-function _distinct(ts::Vector{<:Tiling})
-    out = eltype(ts)[]
-    for t in ts
-        any(u -> _sametiling(u, t), out) || push!(out, t)
-    end
-    return out
+function Base.hash(t::Tiling, h::UInt)
+    h = hash(graphrep(unitcell(t)), h)
+    h = hash(sort(bondtypes(t)), h)
+    h = hash(iscomplete(t), h)
+    h = hash(tilingorder(t), h)
+    return hash(length(latticevectors(t)), h)
 end
 
-function _sametiling(a::Tiling, b::Tiling)
-    (iscomplete(a) == iscomplete(b) && tilingorder(a) == tilingorder(b)) || return false
-    graphrep(unitcell(a)) == graphrep(unitcell(b)) || return false
-    sort(bondtypes(a)) == sort(bondtypes(b)) || return false
-    va, vb = latticevectors(a), latticevectors(b)
-    length(va) == length(vb) || return false
-    # the generators as a set, each up to its sign: order is the search's, not the lattice's
-    return all(v -> any(w -> _samevector(_orient(v), _orient(w)), vb), va)
-end
-
-# Vectors that come from bond geometry rather than from arithmetic on integers, so they are never
-# exactly what they should be: a lattice vector along an axis arrives as `1.2e-16` on the other
-# components. Compared with a tolerance throughout, never for equality.
-_samevector(a, b) = isapprox(a, b; atol=_tol(a), rtol=_tol(a))
-_tol(v::AbstractVector{F}) where {F} = sqrt(eps(F))
+# spatial units are O(1), so use sqrt(eps) for absolute tolerance
+_tol(::AbstractVector{F}) where {F} = sqrt(eps(F))
 
 # A vector and its negative generate the same translations, so pick the one whose first
 # significant component is positive.
@@ -135,24 +130,21 @@ function _orient(v::AbstractVector)
 end
 
 """
-    TileCell{P,S}
+    TileCell{PF,S}
 
-One candidate cell of a lattice: the meta-polyform a translate carries, laid out as plain
-particles.
+One candidate cell of a lattice, kept as the meta-polyform the search grows it from.
 
-  - `poly`: the cell as a `Polyform` of the underlying rules, whose particles are every particle
-    of every copy, in one numbering
-  - `sites`: every site those copies expose, spent ones included
-  - `metabonds`: pairs of indices into `sites`, the sites already joined inside the cell
+  - `meta`: the cell, `order` copies of the tiled polyform wrapped as one meta-polyform
+  - `sites`: its meta sites, in [`bindingsites`](@ref) order
+  - `spent`: which of those a translate can no longer use -- bound inside the cell, or inert
+  - `basecolors`: the color each meta site carries in the *underlying* rules, for naming bond types
   - `order`: how many copies of the polyform the cell holds
-
-Both site lists are needed. The bonds count towards the cell's composition, and their endpoints
-are spent, so only the remaining sites can carry the lattice.
 """
 struct TileCell{PF,S}
-    poly::PF
+    meta::PF
     sites::Vector{S}
-    metabonds::Vector{NTuple{2,Int}}
+    spent::BitVector
+    basecolors::Vector{Int}
     order::Int
 end
 
@@ -160,7 +152,7 @@ end
 # against, and the state of the current branch of the search.
 struct _ShellSearch{PF,P,S,R,V}
     cell::TileCell{PF,S}
-    rules::R
+    rules::R                           # the *meta* rules: the cell is translated as meta-particles
     vectors::Vector{V}
     ofvertex::Vector{Int}              # first vertex of a site -> its index in `cell.sites`, else 0
     nreps::Int
@@ -182,34 +174,34 @@ function _siteofvertex(cell::TileCell)
 end
 _lookup(s::_ShellSearch, vs) = first(vs) <= length(s.ofvertex) ? s.ofvertex[first(vs)] : 0
 
-function _addtilings!(out, cell::TileCell, rules, nreps::Integer)
-    consumed = falses(length(cell.sites))
-    for (i, j) in cell.metabonds
-        consumed[i] = consumed[j] = true
-    end
-    free = [s for (i, s) in enumerate(cell.sites) if !consumed[i]]
+function _addtilings!(out, cell::TileCell, metarules, rules, cellpoly, nreps::Integer)
+    free = [s for (i, s) in enumerate(cell.sites) if !cell.spent[i]]
     isempty(free) && return out
-    vectors = _candidatelatticevectors(free, rules)
+    vectors = _candidatelatticevectors(free, metarules)
     isempty(vectors) && return out
 
     search = _ShellSearch(
         cell,
-        rules,
+        metarules,
         vectors,
         _siteofvertex(cell),
         Int(nreps),
-        consumed,
+        copy(cell.spent),
         NTuple{2,Int}[],
-        Vector{eltype(cell.poly.particles)}[],
+        Vector{eltype(cell.meta.particles)}[],
         Int[],
     )
-    spent = [_bondtype(rules, cell.sites, c) for c in cell.metabonds]
+    # the bonds inside the cell count towards what it spends, alongside the ones its translates
+    # close. Both are named by the colors the sites carry in the underlying rules, not the meta
+    # ones, since a bond type indexes that system's bonds
+    inside = [(siteindex(cell.meta, a), siteindex(cell.meta, b)) for (a, b) in bonds(cell.meta)]
+    spent = [_bondtype(rules, cell.basecolors, c) for c in inside]
     record!() = push!(
         out,
         Tiling(
-            cell.poly,
+            cellpoly,
             vectors[search.chosen],
-            vcat(spent, [_bondtype(rules, cell.sites, c) for c in search.contacts]),
+            vcat(spent, [_bondtype(rules, cell.basecolors, c) for c in search.contacts]),
             all(search.consumed),
             cell.order,
         ),
@@ -219,29 +211,38 @@ function _addtilings!(out, cell::TileCell, rules, nreps::Integer)
 end
 
 # The cells to try: every meta-polyform of up to `maxorder` copies of `poly` that the assembly
-# machinery can build, laid back out as plain particles. `maxorder == 1` needs no special case,
-# since the meta-monomer is `poly` itself.
+# machinery can build. `maxorder == 1` needs no special case, since the meta-monomer is `poly`
+# itself.
+#
+# `exposeinert=true` is not decoration. The search rejects a placement in which two cells merely
+# *touch* at a pair of sites nothing can bond, and it can only see the sites the meta-species
+# exposes. Left to its default the species would expose the bondable ones alone, and two cells
+# resting against each other on inert faces would look like empty space -- `overlap` does not
+# catch it either, since touching is not interpenetrating. Exposed, they are meta sites like any
+# other, the lift leaves them inert, and the rejection fires.
 function _tilecells(poly::Polyform, maxorder::Integer)
-    S = sitetype(poly)
-    cells = TileCell{typeof(poly),S}[]
-    # With no open site there is nothing for a translate to bond to, and no meta-species to build.
-    isempty(opensites(poly)) && return cells
+    mp = MetaParticleSpecies(poly; exposeinert=true)
+    metarules = BindingRules(mp)
+    S = sitetype(metarules)
+    PF = typeof(Polyform(metarules))
+    cells = TileCell{PF,S}[]
+    isempty(opensites(poly)) && return cells, metarules
 
-    for meta in polygen(BindingRules(MetaParticleSpecies(poly)); maxsize=maxorder)
-        joined = [(siteindex(meta, a), siteindex(meta, b)) for (a, b) in bonds(meta)]
-        cellpoly = recast(meta, bindingrules(poly))
-        # The sites the copies expose, read off the cell rather than off the meta-species. A
-        # meta-species inherits its polyform's colors, but `BindingRules` shifts every species'
-        # colors into a range of its own, so the meta site says 1 where the polyform says 3 --
-        # and the search asks the polyform's rules. They agree only when the open sites happen
-        # to start at color 1. The two number their vertices alike, so a site is found by one.
-        sites = map(1:nsites(meta)) do i
-            v = first(bindingsite(meta, i).vertices)
-            return bindingsite(cellpoly, _vertex_to_particle_site(cellpoly, v; canonidxs=false))
+    ucolors = _underlyingcolors(mp)
+    polyenum(metarules; maxsize=maxorder) do meta, _
+        sites = collect(bindingsites(meta))
+        # a translate can use a site that is unbound inside the cell and not inert; everything
+        # else is spent before the search starts, and a `complete` closure is one that uses up
+        # what is left
+        spent = trues(length(sites))
+        for l in opensites(meta)
+            spent[siteindex(meta, l)] = false
         end
-        push!(cells, TileCell(cellpoly, sites, joined, nparticles(meta)))
+        basecolors = [ucolors[k] for _ in meta.particles for k in 1:nsites(mp)]
+        push!(cells, TileCell(copy(meta), sites, spent, basecolors, nparticles(meta)))
+        return ACCEPT
     end
-    return cells
+    return cells, metarules
 end
 
 """
@@ -514,8 +515,8 @@ end
 
 # Every recorded contact joins two sites that interact -- `_overlap_and_contacts` refuses the
 # others before they reach here -- so their color pair is always in the bond list.
-function _bondtype(rules, sites, (i1, i2))
-    i = findfirst(==(minmax(color(sites[i1]), color(sites[i2]))), bonded_colors(rules))
+function _bondtype(rules, basecolors, (i1, i2))
+    i = findfirst(==(minmax(basecolors[i1], basecolors[i2])), bonded_colors(rules))
     isnothing(i) && error("Internal error: a recorded contact has no bond type. Please file an issue.")
     return i
 end
@@ -530,7 +531,7 @@ function _candidatelatticevectors(sites, rules)
         isaligned(s1, s2) || continue
         v = s1.pose.x - s2.pose.x
         norm(v) < _tol(v) && continue
-        any(u -> _samevector(u, v), vecs) || push!(vecs, v)
+        any(u -> u ≈ v, vecs) || push!(vecs, v)
     end
     return vecs
 end
@@ -563,7 +564,7 @@ end
 # an invalid or bound-site contact, or a doubly-consumed site — with all bookkeeping undone.
 # Returns the indices of the sites it consumed.
 function _placeshell!(s::_ShellSearch)
-    parts = s.cell.poly.particles
+    parts = s.cell.meta.particles
     k = length(s.chosen)
     n0 = length(s.contacts)
     added = Int[]

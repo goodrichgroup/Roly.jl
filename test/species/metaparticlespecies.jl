@@ -120,6 +120,21 @@
         @test symmetrynumber(MetaParticleSpecies(sym, live[1:1])) == 1
     end
 
+    # a meta-particle whose sites sit on its bounding sphere -- one wrapping a patchy particle,
+    # whose radius is the patch radius -- meets a neighbour at exactly the sum of the two radii.
+    # The generic `could_contact` asks for strictly less than that, so without a method of its own
+    # the pair is never looked at and the meta-species bonds to nothing
+    let patchy = PatchyDisk([0.0, π/2, π, 3π/2]; colors=[1, 2, 1, 2])
+        prules = BindingRules([1 1 1 2], patchy)
+        pmono = first(polygen(prules; maxsize=1))
+        base = [p for p in polygen(prules; maxsize=2) if nparticles(p) == 2]
+        meta = [p for p in polygen(BindingRules(MetaParticleSpecies(pmono)); maxsize=2)
+                if nparticles(p) == 2]
+        @test !isempty(base)
+        @test length(meta) == length(base)
+        @test all(nbonds(m) == 1 for m in meta)
+    end
+
     @testset "keywords and rejections" begin
         recolored = MetaParticleSpecies(dimer; colors=[4, 9])
         @test [color(bindingsite(recolored, i)) for i in 1:2] == [4, 9]

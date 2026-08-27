@@ -11,6 +11,7 @@ struct MetaParticleSpecies{D,F,B<:BindingSite,G<:AbstractNautyGraph,PF} <: Parti
     sites::Vector{B}
     poly::PF
     rmax::F
+    skin::F
 end
 
 """
@@ -87,8 +88,11 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     rmax = maximum(poly.particles; init=zero(F)) do part
         norm(part.pose.x) + bounding_radius(species(rules, speciesindex(part)))
     end
+
     return check_encoding(
-        MetaParticleSpecies{D,F,eltype(metasites),typeof(g),typeof(poly)}(g, metasites, copy(poly), convert(F, rmax))
+        MetaParticleSpecies{D,F,eltype(metasites),typeof(g),typeof(poly)}(
+            g, metasites, copy(poly), convert(F, rmax), sqrt(eps(F)) * convert(F, rmax)
+        ),
     )
 end
 
@@ -117,7 +121,7 @@ function Base.show(io::Core.IO, ps::MetaParticleSpecies)
     print(io, "$(dimension(ps))d MetaParticleSpecies[", nparticles(ps.poly), " particles, ", nsites(ps), " sites]")
 end
 
-Base.copy(ps::MetaParticleSpecies) = typeof(ps)(copy(ps.g), copy(ps.sites), copy(ps.poly), ps.rmax)
+Base.copy(ps::MetaParticleSpecies) = typeof(ps)(copy(ps.g), copy(ps.sites), copy(ps.poly), ps.rmax, ps.skin)
 
 graphrep(ps::MetaParticleSpecies) = ps.g
 nsites(ps::MetaParticleSpecies) = length(ps.sites)
@@ -146,6 +150,11 @@ function setcolors!(ps::MetaParticleSpecies, colors::AbstractVector{<:Integer})
     end
     _labelsites!(ps.g, ps.sites, orbits)
     return nothing
+end
+
+function could_contact(p1::SpeciesAndPose{<:MetaParticleSpecies}, p2::SpeciesAndPose{<:MetaParticleSpecies}; kwargs...)
+    (s1, pose1), (s2, pose2) = p1, p2
+    return norm(pose1.x - pose2.x) < bounding_radius(s1) + bounding_radius(s2) + s1.skin + s2.skin
 end
 
 """
@@ -237,10 +246,6 @@ end
 "Project" the meta-rules `rules` to down to the original binding rules of the underlying particles.
 Returns the binding rules of the original particles with additional bonds that make all contacts in the meta-polyform
 valid.
-
-Meta rules bond by colors of the meta-species' own choosing, which need not stand for a bond the
-underlying particles can make. Rather than refuse those, this adds these to the original binding rules as additional
-bond types between the underlying particle species.
 """
 function inducedrules(rules::MetaBindingRules)
     spcs = species(rules)

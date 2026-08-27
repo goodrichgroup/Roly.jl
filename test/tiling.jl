@@ -132,7 +132,7 @@
         cts = tilings(cubemono)
         @test count(iscomplete, cts) == 1
         # distinct by geometry, not by exact bits: these vectors come from bond poses
-        @test !any(Roly._sametiling(cts[i], cts[j]) for i in eachindex(cts) for j in 1:(i - 1))
+        @test !any(cts[i] == cts[j] for i in eachindex(cts) for j in 1:(i - 1))
 
         # the cell comes back as a polyform, which is what makes a tiling something to look at
         whole = first(filter(iscomplete, cts))
