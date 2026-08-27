@@ -181,8 +181,9 @@ Faces that are related by a rotation of the body must pick compatible orderings.
 For example, a rectangle has degree 4 but only 2-fold symmetry, so corners fall into two classes a 90deg turn apart.
 Picking as a reference edge both long edges on some faces and a short edges on others hides the symmetry that relates them.
 
-The choice of twist reference is made from the geometry of the face: rotate to the lexicographically
+The choice of twist reference is made from the geometry of the faces: rotate to the lexicographically
 least cyclic word of `(edge length, interior angle)`, which ensures compatible references throughout.
+We also impose that opposing faces should have aligned orientations.
 """
 function _canonical_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     atol = sqrt(eps(F)) * maximum(norm, corners)
@@ -206,7 +207,75 @@ function _canonical_faces(corners::Vector{SVector{3,F}}, faces::Vector{Vector{In
             isbefore(s, best) && (best = s)
         end
         circshift(f, 1 - best)
+    end |> fs -> _mateopposing(corners, fs)
+end
+
+"""
+    _mateopposing(corners, faces)
+
+Return `faces` with the corner list of each face that has an opposite turned so that the two meet
+squarely rather than askew.
+
+The second half of the convention [`_canonical_faces`](@ref) sets. The first half picks each
+face's starting corner from that face alone, which leaves two faces that face each other starting
+wherever their own geometry says, and a bond between them turning the neighbour by whatever their
+two references happen to differ by.
+
+Only turns by a whole step of the face's own symmetry are taken. Those carry a frame onto an
+equivalent one, so they mark nothing and cost the body no symmetry, and they are also the only
+turns that keep the reference on the edge class the first half chose. What that buys depends on
+the face:
+
+  - where the turn that makes bonded copies *translates* of each other is itself a whole step, it
+    is taken, and rules over those faces can tile by translation. Cubes and prisms
+  - where that turn is half a step and the face's symmetry is odd, a further half turn makes it
+    whole, and is taken instead. Bonded copies then meet turned by 180 degrees about the bond
+    rather than translated -- square, but not a translation lattice. Octahedra, dodecahedra,
+    icosahedra, odd antiprisms
+  - where neither is a whole step, the face is left as it was, rather than made to mate at the
+    cost of symmetry the body has. Only the caps of an even antiprism land here
+"""
+function _mateopposing(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
+    tol = sqrt(eps(F)) * maximum(norm, cs)
+    centroid(f) = sum(cs[v] for v in f) / length(f)
+    function frame(f)
+        x = centroid(f)
+        ex = normalize(cross(cs[f[2]] - cs[f[1]], cs[f[3]] - cs[f[2]]))
+        ez = normalize((cs[f[1]] + cs[f[2]]) / 2 - x)
+        return RotMatrix3{F}(hcat(ex, cross(ez, ex), ez))
     end
+    function symmetry(f)
+        k = length(f)
+        c = centroid(f)
+        rel = [cs[v] - c for v in f]
+        nrm = frame(f)[:, 1]
+        return count(0:(k - 1)) do s
+            R = AngleAxis(2F(π) * s / k, nrm[1], nrm[2], nrm[3])
+            all(j -> isapprox(R * rel[j], rel[mod1(j + s, k)]; atol=tol), 1:k)
+        end
+    end
+
+    out = [copy(f) for f in faces]
+    for i in eachindex(faces)
+        j = findfirst(m -> isapprox(dot(frame(faces[i])[:, 1], frame(faces[m])[:, 1]), -1; atol=tol),
+                      eachindex(faces))
+        (isnothing(j) || j <= i) && continue
+        f = faces[j]
+        # the frame a partner of face `i` must wear, against the one face `j` wears already
+        turn = transpose(frame(f)) * (frame(faces[i]) * standard_rotation(F, Val(3)))
+        mate = atan(turn[3, 2], turn[2, 2])
+
+        # a whole step of the face's own symmetry, counted in corners
+        perstep = length(f) ÷ symmetry(f)
+        function wholesteps(θ)
+            steps = θ * length(f) / (2F(π))
+            m = round(Int, steps)
+            return abs(steps - m) < sqrt(eps(F)) && iszero(mod(m, perstep)) ? m : nothing
+        end
+        m = something(wholesteps(mate), wholesteps(mate + F(π)), 0)
+        out[j] = circshift(f, -m)
+    end
+    return out
 end
 
 """

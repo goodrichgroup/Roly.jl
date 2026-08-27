@@ -54,7 +54,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
 
     # The package convention: outward normal on local x. Additionally fix local z
     # at the midpoint of the face's first edge. Asked of the constructor rather than of the
-    # `Unit*` constants, which turn some of their faces off it -- see `paralleltwists`
+    # `Unit*` constants, which turn some of their faces off it -- see `matingtwists`
     for (name, _, shp, nf, _) in solids
         plain = PolyhedronParticleSpecies(shp)
         for i in 1:nf
@@ -531,8 +531,6 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     # `UnitCube` carries the twists that make opposite faces mate square-on, so a rule set bonding
     # them tiles space. `SymmetricUnitCube` gets there the other way: one color leaves every face
     # a fourfold stabilizer, so a bond admits all four twists and the translation is among them
-    @test paralleltwists(Cube()) ./ (pi / 2) ≈ [0, 0, 0, 1, 1, 1]
-    @test isempty(filter(!iszero, paralleltwists(Tetrahedron())))   # no two faces face each other
     @test isunitcell(first(polygen(BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube); maxsize=1)))
     @test isunitcell(first(polygen(BindingRules([1 1 1 1], SymmetricUnitCube); maxsize=1)))
 end

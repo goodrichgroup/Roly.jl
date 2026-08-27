@@ -139,66 +139,39 @@ function overlap(
 end
 
 """
-    paralleltwists(p::Polyhedron)
-
-The twist per face that makes a bond between two faces with opposite normals a pure translation,
-so that bonded copies of the body stay parallel.
-
-Each face is matched with the one whose normal is antiparallel to its own, and the second of the
-pair is turned until its frame is the one [`standard_twist`](@ref) demands of a partner for the
-first. Faces without an opposite are left alone, so a tetrahedron gets nothing and a cube gets a
-quarter turn on three of its six.
-"""
-function paralleltwists(p::Polyhedron{F}) where {F}
-    ps = PolyhedronParticleSpecies(p)
-    tol = sqrt(eps(F))
-    twists = zeros(F, nfaces(p))
-    for i in 1:nfaces(p)
-        # find the site whose face normal is anti parallel to i
-        j = findfirst(k -> isapprox(dot(facenormal(p, i), facenormal(p, k)), -1; atol=tol), 1:nfaces(p))
-        (isnothing(j) || j <= i) && continue
-        # twist j to make the i-j bond a translation
-        want = standard_twist(bindingsite(ps, i)).psi
-        turn = bindingsite(ps, j).pose.psi' * want
-        twists[j] = atan(turn[3, 2], turn[2, 2])
-    end
-    return twists
-end
-
-"""
     UnitTetrahedron
 
 A regular tetrahedron with unit-length edges and one binding site per face.
 """
-const UnitTetrahedron = PolyhedronParticleSpecies(Tetrahedron(); twists=paralleltwists(Tetrahedron()))
+const UnitTetrahedron = PolyhedronParticleSpecies(Tetrahedron())
 
 """
     UnitCube
 
 A cube with unit-length edges and one binding site per face.
 """
-const UnitCube = PolyhedronParticleSpecies(Cube(); twists=paralleltwists(Cube()))
+const UnitCube = PolyhedronParticleSpecies(Cube())
 
 """
     UnitOctahedron
 
 A regular octahedron with unit-length edges and one binding site per face.
 """
-const UnitOctahedron = PolyhedronParticleSpecies(Octahedron(); twists=paralleltwists(Octahedron()))
+const UnitOctahedron = PolyhedronParticleSpecies(Octahedron())
 
 """
     UnitDodecahedron
 
 A regular dodecahedron with unit-length edges and one binding site per face.
 """
-const UnitDodecahedron = PolyhedronParticleSpecies(Dodecahedron(); twists=paralleltwists(Dodecahedron()))
+const UnitDodecahedron = PolyhedronParticleSpecies(Dodecahedron())
 
 """
     UnitIcosahedron
 
 A regular icosahedron with unit-length edges and one binding site per face.
 """
-const UnitIcosahedron = PolyhedronParticleSpecies(Icosahedron(); twists=paralleltwists(Icosahedron()))
+const UnitIcosahedron = PolyhedronParticleSpecies(Icosahedron())
 
 """
     UnitPyramid(n, a=1.0; h=a, kwargs...)
