@@ -109,6 +109,20 @@
         end
     end
 
+    # a cell's sites are read off the cell, not off the meta-species the search grows it from.
+    # `BindingRules` shifts every species' colors into a range of its own, so a meta site says 1
+    # where the polyform says 3, while the search asks the polyform's own rules -- which agree
+    # only when the open sites happen to start at color 1. Two square species that do not:
+    shifted = BindingRules([1 4 2 2; 2 1 1 3], UnitSquare)
+    shiftedchain = polygen(shifted; maxsize=2)[end]
+    @test [color(bindingsite(shiftedchain, l)) for l in opensites(shiftedchain)] == [3, 5]
+    @test (3, 5) in Roly.bonded_colors(shifted)
+    @test length(tilings(shiftedchain)) == 1
+    # `canchain` goes through `tilings`, so it was blind to this system too, while
+    # `growthwitness` -- which does not -- always saw the chain
+    @test canchain(shifted) !== nothing
+    @test isunbounded(shifted)
+
     @testset "a Tiling answers for itself" begin
         # one entry per lattice, not one per way the search reached it. A lattice does not care
         # which order its generators came in nor which way each points, and there are 2^d*d! ways
@@ -117,8 +131,8 @@
         cubemono = first(polygen(cube; maxsize=1))
         cts = tilings(cubemono)
         @test count(iscomplete, cts) == 1
-        oriented(t) = sort([v[findfirst(x -> abs(x) > 1e-8, v)] < 0 ? -v : v for v in latticevectors(t)])
-        @test allunique(oriented.(cts))
+        # distinct by geometry, not by exact bits: these vectors come from bond poses
+        @test !any(Roly._sametiling(cts[i], cts[j]) for i in eachindex(cts) for j in 1:(i - 1))
 
         # the cell comes back as a polyform, which is what makes a tiling something to look at
         whole = first(filter(iscomplete, cts))

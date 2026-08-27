@@ -104,25 +104,34 @@ end
 # that differs only in those is the same tiling found again -- and there are `2^d * d!` ways to
 # find each, which is eight of every one in space.
 function _distinct(ts::Vector{<:Tiling})
-    seen = Set{Any}()
-    return filter(ts) do t
-        key = (graphrep(unitcell(t)), sort(bondtypes(t)), iscomplete(t), tilingorder(t),
-               sort([_orient(v) for v in latticevectors(t)]))
-        key in seen && return false
-        push!(seen, key)
-        return true
+    out = eltype(ts)[]
+    for t in ts
+        any(u -> _sametiling(u, t), out) || push!(out, t)
     end
+    return out
 end
 
+function _sametiling(a::Tiling, b::Tiling)
+    (iscomplete(a) == iscomplete(b) && tilingorder(a) == tilingorder(b)) || return false
+    graphrep(unitcell(a)) == graphrep(unitcell(b)) || return false
+    sort(bondtypes(a)) == sort(bondtypes(b)) || return false
+    va, vb = latticevectors(a), latticevectors(b)
+    length(va) == length(vb) || return false
+    # the generators as a set, each up to its sign: order is the search's, not the lattice's
+    return all(v -> any(w -> _samevector(_orient(v), _orient(w)), vb), va)
+end
+
+# Vectors that come from bond geometry rather than from arithmetic on integers, so they are never
+# exactly what they should be: a lattice vector along an axis arrives as `1.2e-16` on the other
+# components. Compared with a tolerance throughout, never for equality.
+_samevector(a, b) = isapprox(a, b; atol=_tol(a), rtol=_tol(a))
+_tol(v::AbstractVector{F}) where {F} = sqrt(eps(F))
+
 # A vector and its negative generate the same translations, so pick the one whose first
-# significant component is positive, and round so that two ways of computing it agree. Adding
-# zero at the end is not idle: `-0.0` and `0.0` are equal but not `isequal`, so a negated
-# component would key apart from the one it matches.
-function _orient(v::AbstractVector{F}) where {F}
-    tol = sqrt(eps(F))
-    i = findfirst(x -> abs(x) > tol, v)
-    w = isnothing(i) ? v : (v[i] < 0 ? -v : v)
-    return round.(w; digits=8) .+ zero(F)
+# significant component is positive.
+function _orient(v::AbstractVector)
+    i = findfirst(x -> abs(x) > _tol(v), v)
+    return isnothing(i) || v[i] > 0 ? v : -v
 end
 
 """
@@ -220,8 +229,17 @@ function _tilecells(poly::Polyform, maxorder::Integer)
 
     for meta in polygen(BindingRules(MetaParticleSpecies(poly)); maxsize=maxorder)
         joined = [(siteindex(meta, a), siteindex(meta, b)) for (a, b) in bonds(meta)]
-        push!(cells, TileCell(recast(meta, bindingrules(poly)), collect(bindingsites(meta)),
-                              joined, nparticles(meta)))
+        cellpoly = recast(meta, bindingrules(poly))
+        # The sites the copies expose, read off the cell rather than off the meta-species. A
+        # meta-species inherits its polyform's colors, but `BindingRules` shifts every species'
+        # colors into a range of its own, so the meta site says 1 where the polyform says 3 --
+        # and the search asks the polyform's rules. They agree only when the open sites happen
+        # to start at color 1. The two number their vertices alike, so a site is found by one.
+        sites = map(1:nsites(meta)) do i
+            v = first(bindingsite(meta, i).vertices)
+            return bindingsite(cellpoly, _vertex_to_particle_site(cellpoly, v; canonidxs=false))
+        end
+        push!(cells, TileCell(cellpoly, sites, joined, nparticles(meta)))
     end
     return cells
 end
@@ -511,8 +529,8 @@ function _candidatelatticevectors(sites, rules)
         intmat[color(s1), color(s2)] || continue
         isaligned(s1, s2) || continue
         v = s1.pose.x - s2.pose.x
-        sum(abs2, v) < 1e-18 && continue
-        any(u -> isapprox(u, v; atol=1e-9), vecs) || push!(vecs, v)
+        norm(v) < _tol(v) && continue
+        any(u -> _samevector(u, v), vecs) || push!(vecs, v)
     end
     return vecs
 end
