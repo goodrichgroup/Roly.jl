@@ -47,8 +47,7 @@ pairs and exposed in that order. Without them every unbound, non-inert site is e
 
   - `colors`: one interaction color per exposed site; by default each keeps the color it has
     inside `poly`
-  - `exposeinert`: expose every unbound site rather than only the ones `poly`'s own rules can
-    bond, so that rules written over the new colors can put the inert ones to work
+  - `exposeinert`: expose previously inert sites to the new binding rules
 
 Each site's `sitesym` and `locking` carry over from the polyform, while its `stab` is recomputed
 against the polyform by [`siteorbits`](@ref) and [`stabilizerorders`](@ref).
@@ -289,7 +288,17 @@ end
 # they have inside it, relative to the particle they replace. A meta-species records its own; any
 # other species stands for itself, as the monomer of whichever species of `rules` it equals.
 function _substitution(ps::ParticleSpecies, i::Integer, rules::BindingRules, given)
-    isnothing(given) || return given
+    if !isnothing(given)
+        # a substitution written by hand names its species by index into its own rules, and those
+        # indices are read as indices into `rules`, so it has to be a polyform of `rules` itself
+        bindingrules(given) === rules || throw(
+            ArgumentError("a substitution has to be a polyform of `rules`; this one was built under other rules."),
+        )
+        return given
+    end
+    # a meta-species is the one substitution that cannot be: it wraps a polyform of the rules it
+    # was lifted from, which `inducedrules` extends rather than reuses. Those rules keep the
+    # species list in order, which is what `_checkspecies` holds `rules` to.
     ps isa MetaParticleSpecies && return polyform(ps)
     i <= nspecies(rules) ||
         throw(ArgumentError("`rules` has no species $i that could correspond to species $i of `poly`."))
@@ -337,7 +346,8 @@ Recast `poly` as a [`Polyform`](@ref) of `rules`, replacing every particle by th
 species stands for.
 
 `substitutions` maps a species index of `poly`'s own rules to the `Polyform` that species is
-replaced by, one copy per particle wearing it, placed at that particle's pose. A
+replaced by, one copy per particle wearing it, placed at that particle's pose. It has to be a
+polyform of `rules`. A
 [`MetaParticleSpecies`](@ref) records the polyform it wraps and needs no entry; any other species
 stands for itself unless named, and only the rules change. The species that come out are matched
 into `rules` by equality.
