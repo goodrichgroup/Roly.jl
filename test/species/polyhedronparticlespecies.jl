@@ -511,6 +511,22 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); twists=[0.0, 1.0])
     @test_throws ArgumentError PolyhedronParticleSpecies(Cube(); locking=[true, false])
 
+    # bodies that are not regular: opposing faces need not be congruent, and a face need not be
+    # symmetric at all. Nothing about squaring opposing faces up assumes otherwise -- a face whose
+    # only symmetry is the identity has no whole step but zero, so it is never turned
+    box = Roly.Polyhedron(SVector{3,Float64}[(x, 2y, 3z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
+    frustum = Roly.Polyhedron(SVector{3,Float64}[(-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1),
+                                                 (-0.4, -0.4, 1), (0.4, -0.4, 1), (0.4, 0.4, 1),
+                                                 (-0.4, 0.4, 1)])
+    # a box of three different side lengths: every face a rectangle, twofold rather than fourfold
+    @test [Roly.facesym(box, i) for i in 1:nfaces(box)] == fill(2, 6)
+    @test symmetrynumber(PolyhedronParticleSpecies(box; colors=fill(1, 6))) == 4
+    # a frustum: its two square caps oppose each other but are not the same size, and its sides
+    # are trapezoids with no symmetry at all
+    @test sort(unique(Roly.facesym(frustum, i) for i in 1:nfaces(frustum))) == [1, 4]
+    @test symmetrynumber(PolyhedronParticleSpecies(frustum; colors=fill(1, 6))) == 4
+    @test PolyhedronParticleSpecies(frustum) isa PolyhedronParticleSpecies
+
     # the symmetric counterparts differ from the defaults in coloring alone: one color throughout,
     # so the body keeps its rotation group where a color per face leaves it none
     for (plain, sym, sigma) in ((UnitTetrahedron, SymmetricUnitTetrahedron, 12),

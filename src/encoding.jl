@@ -231,15 +231,22 @@ list is the only way to move, so only whole numbers of steps are available. That
 makes this free: a whole step carries a frame onto an equivalent one, so it marks nothing and
 costs the body no symmetry.
 
-  - the turn that makes bonded copies *translates* of each other is a whole number of steps: take
-    it, and rules over those faces can tile by translation. Cubes and prisms
-  - that turn is a half-integer number of steps and the face's symmetry is odd: half a turn is
-    then itself half-integer (`sitesym/2`), so adding it lands on a whole number. Take that, and
-    copies meet turned by 180 degrees. Octahedra, dodecahedra, icosahedra, odd antiprisms
-  - neither is whole: leave the face alone. Nothing is given up by doing so. The only case is the
-    caps of an even antiprism, and they are staggered by half their own symmetry angle in the
-    body itself, so no rotation about the bond makes two of them translates -- the bond they
-    already have is the one their geometry asks for
+What decides the case is how the two faces sit in the body, not how symmetric they are:
+
+  - they are turned alike, so the turn that makes bonded copies *translates* of each other is a
+    whole number of steps: take it, and rules over those faces can tile by translation. Every
+    prism, whatever its parity, and the cube
+  - they are staggered by half a step, so that turn is a half-integer number of them. Half a turn
+    is then itself half-integer when the symmetry is odd (`sitesym/2`), so adding it lands on a
+    whole number: take that, and copies meet turned by 180 degrees. Octahedra, dodecahedra,
+    icosahedra, odd antiprisms
+  - staggered, with even symmetry, so neither is whole: leave the face alone. Nothing is given up
+    by doing so -- the stagger is in the body itself, so no rotation about the bond makes two of
+    them translates, and the bond they already have is the one their geometry asks for. Only the
+    caps of an even antiprism
+
+A face with no symmetry at all has no whole step but zero, so it is never turned, and opposing
+faces are under no obligation to be congruent.
 """
 function _mateopposing(cs::Vector{SVector{3,F}}, faces::Vector{Vector{Int}}) where {F}
     tol = sqrt(eps(F)) * maximum(norm, cs)
