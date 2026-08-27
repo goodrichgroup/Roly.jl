@@ -58,12 +58,12 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     length(cols) == n || throw(DimensionMismatch("$n sites were exposed but $(length(cols)) colors were given"))
 
     # The polyform's graph in its original vertex order, where every particle owns a contiguous
-    # block and each site keeps the vertex range it has inside the polyform.
+    # block of vertices and each site keeps the vertex range it has inside the polyform.
     g = graphrep(poly)[poly.orig2canon]
 
     # `sitesym` and `locking` belong to the site and carry over. The orbits and the stabilizers
     # are the ordinary ones, measured against the polyform's own symmetry group rather than one
-    # derived from the sites, which cannot see the polyform behind them.
+    # derived from just the site poses, which would be unaware of shape of the polyform.
     group = rotationgroup(poly)
     c = rotationcenter(poly)
     poses, sitesyms = [s.pose + (-c) for s in open], [s.sitesym for s in open]
@@ -260,11 +260,11 @@ function inducedrules(rules::MetaBindingRules)
     return BindingRules(intmat, species(origrules))
 end
 
-# Check that the species `sub` is made of can correspond to the species of `rules`, in the same order.
-function _checkspecies(sub::Polyform, rules::BindingRules)
-    from = bindingrules(sub)
+# Check that the species `poly` is made of can correspond to the species of `rules`, in the same order.
+function _checkspecies(poly::Polyform, rules::BindingRules)
+    from = bindingrules(poly)
     from === rules && return rules
-    for q in sub.particles
+    for q in poly.particles
         i = speciesindex(q)
         a = species(from, i)
         ok =
@@ -300,33 +300,23 @@ function _substitution(::ParticleSpecies, i::Integer, rules::BindingRules, ::Not
     return Polyform(rules, i)
 end
 
-# A meta-polyform laid out as plain particles, with the sites its copies expose alongside.
-# Site are independent of particles, since the meta species only exposes a subset of the sites
-function _underlying_particles_and_sites(meta::MetaPolyform)
-    rules = bindingrules(meta)
-    subs = [polyform(ps) for ps in species(rules)]
-    parts = _substitute_particles(meta, bindingrules(first(subs)), subs)
-
-    sites, off = sitetype(rules)[], 0
-    for mpart in meta.particles
-        ps = species(rules, speciesindex(mpart))
-        append!(sites, (shift_vertices(mpart.pose * s, off) for s in ps.sites))
-        off += nv(graphrep(ps))
-    end
-    return parts, sites
+# Expand the meta-species; return all underyling particles of the underlying binding rules
+function _underlying_particles(meta::MetaPolyform)
+    return _substitute_particles(meta, [polyform(ps) for ps in species(bindingrules(meta))])
 end
 
-# Every particle of `poly` replaced by the particles of the polyform its species stands for, posed
-# by the particle it replaces and renumbered so that each keeps a vertex block of its own. The
-# order and the numbering `recast` builds its graph in.
-function _substitute_particles(poly::Polyform, rules::BindingRules, subs)
-    P = particletype(rules)
-    parts, off = P[], 0
+# Substitute every particle of `poly` of species `i` with the particles of polyform `subs[i]`
+function _substitute_particles(poly::Polyform, subs)
+    P = particletype(first(subs))
+    parts = P[]
+    off = 0
     for part in poly.particles
-        for q in subs[speciesindex(part)].particles
+        sub = subs[speciesindex(part)]
+        subrules = bindingrules(sub)
+        for q in sub.particles
             si = speciesindex(q)
             push!(parts, P(part.pose * q.pose, off + 1, si))
-            off += nv(graphrep(species(rules, si)))
+            off += nv(graphrep(species(subrules, si)))
         end
     end
     return parts
@@ -354,7 +344,7 @@ function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) wh
     subs = [_substitution(ps, i, rules, get(substitutions, i, nothing)) for (i, ps) in enumerate(species(src))]
     foreach(s -> _checkspecies(s, rules), subs)
 
-    parts = _substitute_particles(poly, rules, subs)
+    parts = _substitute_particles(poly, subs)
     contacts = Tuple{UnitRange{Int},UnitRange{Int},Int,Int}[]
     g = NautyDiGraph(0)
     for (i, sp) in enumerate(parts)
@@ -405,13 +395,6 @@ numbering.
 These are the bonds between copies. The ones inside a copy came with its polyform, so
 `bonds(recast(meta, rules))` is the two sets together, plus whatever else `rules` bonds.
 """
-metabonds(meta::MetaPolyform) = _metabonds(meta, last(_underlying_particles_and_sites(meta)))
-
-# Takes the sites, so a caller that has already laid the copies out does not lay them out again.
-function _metabonds(meta::MetaPolyform, sites)
-    rules = bindingrules(meta)
-    counts = [nsites(species(rules, speciesindex(p))) for p in meta.particles]
-    starts = cumsum([0; counts[1:(end - 1)]])
-    at(l) = sites[starts[l.particle] + l.site].vertices
-    return [(at(a), at(b)) for (a, b) in bonds(meta)]
+function metabonds(meta::MetaPolyform)
+    return [(bindingsite(meta, a).vertices, bindingsite(meta, b).vertices) for (a, b) in bonds(meta)]
 end

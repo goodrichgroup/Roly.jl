@@ -113,6 +113,21 @@ Return the symmetry number of `p`, i.e. the size of its automorphism group.
 @inline posetype(::Polyform{D,<:Particle{<:P}}) where {D,P} = P
 @inline posetype(::Type{<:Polyform{D,<:Particle{<:P}}}) where {D,P} = P
 @inline numtype(p::Polyform) = eltype(posetype(p))
+
+"""
+    particletype(p::Polyform)
+
+The concrete `Particle` type of every particle in `p`, for sizing a container that holds them.
+"""
+@inline particletype(::Polyform{D,P}) where {D,P} = P
+
+"""
+    sitetype(p::Polyform)
+
+The concrete [`BindingSite`](@ref) type of every site of `p`, for sizing a container that holds
+them.
+"""
+@inline sitetype(p::Polyform) = sitetype(bindingrules(p))
 @inline numtype(::Type{<:Polyform{D,<:Particle{<:P}}}) where {D,P} = eltype(P)
 
 """
@@ -627,7 +642,7 @@ sites become unbound.
 """
 function subpolyform(poly::Polyform, particleids)
     rules = bindingrules(poly)
-    newparticles = eltype(poly.particles)[]
+    newparticles = particletype(poly)[]
     verts = Int[]
     lv = 1
     for p in particleids
