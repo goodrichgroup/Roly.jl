@@ -377,6 +377,16 @@
         @test graphrep(recast(Polyform(chainlike, 1), chainlike;
                                substitutions=Dict(1 => dimer))) == graphrep(dimer)
 
+        # a substitution may come from rules defining more species than the target has, as long
+        # as it wears only the ones the target does
+        twospecies = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
+        @test nspecies(twospecies) > nspecies(chainlike)
+        @test nparticles(recast(Polyform(chainlike, 1), chainlike;
+                                substitutions=Dict(1 => Polyform(twospecies, 1)))) == 1
+        # but not one wearing a species the target does not have
+        @test_throws ArgumentError recast(Polyform(chainlike, 1), chainlike;
+                                          substitutions=Dict(1 => Polyform(twospecies, 2)))
+
         ### two species, which must not be conflated when the block is recast
         two = BindingRules([1 1 2 3; 1 2 2 4], [UnitSquare, UnitSquare])
         direct2 = Set(graphrep(p) for p in polygen(two; maxsize=6))

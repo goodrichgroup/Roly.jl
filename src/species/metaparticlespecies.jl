@@ -296,15 +296,19 @@ function _substitution(ps::ParticleSpecies, i::Integer, rules::BindingRules, giv
     return Polyform(rules, i)
 end
 
-# The particles of a substitution carry species indices of its own rules, and those indices are
-# what `rules` is indexed by, so matching species are the ones at the same position.
-function _checkspecies(from::BindingRules, rules::BindingRules)
+# Check that the species `sub` is made of can correspond to the species of `rules`, in the same
+# order. Only the ones it actually wears: species its own rules define but it never uses say
+# nothing about whether it can be read under `rules`.
+function _checkspecies(sub::Polyform, rules::BindingRules)
+    from = bindingrules(sub)
     from === rules && return rules
-    ok = nspecies(from) <= nspecies(rules) && all(1:nspecies(from)) do i
-        a, b = species(from, i), species(rules, i)
-        return nsites(a) == nsites(b) && nv(graphrep(a)) == nv(graphrep(b))
+    for q in sub.particles
+        i = speciesindex(q)
+        a = species(from, i)
+        ok = i <= nspecies(rules) && nsites(a) == nsites(species(rules, i)) &&
+             nv(graphrep(a)) == nv(graphrep(species(rules, i)))
+        ok || throw(ArgumentError("the particle species of `rules` are incompatible with the original binding rules. Make sure that corresponding species are defined in the same order."))
     end
-    ok || throw(ArgumentError("`rules` must list the species a substitution is made of, in the same order"))
     return rules
 end
 
@@ -345,7 +349,7 @@ at a pair `rules` leaves inert, since then no polyform of `rules` occupies that 
 function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) where {D}
     src = bindingrules(poly)
     subs = [_substitution(ps, i, rules, get(substitutions, i, nothing)) for (i, ps) in enumerate(species(src))]
-    foreach(s -> _checkspecies(bindingrules(s), rules), subs)
+    foreach(s -> _checkspecies(s, rules), subs)
 
     P = eltype(poly.particles)
     parts = P[]
