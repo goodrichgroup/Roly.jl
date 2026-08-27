@@ -134,6 +134,7 @@ SymmetricUnitIcosahedron
 UnitPyramid
 UnitPrism
 UnitAntiprism
+paralleltwists
 PatchyParticleSpecies
 PatchyDisk
 PatchySphere

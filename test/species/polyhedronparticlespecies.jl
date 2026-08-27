@@ -53,10 +53,12 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     end
 
     # The package convention: outward normal on local x. Additionally fix local z
-    # at the midpoint of the face's first edge
-    for (name, ps, shp, nf, _) in solids
+    # at the midpoint of the face's first edge. Asked of the constructor rather than of the
+    # `Unit*` constants, which turn some of their faces off it -- see `paralleltwists`
+    for (name, _, shp, nf, _) in solids
+        plain = PolyhedronParticleSpecies(shp)
         for i in 1:nf
-            psi = bindingsite(ps, i).pose.psi
+            psi = bindingsite(plain, i).pose.psi
             @test isapprox(psi[:, 1], Roly.facenormal(shp, i); atol=1e-10)
             v = edgemidpoint(shp, i, 1) - facecentroid(shp, i)
             @test isapprox(psi[:, 3], normalize(v); atol=1e-10)
@@ -509,8 +511,17 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test nsites(sym) == n
         @test [color(bindingsite(plain, i)) for i in 1:n] == 1:n
         @test [color(bindingsite(sym, i)) for i in 1:n] == fill(1, n)
-        @test [bindingsite(plain, i).pose for i in 1:n] == [bindingsite(sym, i).pose for i in 1:n]
+        # the sites sit in the same places; only their twist references and colors differ
+        @test [bindingsite(plain, i).pose.x for i in 1:n] == [bindingsite(sym, i).pose.x for i in 1:n]
         @test symmetrynumber(plain) == 1
         @test symmetrynumber(sym) == sigma
     end
+
+    # `UnitCube` carries the twists that make opposite faces mate square-on, so a rule set bonding
+    # them tiles space. `SymmetricUnitCube` gets there the other way: one color leaves every face
+    # a fourfold stabilizer, so a bond admits all four twists and the translation is among them
+    @test paralleltwists(Cube()) ./ (pi / 2) ≈ [0, 0, 0, 1, 1, 1]
+    @test isempty(filter(!iszero, paralleltwists(Tetrahedron())))   # no two faces face each other
+    @test isunitcell(first(polygen(BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube); maxsize=1)))
+    @test isunitcell(first(polygen(BindingRules([1 1 1 1], SymmetricUnitCube); maxsize=1)))
 end

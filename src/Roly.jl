@@ -55,7 +55,7 @@ export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
 export SymmetricUnitTetrahedron, SymmetricUnitCube, SymmetricUnitOctahedron
 export SymmetricUnitDodecahedron, SymmetricUnitIcosahedron
-export UnitPyramid, UnitPrism, UnitAntiprism
+export UnitPyramid, UnitPrism, UnitAntiprism, paralleltwists
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
 export MetaParticleSpecies, polyform, inducedrules, recast
 
