@@ -74,6 +74,12 @@
     @test length(geom[1]) == nparticles(metaseed) * length(one[1])
     @test length(geom[2]) == nparticles(metaseed) * length(one[2])
 
+    # a tiling draws as a patch of itself: its cell, repeated along each lattice vector
+    lattice = BindingRules([1 2 1 4; 1 3 1 1], UnitSquare)
+    tiled = first(filter(iscomplete, tilings(first(polygen(lattice; maxsize=1)))))
+    @test render(tiled) isa Figure
+    @test render(tiled; repeats=1) isa Figure
+
     # An explicitly passed `speciesindex` picks the palette instead of being overridden by
     # the default of 1.
     _, _, colors1, bonding1 = ext._resolve_colors(cube, 1, nothing, nothing)

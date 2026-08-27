@@ -4,11 +4,14 @@ using Roly
 using Makie
 using LinearAlgebra: dot, normalize
 import Roly: species, bindingrules, polyformplot, polyformplot!, render
+import Roly: Tiling, unitcell, latticevectors, Pose
 import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, polyhedron, bounding_radius
 
 @recipe PolyformPlot (poly, ) begin
     bindingrules = nothing
     pose = nothing
+    "How many cells to draw along each lattice vector, when the thing drawn is a `Tiling`."
+    repeats = 2
     Makie.mixin_generic_plot_attributes()...
 end
 
@@ -22,6 +25,22 @@ function Makie.plot!(p::PolyformPlot{<:Tuple{<:ParticleSpecies}})
     pose = p.pose[]
     args = isnothing(pose) ? (p.poly[],) : (p.poly[], pose)
     plot_particlespecies!(p, args...; rules=p.bindingrules[])
+    return p
+end
+
+# A tiling is drawn as a patch of itself: its cell, repeated along each lattice vector. One cell
+# with `repeats = 1`, and enough to read the pattern by default.
+function Makie.plot!(p::PolyformPlot{<:Tuple{<:Tiling}})
+    t = p.poly[]
+    cell = unitcell(t)
+    vs = latticevectors(t)
+    base = p.pose[]
+    n = max(1, p.repeats[])
+    for m in Iterators.product(ntuple(_ -> 0:(n - 1), length(vs))...)
+        offset = isempty(vs) ? zero(first(cell.particles).pose.x) : sum(m[i] * vs[i] for i in eachindex(vs))
+        shift = Pose(offset, one(typeof(first(cell.particles).pose.psi)))
+        plot_polyform!(p, cell, isnothing(base) ? shift : base * shift; rules=bindingrules(cell))
+    end
     return p
 end
 

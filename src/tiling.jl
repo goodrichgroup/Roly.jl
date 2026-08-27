@@ -4,14 +4,18 @@
 One periodic closure of a polyform: the lattice its copies form, and what one cell of that
 lattice holds. Returned by [`tilings`](@ref).
 
+  - `cell`: the unit cell, as a [`Polyform`](@ref) of the rules the tiled polyform was built under
   - `vectors`: the generating translations, at most `dimension` of them
   - `bondtypes`: the bond type of every bond one cell contributes, those inside the cell included
   - `complete`: whether the closure leaves no open site
-  - `order`: how many copies of the polyform the cell holds
+  - `order`: how many copies of the tiled polyform the cell holds
 
-A cell's composition is `order` copies of the polyform plus `bondtypes`.
+A cell's composition is `order` copies of the polyform plus `bondtypes`. Reach the parts through
+[`unitcell`](@ref), [`latticevectors`](@ref), [`bondtypes`](@ref), [`iscomplete`](@ref) and
+[`tilingorder`](@ref) rather than the fields.
 """
-struct Tiling{V}
+struct Tiling{PF,V}
+    cell::PF
     vectors::Vector{V}
     bondtypes::Vector{Int}
     complete::Bool
@@ -23,6 +27,53 @@ function Base.show(io::Core.IO, t::Tiling)
 end
 
 """
+    unitcell(t::Tiling)
+
+The cell `t` repeats, as a [`Polyform`](@ref): `order(t)` copies of the polyform that was tiled,
+bonded to each other as they are inside the cell.
+"""
+unitcell(t::Tiling) = t.cell
+
+"""
+    latticevectors(t::Tiling)
+
+The translations that generate `t`, at most one per dimension. Fewer means a partial closure: a
+column in the plane, a column or a sheet in space.
+"""
+latticevectors(t::Tiling) = t.vectors
+
+"""
+    bondtypes(t::Tiling)
+
+The bond type of every bond one cell of `t` contributes, indexing [`bonded_colors`](@ref). The
+bonds inside the cell are counted alongside the ones its translates close.
+"""
+bondtypes(t::Tiling) = t.bondtypes
+
+"""
+    iscomplete(t::Tiling)
+
+Whether `t` leaves no open site: every site of the cell is closed by one of its translates. A
+tiling that is not complete closes along fewer directions than the space has.
+"""
+iscomplete(t::Tiling) = t.complete
+
+"""
+    tilingorder(t::Tiling)
+
+How many copies of the tiled polyform one cell of `t` holds.
+"""
+tilingorder(t::Tiling) = t.order
+
+"""
+    dimension(t::Tiling)
+
+The dimension of the space `t` lives in, not the number of directions it closes -- that is
+`length(latticevectors(t))`.
+"""
+dimension(t::Tiling) = dimension(unitcell(t))
+
+"""
     tilings(poly::Polyform; nreps=2, maxorder=1)
 
 Enumerate the periodic closures of `poly`: choices of up to `dimension` translation vectors
@@ -31,8 +82,8 @@ contributing at least one bond.
 
   - `nreps`: neighbor shells placed and checked per vector.
   - `maxorder`: let a cell hold up to `maxorder` copies of `poly`, grown as a meta-polyform and
-    then checked for translation tilings. Above 1 this reaches tilings in which `poly` appears
-    turned as well as translated.
+    then checked for translation tilings. Above 1 this reaches tilings in which `poly` appears in
+    rotated configuraitons.
   - returns a vector of [`Tiling`](@ref)
 
 Candidate vectors connect interacting, aligned pairs of open sites, so a closure that needs a
@@ -41,11 +92,37 @@ puts the turn inside the cell, leaving a lattice that is a pure translation agai
 """
 function tilings(poly::Polyform; nreps::Integer=2, maxorder::Integer=1)
     rules = bindingrules(poly)
-    out = Tiling{SVector{dimension(rules),numtype(rules)}}[]
+    out = Tiling{typeof(poly),SVector{dimension(rules),numtype(rules)}}[]
     for cell in _tilecells(poly, maxorder)
         _addtilings!(out, cell, rules, nreps)
     end
-    return out
+    return _distinct(out)
+end
+
+# One entry per lattice, rather than one per way the search reached it. A lattice does not care
+# which order its generators were chosen in, nor which way round each one points, so a tiling
+# that differs only in those is the same tiling found again -- and there are `2^d * d!` ways to
+# find each, which is eight of every one in space.
+function _distinct(ts::Vector{<:Tiling})
+    seen = Set{Any}()
+    return filter(ts) do t
+        key = (graphrep(unitcell(t)), sort(bondtypes(t)), iscomplete(t), tilingorder(t),
+               sort([_orient(v) for v in latticevectors(t)]))
+        key in seen && return false
+        push!(seen, key)
+        return true
+    end
+end
+
+# A vector and its negative generate the same translations, so pick the one whose first
+# significant component is positive, and round so that two ways of computing it agree. Adding
+# zero at the end is not idle: `-0.0` and `0.0` are equal but not `isequal`, so a negated
+# component would key apart from the one it matches.
+function _orient(v::AbstractVector{F}) where {F}
+    tol = sqrt(eps(F))
+    i = findfirst(x -> abs(x) > tol, v)
+    w = isnothing(i) ? v : (v[i] < 0 ? -v : v)
+    return round.(w; digits=8) .+ zero(F)
 end
 
 """
@@ -54,7 +131,8 @@ end
 One candidate cell of a lattice: the meta-polyform a translate carries, laid out as plain
 particles.
 
-  - `particles`: every particle of every copy, in one numbering
+  - `poly`: the cell as a `Polyform` of the underlying rules, whose particles are every particle
+    of every copy, in one numbering
   - `sites`: every site those copies expose, spent ones included
   - `metabonds`: pairs of indices into `sites`, the sites already joined inside the cell
   - `order`: how many copies of the polyform the cell holds
@@ -62,8 +140,8 @@ particles.
 Both site lists are needed. The bonds count towards the cell's composition, and their endpoints
 are spent, so only the remaining sites can carry the lattice.
 """
-struct TileCell{P,S}
-    particles::Vector{P}
+struct TileCell{PF,S}
+    poly::PF
     sites::Vector{S}
     metabonds::Vector{NTuple{2,Int}}
     order::Int
@@ -71,8 +149,8 @@ end
 
 # Everything the shell search threads around: the cell being translated, what it is searched
 # against, and the state of the current branch of the search.
-struct _ShellSearch{P,S,R,V}
-    cell::TileCell{P,S}
+struct _ShellSearch{PF,P,S,R,V}
+    cell::TileCell{PF,S}
     rules::R
     vectors::Vector{V}
     ofvertex::Vector{Int}              # first vertex of a site -> its index in `cell.sites`, else 0
@@ -113,13 +191,14 @@ function _addtilings!(out, cell::TileCell, rules, nreps::Integer)
         Int(nreps),
         consumed,
         NTuple{2,Int}[],
-        Vector{eltype(cell.particles)}[],
+        Vector{eltype(cell.poly.particles)}[],
         Int[],
     )
     spent = [_bondtype(rules, cell.sites, c) for c in cell.metabonds]
     record!() = push!(
         out,
         Tiling(
+            cell.poly,
             vectors[search.chosen],
             vcat(spent, [_bondtype(rules, cell.sites, c) for c in search.contacts]),
             all(search.consumed),
@@ -135,14 +214,14 @@ end
 # since the meta-monomer is `poly` itself.
 function _tilecells(poly::Polyform, maxorder::Integer)
     S = sitetype(poly)
-    cells = TileCell{particletype(poly),S}[]
+    cells = TileCell{typeof(poly),S}[]
     # With no open site there is nothing for a translate to bond to, and no meta-species to build.
     isempty(opensites(poly)) && return cells
 
     for meta in polygen(BindingRules(MetaParticleSpecies(poly)); maxsize=maxorder)
-        parts, sites = _underlying_particles(meta), collect(bindingsites(meta))
         joined = [(siteindex(meta, a), siteindex(meta, b)) for (a, b) in bonds(meta)]
-        push!(cells, TileCell(parts, sites, joined, nparticles(meta)))
+        push!(cells, TileCell(recast(meta, bindingrules(poly)), collect(bindingsites(meta)),
+                              joined, nparticles(meta)))
     end
     return cells
 end
@@ -466,7 +545,7 @@ end
 # an invalid or bound-site contact, or a doubly-consumed site — with all bookkeeping undone.
 # Returns the indices of the sites it consumed.
 function _placeshell!(s::_ShellSearch)
-    parts = s.cell.particles
+    parts = s.cell.poly.particles
     k = length(s.chosen)
     n0 = length(s.contacts)
     added = Int[]

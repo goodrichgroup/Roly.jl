@@ -109,6 +109,38 @@
         end
     end
 
+    @testset "a Tiling answers for itself" begin
+        # one entry per lattice, not one per way the search reached it. A lattice does not care
+        # which order its generators came in nor which way each points, and there are 2^d*d! ways
+        # to walk the same one -- eight of every cubic lattice
+        cube = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
+        cubemono = first(polygen(cube; maxsize=1))
+        cts = tilings(cubemono)
+        @test count(iscomplete, cts) == 1
+        oriented(t) = sort([v[findfirst(x -> abs(x) > 1e-8, v)] < 0 ? -v : v for v in latticevectors(t)])
+        @test allunique(oriented.(cts))
+
+        # the cell comes back as a polyform, which is what makes a tiling something to look at
+        whole = first(filter(iscomplete, cts))
+        @test unitcell(whole) isa Polyform
+        @test nparticles(unitcell(whole)) == tilingorder(whole) == 1
+        @test length(latticevectors(whole)) == dimension(whole) == 3
+        @test bondtypes(whole) == [1, 1, 1]
+        @test bindingrules(unitcell(whole)) === cube
+
+        # a cell of several copies holds several particles, bonded as they are inside it
+        turn = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
+        mono = first(polygen(turn; maxsize=1))
+        pair = first(filter(t -> tilingorder(t) == 2, tilings(mono; maxorder=2)))
+        @test nparticles(unitcell(pair)) == 2
+        @test nbonds(unitcell(pair)) == 1
+        @test bindingrules(unitcell(pair)) === turn
+
+        # a partial closure runs along fewer directions than the space has
+        strip = first(filter(t -> !iscomplete(t), cts))
+        @test length(latticevectors(strip)) < dimension(strip)
+    end
+
     @testset "3D" begin
         using Roly: nfaces, facenormal, twistfreedom
 

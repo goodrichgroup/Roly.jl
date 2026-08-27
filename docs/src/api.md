@@ -212,6 +212,11 @@ chainstatebound
 canchain
 tilings
 Tiling
+unitcell
+latticevectors
+bondtypes
+iscomplete
+tilingorder
 isunitcell
 tilelatticevectors
 cantile
