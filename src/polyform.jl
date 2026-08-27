@@ -669,6 +669,133 @@ function subpolyform(poly::Polyform, particleids)
     return typeof(poly)(g, convert(Int, autg.n), collect(Int, perm), invperm(perm), newparticles, rules)
 end
 
+# Species `i` of `from` and species `i` of `rules` should be a "compatible" species. What that means exactly can be
+# refined later. Right now, we check the vertex count and site poses.
+# TODO: this is overly restrictive
+function _checkspecies(from::BindingRules, rules::BindingRules, i::Integer)
+    ok = i <= nspecies(rules)
+    if ok
+        a, b = species(from, i), species(rules, i)
+        ok =
+            nsites(a) == nsites(b) &&
+            nv(graphrep(a)) == nv(graphrep(b)) &&
+            all(k -> _siteoverlap(bindingsite(a, k), bindingsite(b, k)), 1:nsites(a))
+    end
+    ok || throw(
+        ArgumentError(
+            "species $i of `rules` is not the species that would stand in its place. `rules` has " *
+            "to list the corresponding species in the same order.",
+        ),
+    )
+    return nothing
+end
+
+# Check every species of `poly`, against the ones `rules` has in those places.
+function _checkspecies(poly::Polyform, rules::BindingRules)
+    foreach(q -> _checkspecies(bindingrules(poly), rules, speciesindex(q)), poly.particles)
+    return poly
+end
+
+# check if the sites are at the same location and pose
+function _siteoverlap(sa::BindingSite, sb::BindingSite)
+    return isapprox(sa.pose.x, sb.pose.x; atol=sa.touching_tolerance + sb.touching_tolerance, rtol=0) &&
+           isapprox(sa.pose.psi, sb.pose.psi; atol=sa.alignment_tolerance + sb.alignment_tolerance, rtol=0)
+end
+
+# Return the polyforms each species of `src` is replaced by, one per species, as a polyform of `rules`.
+# Return `given` if present, return the underlying polyform of a meta species, or simply return the corresponding species.
+function _resolvesubstitutions(src::BindingRules, rules::BindingRules, given)
+    return map(collect(enumerate(species(src)))) do (i, ps)
+        sub = get(given, i, nothing)
+        if !isnothing(sub)
+            bindingrules(sub) === rules || throw(ArgumentError("A substitution has to be a polyform of `rules`."))
+            return sub
+        end
+        return _defaultsubstitution(ps, src, rules, i)
+    end
+end
+
+# The substitution for species `i` of `src` when none was given; returns species `i` of `rules` and checks if valid
+function _defaultsubstitution(::ParticleSpecies, src::BindingRules, rules::BindingRules, i::Integer)
+    _checkspecies(src, rules, i)
+    return Polyform(rules, i)
+end
+
+# Substitute every particle of `poly` of species `i` with the particles of polyform `subs[i]`.
+function _substitute_particles(poly::Polyform, subs)
+    P = particletype(first(subs))
+    parts = P[]
+    off = 0
+    for part in poly.particles
+        sub = subs[speciesindex(part)]
+        subrules = bindingrules(sub)
+        for q in sub.particles
+            si = speciesindex(q)
+            push!(parts, P(part.pose * q.pose, off + 1, si))
+            off += nv(graphrep(species(subrules, si)))
+        end
+    end
+    return parts
+end
+
+"""
+    recast(poly::Polyform, rules::BindingRules; substitutions=Dict())
+
+Recast `poly` as a [`Polyform`](@ref) of `rules`, substituting every particle with one or multiple particles
+from `rules`.
+
+`substitutions` maps a species index of `poly`'s own rules to the `Polyform` that species is
+replaced by. It has to be a polyform of `rules`. A [`MetaParticleSpecies`](@ref) is substituted by the polyform it
+wraps and needs no entry. Any other species type not in `substitutions`is relplaced by the species of `rules`
+with the same species index.
+"""
+function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) where {D}
+    src = bindingrules(poly)
+    subs = _resolvesubstitutions(src, rules, substitutions)
+
+    parts = _substitute_particles(poly, subs)
+    contacts = Contact[]
+    g = NautyDiGraph(0)
+    for (i, sp) in enumerate(parts)
+        placed = view(parts, 1:(i - 1))
+        overlap, cts = _overlap_and_contacts(placed, sp, rules)
+        overlap && _recastfailed(placed, sp, rules)
+        append!(contacts, cts)
+        blockdiag!(g, graphrep(species(rules, speciesindex(sp))))
+    end
+
+    for contact in contacts
+        for (v1, v2) in contact_pairing(contact)
+            add_edge!(g, v1, v2)
+            add_edge!(g, v2, v1)
+        end
+    end
+
+    # `g` is built in original vertex order, so the canonical permutation is `canon2orig` itself.
+    perm, autg = nauty(g; canonize=true)
+    cvs = collect(Int, perm)
+    return Polyform{D,particletype(rules),typeof(rules),typeof(g)}(
+        g, convert(Int, autg.n), cvs, invperm(cvs), parts, rules
+    )
+end
+
+# `_overlap_and_contacts` refuses for three different reasons and reports all of them the same
+# way, so ask it again to find out which. Only ever reached on the way to an error.
+function _recastfailed(parts, part, rules)
+    refuses(; kwargs...) = first(_overlap_and_contacts(parts, part, rules; kwargs...))
+
+    refuses(; allow_noninteracting=true, allow_misaligned=true) &&
+        throw(ArgumentError("two of the particles overlap, the recast polyform is invalid."))
+    why = if refuses(; allow_noninteracting=true)
+        "at a twist `rules` does not allow"
+    else
+        "at a pair of sites `rules` leaves inert"
+    end
+    return throw(
+        ArgumentError("Two of the particles touch $why, so recasting does not result in a polyform valid under `rules`")
+    )
+end
+
 function _overlap_and_contacts(
     polyparticles::AbstractVector{<:Particle},
     part::Particle,
