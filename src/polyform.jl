@@ -681,7 +681,7 @@ end
 function _exposed(poly::Polyform)
     rules = bindingrules(poly)
     index = Dict(leadingvertex(p) => i for (i, p) in enumerate(poly.particles))
-    out = Tuple{ParticleSite,BindingSite{posetype(rules),numtype(rules)}}[]
+    out = Tuple{ParticleSite,sitetype(rules)}[]
     for orig_v in poly.canon2orig
         part = particle_from_leadingvertex(poly, orig_v)
         isnothing(part) && continue
@@ -817,6 +817,6 @@ See [`collect_attachments!`](@ref).
 """
 function collect_attachments(poly::Polyform)
     rules = bindingrules(poly)
-    BS = BindingSite{posetype(rules),numtype(rules)}
+    BS = sitetype(rules)
     return collect_attachments!(Tuple{BS,SpeciesSite,Int}[], poly)
 end

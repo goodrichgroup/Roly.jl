@@ -11,6 +11,8 @@ Pose
 dimension
 numtype
 posetype
+sitetype
+particletype
 ```
 
 ## Binding sites

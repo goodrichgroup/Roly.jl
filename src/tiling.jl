@@ -129,13 +129,13 @@ end
 # machinery can build, laid back out as plain particles. `maxorder == 1` needs no special case,
 # since the meta-monomer is `poly` itself.
 function _tilecells(poly::Polyform, maxorder::Integer)
-    S = BindingSite{posetype(bindingrules(poly)),numtype(bindingrules(poly))}
-    cells = TileCell{eltype(poly.particles),S}[]
+    S = sitetype(bindingrules(poly))
+    cells = TileCell{particletype(bindingrules(poly)),S}[]
     # With no open site there is nothing for a translate to bond to, and no meta-species to build.
     isempty(opensites(poly)) && return cells
 
     for meta in polygen(BindingRules(MetaParticleSpecies(poly)); maxsize=maxorder)
-        parts, sites = _recastparts(meta)
+        parts, sites = _underlying_particles_and_sites(meta)
         push!(cells, TileCell(parts, sites, _metabonds(meta, sites), nparticles(meta)))
     end
     return cells

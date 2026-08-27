@@ -4,31 +4,7 @@
 A `Polyform` wrapped as a `ParticleSpecies`, so that meta-assemblies can be built out of whole
 polyforms.
 
-Chosen unbound sites of the polyform become the species' sites. By default these are every one that is not
-inert, and otherwise exactly those named, see [`exposedsites`](@ref). Geometry is delegated: two
-meta-particles overlap exactly when any of their constituent particles do.
-
-Meta-species describe *meta*-assembly systems, whose `BindingRules` say how meta-particles
-attach to each other. A meta-particle cannot bond to a plain particle; wrap the plain species as
-its own single-particle meta-species instead.
-
-The encoding is the wrapped polyform's own graph, not a fresh graph over its open sites. A
-polyform's shape is not determined by its binding sites — two open sites can sit in symmetric
-poses while the polyforms behind them differ — so an encoding built from the sites alone would
-have to either claim a symmetry it cannot justify or refuse to claim any. Carrying the polyform
-graph instead makes the species' automorphisms *exactly* the polyform's own, so
-[`symmetrynumber`](@ref) and the site equivalences are right by construction, and the graph of a
-meta-assembly is the graph its particles would have formed directly. Bound sites stay in the
-graph as interior vertices; only the open ones are sites, which is why `nv(graphrep(ps))` exceeds
-`nsites(ps)`, as it does for a 3D dart encoding.
-
-Open-site vertices are relabeled by their symmetry orbit, above every interior label, so that
-automorphisms have to preserve what a bond can see while interior structure keeps its own
-distinctions. The orbits come from the polyform's own [`rotationgroup`](@ref
-rotationgroup(::Polyform)), which is also what [`rotationgroup`](@ref
-rotationgroup(::ParticleSpecies)) reports for the species: deriving a group from the sites would
-claim symmetries the polyform does not have. [`setcolors!`](@ref) maintains the labeling and is
-not the generic method, which would re-derive it from the site poses alone.
+Selected exposed sites of the polyform become the species' sites (by default are all non-inert sites are forwarded).
 """
 struct MetaParticleSpecies{D,F,B<:BindingSite,G<:AbstractNautyGraph,PF} <: ParticleSpecies{D,B}
     g::G
@@ -42,12 +18,12 @@ end
     MetaParticleSpecies(poly::Polyform, sites; colors=nothing)
 
 Wrap `poly` as a particle species whose sites are the ones named by `sites`, given as `(particle, site)`
-pairs and exposed in that order. Without them every unbound, non-inert site is exposed, in
+pairs and exposed in that order. Without them every open non-inert site is exposed, in
 [`exposedsites`](@ref) order.
 
   - `colors`: one interaction color per exposed site; by default each keeps the color it has
     inside `poly`
-  - `exposeinert`: expose previously inert sites to the new binding rules
+  - `exposeinert`: whether to also expose previously inert sites to the new binding rules
 
 Each site's `sitesym` and `locking` carry over from the polyform, while its `stab` is recomputed
 against the polyform by [`siteorbits`](@ref) and [`stabilizerorders`](@ref).
@@ -72,7 +48,7 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
             throw(ArgumentError("particle $p has $(nsites(part, rules)) sites, so ($p, $k) is out of range"))
         ParticleSite(p, k) in exposable || throw(
             ArgumentError(
-                "site ($p, $k) is bound inside the polyform; a bond already consumes it, so it cannot be exposed",
+                "site ($p, $k) is bound inside the polyform; a bond already consumes it, so it cannot be exposed"
             ),
         )
         return bindingsite(part, rules, k)
@@ -116,15 +92,13 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
     )
 end
 
-
 # candidate rotation symmetries, which is the symmetry of the underlying polyform.
 # Exposing only some of the polyform's open sites or recoloring some sites will lower the symmetry
 _rotationcandidates(ps::MetaParticleSpecies) = rotationgroup(polyform(ps))
 
 function _sitegeometry(ps::MetaParticleSpecies)
     c = rotationcenter(polyform(ps))
-    return ([s.pose + (-c) for s in ps.sites], [s.sitesym for s in ps.sites],
-            [sitelabel(ps, i) for i in 1:nsites(ps)])
+    return ([s.pose + (-c) for s in ps.sites], [s.sitesym for s in ps.sites], [sitelabel(ps, i) for i in 1:nsites(ps)])
 end
 
 # Label every open-site vertex by its symmetry orbit, placed above every interior label.
@@ -217,31 +191,34 @@ polyforms, which is the default. All of them must wrap polyforms built under the
 function BindingRules(pss::AbstractVector{<:MetaParticleSpecies})
     isempty(pss) && throw(ArgumentError("The list of particle species is empty."))
     base = bindingrules(polyform(first(pss)))
-    all(ps -> bindingrules(polyform(ps)) === base, pss) || throw(
-        ArgumentError("The meta particle species wrap polyforms built under different binding rules."),
-    )
+    all(ps -> bindingrules(polyform(ps)) === base, pss) ||
+        throw(ArgumentError("The meta particle species wrap polyforms built under different binding rules."))
 
     intmat = interactionmatrix(base)
     cols = [[color(bindingsite(ps, i)) for i in 1:nsites(ps)] for ps in pss]
-    all(c -> 1 <= c <= ncolors(base), Iterators.flatten(cols)) || throw(
-        ArgumentError(
-            "These meta particle species carry colors the original polyforms' rules do not have.",
-        ),
-    )
+    all(c -> 1 <= c <= ncolors(base), Iterators.flatten(cols)) ||
+        throw(ArgumentError("These meta particle species carry colors the original polyforms' rules do not have."))
 
     # Each unordered pair of sites once: within a species from `i` on, across species all of them.
-    rows = [[a, i, b, j] for a in eachindex(pss) for i in eachindex(cols[a]) for b in a:length(pss)
-            for j in (a == b ? i : 1):length(cols[b]) if intmat[cols[a][i], cols[b][j]]]
+    rows = [
+        [a, i, b, j] for a in eachindex(pss) for i in eachindex(cols[a]) for b in a:length(pss) for
+        j in (a == b ? i : 1):length(cols[b]) if intmat[cols[a][i], cols[b][j]]
+    ]
     bonds = isempty(rows) ? zeros(Int, 0, 4) : permutedims(reduce(hcat, rows))
     return BindingRules(bonds, pss)
 end
 
-function _metaspecies(rules::BindingRules)
-    spcs = species(rules)
-    first(spcs) isa MetaParticleSpecies ||
-        throw(ArgumentError("these are not the rules of a meta-assembly"))
-    return spcs
-end
+"""
+    MetaBindingRules{D}
+    MetaPolyform{D,P}
+
+Rules whose species are all [`MetaParticleSpecies`](@ref), and a `Polyform` built under such
+rules -- the two things the meta level is made of, named so that dispatch can say so. Rules
+mixing meta-species with plain ones are neither, since their element type is then the abstract
+supertype, which is what makes a meta-particle bonded to a plain one a `MethodError`.
+"""
+const MetaBindingRules{D} = BindingRules{D,<:MetaParticleSpecies}
+const MetaPolyform{D,P} = Polyform{D,P,<:MetaBindingRules{D}}
 
 # The color each site of `ps` carries inside the polyform it was taken from. A site keeps the
 # vertex range it has there whatever it is recolored to, so any one of its vertices names it.
@@ -265,12 +242,11 @@ Meta rules bond by colors of the meta-species' own choosing, which need not stan
 underlying particles can make. Rather than refuse those, this adds these to the original binding rules as additional
 bond types between the underlying particle species.
 """
-function inducedrules(rules::BindingRules)
-    spcs = _metaspecies(rules)
+function inducedrules(rules::MetaBindingRules)
+    spcs = species(rules)
     origrules = bindingrules(polyform(first(spcs)))
-    all(ps -> bindingrules(polyform(ps)) === origrules, spcs) || throw(
-        ArgumentError("The meta-species wrap polyforms built under different binding rules."),
-    )
+    all(ps -> bindingrules(polyform(ps)) === origrules, spcs) ||
+        throw(ArgumentError("The meta-species wrap polyforms built under different binding rules."))
 
     intmat = Matrix(interactionmatrix(origrules))
     cols = map(_underlyingcolors, spcs)
@@ -284,59 +260,76 @@ function inducedrules(rules::BindingRules)
     return BindingRules(intmat, species(origrules))
 end
 
-# What one particle of `ps` is replaced by: a polyform, whose particles are placed at the poses
-# they have inside it, relative to the particle they replace. A meta-species records its own; any
-# other species stands for itself, as the monomer of whichever species of `rules` it equals.
-function _substitution(ps::ParticleSpecies, i::Integer, rules::BindingRules, given)
-    if !isnothing(given)
-        # a substitution written by hand names its species by index into its own rules, and those
-        # indices are read as indices into `rules`, so it has to be a polyform of `rules` itself
-        bindingrules(given) === rules || throw(
-            ArgumentError("a substitution has to be a polyform of `rules`; this one was built under other rules."),
-        )
-        return given
-    end
-    # a meta-species is the one substitution that cannot be: it wraps a polyform of the rules it
-    # was lifted from, which `inducedrules` extends rather than reuses. Those rules keep the
-    # species list in order, which is what `_checkspecies` holds `rules` to.
-    ps isa MetaParticleSpecies && return polyform(ps)
-    i <= nspecies(rules) ||
-        throw(ArgumentError("`rules` has no species $i that could correspond to species $i of `poly`."))
-    return Polyform(rules, i)
-end
-
-# Check that the species `sub` is made of can correspond to the species of `rules`, in the same
-# order. Only the ones it actually wears: species its own rules define but it never uses say
-# nothing about whether it can be read under `rules`.
+# Check that the species `sub` is made of can correspond to the species of `rules`, in the same order.
 function _checkspecies(sub::Polyform, rules::BindingRules)
     from = bindingrules(sub)
     from === rules && return rules
     for q in sub.particles
         i = speciesindex(q)
         a = species(from, i)
-        ok = i <= nspecies(rules) && nsites(a) == nsites(species(rules, i)) &&
-             nv(graphrep(a)) == nv(graphrep(species(rules, i)))
-        ok || throw(ArgumentError("the particle species of `rules` are incompatible with the original binding rules. Make sure that corresponding species are defined in the same order."))
+        ok =
+            i <= nspecies(rules) &&
+            nsites(a) == nsites(species(rules, i)) &&
+            nv(graphrep(a)) == nv(graphrep(species(rules, i)))
+        ok || throw(
+            ArgumentError(
+                "the particle species of `rules` are incompatible with the original binding rules. Make sure that corresponding species are defined in the same order.",
+            ),
+        )
     end
     return rules
 end
 
-# Lay a meta-polyform's copies out as plain particles, renumbering each copy's vertices so that
-# every site keeps a range of its own. Returns the particles and the sites each copy exposes,
-# both in the numbering [`recast`](@ref) gives them.
-function _recastparts(meta::Polyform)
-    spcs = _metaspecies(bindingrules(meta))
-    P = eltype(polyform(first(spcs)).particles)
-    parts, sites, off = P[], eltype(first(spcs).sites)[], 0
+# What one particle of `ps` is replaced by: a polyform, whose particles are placed at the poses
+# they have inside it, relative to the particle they replace. A meta-species records its own; any
+# other species stands for itself, as the monomer of whichever species of `rules` it equals.
+function _substitution(::ParticleSpecies, ::Integer, rules::BindingRules, given::Polyform)
+    bindingrules(given) === rules || throw(ArgumentError("A substitution has to be a polyform of `rules`."))
+    return given
+end
+
+# A meta-species is the one substitution that cannot be a polyform of `rules`: it wraps a polyform
+# of the rules it was lifted from, which `inducedrules` extends rather than reuses. Those rules
+# keep the species list in order, which is what `_checkspecies` holds `rules` to.
+_substitution(ps::MetaParticleSpecies, ::Integer, ::BindingRules, ::Nothing) = polyform(ps)
+
+# Any other species stands for itself, as the monomer of the species `rules` has in its place.
+function _substitution(::ParticleSpecies, i::Integer, rules::BindingRules, ::Nothing)
+    i <= nspecies(rules) ||
+        throw(ArgumentError("`rules` has no species $i that could correspond to species $i of `poly`."))
+    return Polyform(rules, i)
+end
+
+# A meta-polyform laid out as plain particles, with the sites its copies expose alongside.
+# Site are independent of particles, since the meta species only exposes a subset of the sites
+function _underlying_particles_and_sites(meta::MetaPolyform)
+    rules = bindingrules(meta)
+    subs = [polyform(ps) for ps in species(rules)]
+    parts = _substitute_particles(meta, bindingrules(first(subs)), subs)
+
+    sites, off = sitetype(rules)[], 0
     for mpart in meta.particles
-        ps = species(bindingrules(meta), speciesindex(mpart))
-        for p in polyform(ps).particles
-            push!(parts, P(mpart.pose * p.pose, p.leadingvertex + off, p.speciesindex))
-        end
+        ps = species(rules, speciesindex(mpart))
         append!(sites, (shift_vertices(mpart.pose * s, off) for s in ps.sites))
         off += nv(graphrep(ps))
     end
     return parts, sites
+end
+
+# Every particle of `poly` replaced by the particles of the polyform its species stands for, posed
+# by the particle it replaces and renumbered so that each keeps a vertex block of its own. The
+# order and the numbering `recast` builds its graph in.
+function _substitute_particles(poly::Polyform, rules::BindingRules, subs)
+    P = particletype(rules)
+    parts, off = P[], 0
+    for part in poly.particles
+        for q in subs[speciesindex(part)].particles
+            si = speciesindex(q)
+            push!(parts, P(part.pose * q.pose, off + 1, si))
+            off += nv(graphrep(species(rules, si)))
+        end
+    end
+    return parts
 end
 
 """
@@ -361,21 +354,15 @@ function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) wh
     subs = [_substitution(ps, i, rules, get(substitutions, i, nothing)) for (i, ps) in enumerate(species(src))]
     foreach(s -> _checkspecies(s, rules), subs)
 
-    P = eltype(poly.particles)
-    parts = P[]
+    parts = _substitute_particles(poly, rules, subs)
     contacts = Tuple{UnitRange{Int},UnitRange{Int},Int,Int}[]
     g = NautyDiGraph(0)
-    for part in poly.particles
-        sub = subs[speciesindex(part)]
-        for q in sub.particles
-            si = speciesindex(q)
-            sp = P(part.pose * q.pose, nv(g) + 1, si)
-            ov, cts = _overlap_and_contacts(parts, sp, rules)
-            ov && _recastfailed(parts, sp, rules)
-            append!(contacts, cts)
-            push!(parts, sp)
-            blockdiag!(g, graphrep(species(rules, si)))
-        end
+    for (i, sp) in enumerate(parts)
+        placed = view(parts, 1:(i - 1))
+        ov, cts = _overlap_and_contacts(placed, sp, rules)
+        ov && _recastfailed(placed, sp, rules)
+        append!(contacts, cts)
+        blockdiag!(g, graphrep(species(rules, speciesindex(sp))))
     end
 
     for (vs1, vs2, t, ntwists) in contacts
@@ -388,29 +375,29 @@ function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) wh
     # `g` is built in original vertex order, so the canonical permutation is `canon2orig` itself.
     perm, autg = nauty(g; canonize=true)
     cvs = collect(Int, perm)
-    return Polyform{D,P,typeof(rules),typeof(g)}(g, convert(Int, autg.n), cvs, invperm(cvs), parts, rules)
+    return Polyform{D,particletype(rules),typeof(rules),typeof(g)}(g, convert(Int, autg.n), cvs,
+                                                                   invperm(cvs), parts, rules)
 end
 
 # `_overlap_and_contacts` refuses for three different reasons and reports all of them the same
 # way, so ask it again to find out which. Only ever reached on the way to an error.
 function _recastfailed(parts, part, rules)
     refuses(; kwargs...) = first(_overlap_and_contacts(parts, part, rules; kwargs...))
-    refuses(; allow_noninteracting=true, allow_misaligned=true) &&
-        throw(ArgumentError("two of the particles overlap, so recasting does not result in a polyform valid under `rules`"))
+    refuses(; allow_noninteracting=true, allow_misaligned=true) && throw(
+        ArgumentError("two of the particles overlap, so recasting does not result in a polyform valid under `rules`"),
+    )
     why = if refuses(; allow_noninteracting=true)
         "at a twist `rules` does not allow"
     else
         "at a pair of sites `rules` leaves inert"
     end
     return throw(
-        ArgumentError(
-            "Two of the particles touch $why, so recasting does not result in a polyform valid under `rules`",
-        ),
+        ArgumentError("Two of the particles touch $why, so recasting does not result in a polyform valid under `rules`")
     )
 end
 
 """
-    metabonds(meta::Polyform)
+    metabonds(meta::MetaPolyform)
 
 The bonds a meta-polyform adds, as pairs of binding site vertex ranges in [`recast`](@ref)'s
 numbering.
@@ -418,10 +405,10 @@ numbering.
 These are the bonds between copies. The ones inside a copy came with its polyform, so
 `bonds(recast(meta, rules))` is the two sets together, plus whatever else `rules` bonds.
 """
-metabonds(meta::Polyform) = _metabonds(meta, last(_recastparts(meta)))
+metabonds(meta::MetaPolyform) = _metabonds(meta, last(_underlying_particles_and_sites(meta)))
 
 # Takes the sites, so a caller that has already laid the copies out does not lay them out again.
-function _metabonds(meta::Polyform, sites)
+function _metabonds(meta::MetaPolyform, sites)
     rules = bindingrules(meta)
     counts = [nsites(species(rules, speciesindex(p))) for p in meta.particles]
     starts = cumsum([0; counts[1:(end - 1)]])

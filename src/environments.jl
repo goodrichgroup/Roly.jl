@@ -332,7 +332,7 @@ extensions of an environment, or `BREAK` to stop.
 function particleenvironments(f, rules::BindingRules; depth::Integer, maxsize=Inf, maxstrs=Inf,
     kwargs...)
     v₀ = EnvironmentState(rules)
-    BS = BindingSite{posetype(rules),numtype(rules)}
+    BS = sitetype(rules)
     G = typeof(graphrep(v₀.poly))
     aux = EnvironmentEnumAux(Set{G}(), Tuple{BS,SpeciesSite}[], EnvironmentBuffers(), Int(depth))
     lsbufs = EnvironmentBuffers()

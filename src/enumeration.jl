@@ -56,7 +56,7 @@ the underlying reverse search: `Finished` if the enumeration ran to completion, 
 """
 function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
     v₀ = Polyform(rules)
-    BS = BindingSite{posetype(rules),numtype(rules)}
+    BS = sitetype(rules)
     aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,SpeciesSite,Int}[])
     rsys = RSSystem(ls!, adj!, v₀; aux)
 

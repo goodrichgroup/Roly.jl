@@ -220,6 +220,22 @@ Return the spatial dimension of the particles of the assembly system `rules`.
 @inline speciestype(::BindingRules{D,PS}) where {D,PS} = PS
 
 """
+    sitetype(rules::BindingRules)
+
+The concrete [`BindingSite`](@ref) type of every site in `rules`, for sizing a container that
+holds them.
+"""
+@inline sitetype(rules::BindingRules) = BindingSite{posetype(rules),numtype(rules)}
+
+"""
+    particletype(rules::BindingRules)
+
+The concrete `Particle` type of every particle in a [`Polyform`](@ref) of `rules`, for sizing a
+container that holds them.
+"""
+@inline particletype(rules::BindingRules) = Particle{posetype(rules)}
+
+"""
     bonded_colors(rules::BindingRules)
 
 Return all pairs of binding site colors that may bind according to the binding rules
