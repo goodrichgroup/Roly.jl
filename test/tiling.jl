@@ -295,12 +295,12 @@
         end
     end
 
-    @testset "the reverse search agrees with the shell search" begin
-        # Two backends answer the same question by different means. `tilings(rules; maxsize)` walks
-        # polyforms and identifications together by reverse search; `tilings(poly; maxorder)` grows
-        # cells out of copies of one block and closes each with a shell search over lattice
-        # vectors. Where their scopes coincide -- one species, so every cell is copies of the
-        # monomer -- they have to agree, and neither validates the other unless they do.
+    @testset "the two entry points agree" begin
+        # `tilings(rules; maxsize)` walks polyforms and identifications together, taking any
+        # structure the rules admit as a cell. `tilings(poly; maxorder)` takes cells built from
+        # copies of one block, which is a `MetaParticleSpecies`, and closes each. Where their
+        # scopes coincide -- one species, so every cell is copies of the monomer -- they have to
+        # agree, and the counts below are the ones the shell search they replaced returned.
         cases = ((BindingRules([1 1 1 3], UnitSquare), 3),
                  (BindingRules([1 1 1 3; 1 2 1 4], UnitSquare), 3),
                  (BindingRules([1 1 1 2; 1 3 1 4], UnitSquare), 2),
