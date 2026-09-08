@@ -16,7 +16,7 @@ mutable struct TilingState{P<:Polyform,G<:AbstractNautyGraph,V}
     cell::P
     periodic::Vector{PeriodicContact{V}}   # the bonds made across the cut, in the order made
     graphrep::G                            # the cell's graph with a vertex per bond, canonized
-    canonorder::Vector{Int}                # each periodic bond's first marker, in that graph's order
+    canonmarkers::Vector{Int}              # where each periodic bond's leading marker sits in it
 end
 
 function TilingState(cell::Polyform)
@@ -28,13 +28,13 @@ end
 graphrep(s::TilingState) = s.graphrep
 
 function Base.copy(s::TilingState)
-    return TilingState(copy(s.cell), copy(s.periodic), copy(s.graphrep), copy(s.canonorder))
+    return TilingState(copy(s.cell), copy(s.periodic), copy(s.graphrep), copy(s.canonmarkers))
 end
 function Base.copy!(dst::TilingState, src::TilingState)
     copy!(dst.cell, src.cell)
     copy!(dst.periodic, src.periodic)
     copy!(dst.graphrep, src.graphrep)
-    copy!(dst.canonorder, src.canonorder)
+    copy!(dst.canonmarkers, src.canonmarkers)
     return dst
 end
 
@@ -46,9 +46,12 @@ function Base.show(io::Core.IO, s::TilingState)
 end
 
 # Rebuild the graph from the cell and the periodic bonds: the cell's own graph, plus a vertex per
-# bond joined to the two sites it joins, canonized. Records where each periodic bond's first marker
-# landed, so that the parent can pick one of them in an order that does not depend on how the state
-# was reached.
+# bond joined to the two sites it joins, canonized.
+#
+# Also record where each periodic bond's leading marker landed. One bond wears several markers when
+# its sites are dart-encoded faces, so the leading one stands for it. These positions are what the
+# parent orders the bonds by, which ties its choice to the state's own canonical graph rather than
+# to the order the bonds were listed in.
 function _recanonize!(s::TilingState)
     rules = bindingrules(s.cell)
     g = NautyDiGraph(0)
@@ -63,9 +66,9 @@ function _recanonize!(s::TilingState)
     for e in exterior_edges(s.cell)
         _addmarker!(g, marker, toorig(s.cell, e.src), toorig(s.cell, e.dst))
     end
-    firstmarker = Int[]
+    leadingmarkers = Int[]
     for c in s.periodic
-        push!(firstmarker, nv(g) + 1)
+        push!(leadingmarkers, nv(g) + 1)
         for (v1, v2) in contact_pairing(c.contact)
             _addmarker!(g, marker, v1, v2)
         end
@@ -73,8 +76,8 @@ function _recanonize!(s::TilingState)
     perm, _ = nauty(g; canonize=true)
     place = invperm(collect(Int, perm))
     s.graphrep = g
-    resize!(s.canonorder, length(firstmarker))
-    s.canonorder .= (place[v] for v in firstmarker)
+    resize!(s.canonmarkers, length(leadingmarkers))
+    s.canonmarkers .= (place[v] for v in leadingmarkers)
     return s
 end
 
@@ -246,8 +249,9 @@ end
 # those three, any two generate what all three do, so removing any one changes nothing while
 # removing two changes everything.
 #
-# So drop them in canonical order and stop as soon as the state changes, which is graph inequality
-# and asks nothing of the lattice. Dropping all of them certainly changes it, so this terminates.
+# So drop them in the order their markers take in the state's own canonical graph, and stop as soon
+# as the state changes, which is graph inequality and asks nothing of the lattice. Dropping all of
+# them certainly changes it, so this terminates.
 function ls!(k::TilingState, s::TilingState)
     if isempty(s.periodic)
         copy!(k, s)
@@ -256,7 +260,7 @@ function ls!(k::TilingState, s::TilingState)
         return _recanonize!(k)
     end
     keep = trues(length(s.periodic))
-    for i in sortperm(s.canonorder; rev=true)
+    for i in sortperm(s.canonmarkers; rev=true)
         keep[i] = false
         gens = [c.t for (j, c) in enumerate(s.periodic) if keep[j]]
         cand = _statefrom(s.cell, gens)
