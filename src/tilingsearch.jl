@@ -1,87 +1,96 @@
 """
-One periodic bond: the two sites it identifies, and the translation that brings them together.
+One bond a cell makes with a translate of itself: the contact the two sites make, and the
+translation that brings them together.
 
-A search state is a polyform together with a set of such identifications, which is the same thing a
+A search state is a polyform together with a set of these, which is the same thing a
 [`Tiling`](@ref) is. Two moves reach every state: attaching a particle, which is `raise!`, and
-identifying a pair of sites. Identifying comes after attaching, because a particle cannot be removed
-while a bond refers to its sites.
+bonding a pair of open sites across the cut. Bonding comes after attaching, because a particle
+cannot be removed while a bond refers to its sites.
 """
-struct Identification{V}
-    a::Int          # first vertex of one site, in the cell's original numbering
-    b::Int          # and of the other
-    t::V            # the translation carrying the second onto the first
+struct PeriodicContact{V}
+    contact::Contact
+    t::V            # the translation carrying the second site onto the first
 end
 
 mutable struct TilingState{P<:Polyform,G<:AbstractNautyGraph,V}
     cell::P
-    closes::Vector{Identification{V}}   # the identifications made, in the order they were made
-    key::G                              # the cell's graph with a vertex per bond, canonized
-    markerat::Vector{Int}               # where each close's vertex landed in the canonical order
+    periodic::Vector{PeriodicContact{V}}   # the bonds made across the cut, in the order made
+    graphrep::G                            # the cell's graph with a vertex per bond, canonized
+    canonorder::Vector{Int}                # each periodic bond's first marker, in that graph's order
 end
 
 function TilingState(cell::Polyform)
     V = SVector{dimension(bindingrules(cell)),numtype(bindingrules(cell))}
-    s = TilingState(cell, Identification{V}[], copy(graphrep(cell)), Int[])
-    return _rekey!(s)
+    s = TilingState(cell, PeriodicContact{V}[], copy(graphrep(cell)), Int[])
+    return _recanonize!(s)
 end
 
-Base.copy(s::TilingState) = TilingState(copy(s.cell), copy(s.closes), copy(s.key), copy(s.markerat))
+graphrep(s::TilingState) = s.graphrep
+
+function Base.copy(s::TilingState)
+    return TilingState(copy(s.cell), copy(s.periodic), copy(s.graphrep), copy(s.canonorder))
+end
 function Base.copy!(dst::TilingState, src::TilingState)
     copy!(dst.cell, src.cell)
-    copy!(dst.closes, src.closes)
-    copy!(dst.key, src.key)
-    copy!(dst.markerat, src.markerat)
+    copy!(dst.periodic, src.periodic)
+    copy!(dst.graphrep, src.graphrep)
+    copy!(dst.canonorder, src.canonorder)
     return dst
 end
 
 # Two states are the same when the structures they describe are, which is when their graphs are.
-_samestate(a::TilingState, b::TilingState) = a.key == b.key
+_samestate(a::TilingState, b::TilingState) = a.graphrep == b.graphrep
 
 function Base.show(io::Core.IO, s::TilingState)
-    return print(io, "TilingState[n=", nparticles(s.cell), ", closes=", length(s.closes), "]")
+    return print(io, "TilingState[n=", nparticles(s.cell), ", periodic=", length(s.periodic), "]")
 end
 
-# Rebuild the key from the cell and the closes: the cell's own graph, plus a vertex per bond
-# joined to the two sites it identifies, canonized. Records where each close's vertex landed, so
-# that the parent can pick one of them in an order that does not depend on how the state was
-# reached.
-function _rekey!(s::TilingState)
+# Rebuild the graph from the cell and the periodic bonds: the cell's own graph, plus a vertex per
+# bond joined to the two sites it joins, canonized. Records where each periodic bond's first marker
+# landed, so that the parent can pick one of them in an order that does not depend on how the state
+# was reached.
+function _recanonize!(s::TilingState)
     rules = bindingrules(s.cell)
     g = NautyDiGraph(0)
     for part in s.cell.particles
         blockdiag!(g, graphrep(species(rules, speciesindex(part))))
     end
 
-    # every bond is marked, the cell's own alongside the ones an identification makes. Marking only
-    # the latter would record where the structure was cut, and two cuts of one tiling would then
-    # look like two tilings
+    # every bond is marked, the cell's own alongside the periodic ones. Marking only the latter
+    # would record where the structure was cut, and two cuts of one tiling would then look like
+    # two tilings
     marker = _markerlabel(rules)
     for e in exterior_edges(s.cell)
         _addmarker!(g, marker, toorig(s.cell, e.src), toorig(s.cell, e.dst))
     end
-    first_of = Int[]
-    for c in s.closes
-        push!(first_of, nv(g) + 1)
-        for (v1, v2) in contact_pairing(_contactof(s.cell, c))
+    firstmarker = Int[]
+    for c in s.periodic
+        push!(firstmarker, nv(g) + 1)
+        for (v1, v2) in contact_pairing(c.contact)
             _addmarker!(g, marker, v1, v2)
         end
     end
     perm, _ = nauty(g; canonize=true)
     place = invperm(collect(Int, perm))
-    s.key = g
-    resize!(s.markerat, length(first_of))
-    s.markerat .= (place[v] for v in first_of)
+    s.graphrep = g
+    resize!(s.canonorder, length(firstmarker))
+    s.canonorder .= (place[v] for v in firstmarker)
     return s
 end
 
-# The contact a close stands for: the two sites meet once one is carried onto the other, so the
-# bond they make is the one they would make side by side.
-function _contactof(cell::Polyform, c::Identification)
-    rules = bindingrules(cell)
-    a = bindingsite(cell, _vertex_to_particle_site(cell, c.a; canonidxs=false))
-    b = bindingsite(cell, _vertex_to_particle_site(cell, c.b; canonidxs=false))
-    moved = translate(b, c.t)
-    return Contact(a.vertices, b.vertices, twist(a, moved), twistfreedom(a, moved))
+"""
+    PeriodicContact(cell::Polyform, u::Integer, v::Integer, t)
+
+The bond the sites at graph vertices `u` and `v` of `cell` make when `t` carries the second onto
+the first, which is the bond they would make side by side.
+
+`u` and `v` are in `cell`'s original numbering, and name their sites by any one of their vertices.
+"""
+function PeriodicContact(cell::Polyform, u::Integer, v::Integer, t)
+    a = bindingsite(cell, _vertex_to_particle_site(cell, u; canonidxs=false))
+    b = bindingsite(cell, _vertex_to_particle_site(cell, v; canonidxs=false))
+    moved = translate(b, t)
+    return PeriodicContact(Contact(a.vertices, b.vertices, twist(a, moved), twistfreedom(a, moved)), t)
 end
 
 ### the structure a state describes
@@ -143,7 +152,7 @@ function _closurebonds(cell::Polyform, gens)
     for l in opensitelocs(cell)
         partner[first(bindingsite(cell, l).vertices)] = 0
     end
-    out = Identification{eltype(gens)}[]
+    out = PeriodicContact{eltype(gens)}[]
     for t in pts
         _maytouch(parts, t, radius) || continue
         for part in parts
@@ -154,7 +163,7 @@ function _closurebonds(cell::Polyform, gens)
                 partner[v1] == v2 && partner[v2] == v1 && continue
                 (partner[v1] == 0 && partner[v2] == 0) || return false, out, pts
                 partner[v1], partner[v2] = v2, v1
-                push!(out, Identification(v1, v2, t))
+                push!(out, PeriodicContact(c, t))
             end
         end
     end
@@ -187,7 +196,7 @@ end
 
 mutable struct TilingAux{BS,G}
     attachments::Vector{Tuple{BS,SpeciesSiteLoc,Int}}
-    pairs::Vector{NTuple{2,Int}}      # first vertices of the two sites a close would identify
+    pairs::Vector{NTuple{2,Int}}      # first vertices of the two sites a periodic bond would join
     seen::Set{G}                      # children already offered, since two pairs can identify the
     maxsize::Int                      # same structure and each would then be walked into
 end
@@ -195,24 +204,24 @@ Base.copy(a::TilingAux) = typeof(a)(copy(a.attachments), copy(a.pairs), copy(a.s
 
 # Offer a child once. A second route to the same structure is not a second structure.
 function _once!(aux::TilingAux, u::TilingState)
-    u.key in aux.seen && return missing
-    push!(aux.seen, copy(u.key))
+    u.graphrep in aux.seen && return missing
+    push!(aux.seen, copy(u.graphrep))
     return u
 end
 
-# The state with the closes recomputed from the translations `gens`: whatever bonds the structure
-# they generate actually forms. `nothing` if it forms none, or is no structure at all.
+# The state with its periodic bonds recomputed from the translations `gens`: whatever bonds the
+# structure they generate actually forms. `nothing` if it forms none, or is no structure at all.
 function _statefrom(cell::Polyform, gens)
     ok, bonds, pts = _closurebonds(cell, gens)
     ok || return nothing
     _isreducible(cell, pts) && return nothing
-    isempty(bonds) && return _rekey!(TilingState(cell, bonds, copy(graphrep(cell)), Int[]))
+    isempty(bonds) && return _recanonize!(TilingState(cell, bonds, copy(graphrep(cell)), Int[]))
 
     # A structure has as many cells as there are ways to cut it, and the walk needs one of them:
     # the parent has to be a function of the structure, not of the cut it was reached through, or
     # the same tiling is walked into once per cut. `Tiling` cuts canonically, so read the cut back
     # off one.
-    t = Tiling(cell, [_contactof(cell, c) for c in bonds])
+    t = Tiling(cell, [c.contact for c in bonds])
     cut = unitcell(t)
     # one entry per bond, not per marker: a bond between two dart-encoded faces is pinned by
     # several pairs of vertices and wears a marker for each
@@ -224,12 +233,12 @@ function _statefrom(cell::Polyform, gens)
                       _vertex_to_particle_site(t, v; canonidxs=false))
         pair in seen && continue
         push!(seen, pair)
-        push!(kept, Identification(u, v, _translation(t, u, v; canonidxs=false)))
+        push!(kept, PeriodicContact(cut, u, v, _translation(t, u, v; canonidxs=false)))
     end
-    return _rekey!(TilingState(cut, kept, copy(graphrep(cut)), Int[]))
+    return _recanonize!(TilingState(cut, kept, copy(graphrep(cut)), Int[]))
 end
 
-# The parent: undo an identification if any were made, otherwise remove a particle.
+# The parent: undo a periodic bond if any were made, otherwise remove a particle.
 #
 # Bonds cannot be undone one at a time. Some are consequences of the lattice rather than generators
 # of it -- a cell bonded at `v` and at `w` is bonded at `v + w` as well -- and dropping one of those
@@ -240,16 +249,16 @@ end
 # So drop them in canonical order and stop as soon as the state changes, which is graph inequality
 # and asks nothing of the lattice. Dropping all of them certainly changes it, so this terminates.
 function ls!(k::TilingState, s::TilingState)
-    if isempty(s.closes)
+    if isempty(s.periodic)
         copy!(k, s)
         lower!(k.cell)
-        empty!(k.closes)
-        return _rekey!(k)
+        empty!(k.periodic)
+        return _recanonize!(k)
     end
-    keep = trues(length(s.closes))
-    for i in sortperm(s.markerat; rev=true)
+    keep = trues(length(s.periodic))
+    for i in sortperm(s.canonorder; rev=true)
         keep[i] = false
-        gens = [c.t for (j, c) in enumerate(s.closes) if keep[j]]
+        gens = [c.t for (j, c) in enumerate(s.periodic) if keep[j]]
         cand = _statefrom(s.cell, gens)
         (isnothing(cand) || _samestate(cand, s)) && continue
         return copy!(k, cand)
@@ -257,22 +266,22 @@ function ls!(k::TilingState, s::TilingState)
     return error("Internal error: a tiling state survived dropping all of its bonds. Please file an issue.")
 end
 
-# The children: attach a particle while nothing is identified yet, then identify a pair of sites.
-# Attaching after identifying is not offered, since the parent rule undoes identifications first
-# and would never lead back here.
+# The children: attach a particle while nothing is bonded across the cut yet, then bond a pair of
+# sites. Attaching afterwards is not offered, since the parent rule undoes those bonds first and
+# would never lead back here.
 function adj!(u::TilingState, v::TilingState, j::Integer, aux::TilingAux)
     rules = bindingrules(v.cell)
     if nparticles(v.cell) == 0
         j > nspecies(rules) && return nothing
         copy!(u.cell, Polyform(rules, j))
-        empty!(u.closes)
-        return _rekey!(u)
+        empty!(u.periodic)
+        return _recanonize!(u)
     end
 
     if j == 1
         empty!(aux.seen)
         empty!(aux.attachments)
-        isempty(v.closes) && nparticles(v.cell) < aux.maxsize &&
+        isempty(v.periodic) && nparticles(v.cell) < aux.maxsize &&
             collect_attachments!(aux.attachments, v.cell)
         _freepairs!(aux.pairs, v)
     end
@@ -280,10 +289,10 @@ function adj!(u::TilingState, v::TilingState, j::Integer, aux::TilingAux)
     if j <= length(aux.attachments)
         site, loc, t = aux.attachments[j]
         copy!(u.cell, v.cell)
-        empty!(u.closes)
+        empty!(u.periodic)
         out = raise!(u.cell, site, loc, t)
         (ismissing(out) || isnothing(out)) && return out
-        return _once!(aux, _rekey!(u))
+        return _once!(aux, _recanonize!(u))
     end
 
     i = j - length(aux.attachments)
@@ -291,20 +300,20 @@ function adj!(u::TilingState, v::TilingState, j::Integer, aux::TilingAux)
     a, b = aux.pairs[i]
     sa = bindingsite(v.cell, _vertex_to_particle_site(v.cell, a; canonidxs=false))
     sb = bindingsite(v.cell, _vertex_to_particle_site(v.cell, b; canonidxs=false))
-    gens = push!([c.t for c in v.closes], sa.pose.x - sb.pose.x)
+    gens = push!([c.t for c in v.periodic], sa.pose.x - sb.pose.x)
     child = _statefrom(v.cell, gens)
     isnothing(child) && return missing
-    length(child.closes) > length(v.closes) || return missing
+    length(child.periodic) > length(v.periodic) || return missing
     return _once!(aux, copy!(u, child))
 end
 
-# The pairs of sites a close could identify: still unbonded, able to bond, and facing each other,
-# since only antiparallel sites meet under a translation.
+# The pairs of sites a periodic bond could join: still unbonded, able to bond, and facing each
+# other, since only antiparallel sites meet under a translation.
 function _freepairs!(out, s::TilingState)
     cell = s.cell
     rules = bindingrules(cell)
     intmat = interactionmatrix(rules)
-    taken = Set(v for c in s.closes for v in (c.a, c.b))
+    taken = Set(v for c in s.periodic for v in (first(c.contact.vs1), first(c.contact.vs2)))
     free = [bindingsite(cell, l) for l in opensitelocs(cell)]
     filter!(b -> !(first(b.vertices) in taken), free)
 
@@ -322,7 +331,7 @@ end
 ### the entry point
 
 # The tiling a state stands for.
-_astiling(s::TilingState) = Tiling(s.cell, [_contactof(s.cell, c) for c in s.closes])
+_astiling(s::TilingState) = Tiling(s.cell, [c.contact for c in s.periodic])
 
 """
     tilingenum(f, rules::BindingRules; maxsize)
@@ -340,11 +349,11 @@ translation its own lattice misses.
 function tilingenum(f::F, rules::BindingRules; maxsize::Integer) where {F}
     v₀ = TilingState(Polyform(rules))
     BS = sitetype(rules)
-    aux = TilingAux(Tuple{BS,SpeciesSiteLoc,Int}[], NTuple{2,Int}[], Set{typeof(v₀.key)}(), Int(maxsize))
+    aux = TilingAux(Tuple{BS,SpeciesSiteLoc,Int}[], NTuple{2,Int}[], Set{typeof(v₀.graphrep)}(), Int(maxsize))
     rsys = RSSystem(ls!, adj!, v₀; compare=_samestate, aux)
 
     reversesearch(rsys) do s, _
-        isempty(s.closes) && return ACCEPT      # a polyform on the way to one, not a tiling
+        isempty(s.periodic) && return ACCEPT      # a polyform on the way to one, not a tiling
         return f(_astiling(s), nparticles(s.cell))
     end
     return nothing
@@ -379,18 +388,18 @@ of the structure it describes even where a smaller one would do, which is what t
 """
 function _cellclosures(f::F, cell::Polyform) where {F}
     start = TilingState(cell)
-    seen = Set([copy(start.key)])
+    seen = Set([copy(start.graphrep)])
     stack = [start]
     while !isempty(stack)
         s = pop!(stack)
         for (a, b) in _freepairs!(NTuple{2,Int}[], s)
             sa = bindingsite(cell, _vertex_to_particle_site(cell, a; canonidxs=false))
             sb = bindingsite(cell, _vertex_to_particle_site(cell, b; canonidxs=false))
-            ok, bonds, _ = _closurebonds(cell, push!([c.t for c in s.closes], sa.pose.x - sb.pose.x))
-            (ok && length(bonds) > length(s.closes)) || continue
-            child = _rekey!(TilingState(cell, bonds, copy(graphrep(cell)), Int[]))
-            child.key in seen && continue
-            push!(seen, copy(child.key))
+            ok, bonds, _ = _closurebonds(cell, push!([c.t for c in s.periodic], sa.pose.x - sb.pose.x))
+            (ok && length(bonds) > length(s.periodic)) || continue
+            child = _recanonize!(TilingState(cell, bonds, copy(graphrep(cell)), Int[]))
+            child.graphrep in seen && continue
+            push!(seen, copy(child.graphrep))
 
             signal = f(_astiling(child))
             signal == BREAK && return BREAK
