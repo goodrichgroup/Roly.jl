@@ -367,3 +367,36 @@ function tilings(rules::BindingRules; maxsize::Integer)
     end
     return out
 end
+
+"""
+    _cellclosures(f, cell::Polyform)
+
+Stream every periodic closure whose cell is `cell` itself to `f`, as a [`Tiling`](@ref).
+
+Asking whether one structure closes is not asking what a rule set tiles into, and differs in two
+ways. The cell is fixed, so there are no attaching moves and no walk over polyforms. And a closure
+that repeats under a translation its lattice misses is kept rather than rejected: `cell` is a cell
+of the structure it describes even where a smaller one would do, which is what the question means.
+"""
+function _cellclosures(f::F, cell::Polyform) where {F}
+    start = RSTiling(cell)
+    seen = Set([copy(start.key)])
+    stack = [start]
+    while !isempty(stack)
+        s = pop!(stack)
+        for (a, b) in _rspairs!(NTuple{2,Int}[], s)
+            sa = bindingsite(cell, _vertex_to_particle_site(cell, a; canonidxs=false))
+            sb = bindingsite(cell, _vertex_to_particle_site(cell, b; canonidxs=false))
+            ok, bonds, _ = _rsbonds(cell, push!([c.t for c in s.closes], sa.pose.x - sb.pose.x))
+            (ok && length(bonds) > length(s.closes)) || continue
+            child = _rekey!(RSTiling(cell, bonds, copy(graphrep(cell)), Int[]))
+            child.key in seen && continue
+            push!(seen, copy(child.key))
+
+            signal = f(_astiling(child))
+            signal == BREAK && return BREAK
+            signal == REJECT || push!(stack, child)
+        end
+    end
+    return ACCEPT
+end

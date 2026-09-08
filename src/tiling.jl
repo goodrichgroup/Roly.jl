@@ -576,12 +576,17 @@ function _tilingtype(poly::Polyform{D}) where {D}
 end
 
 # The first tiling of `poly` that `pred` accepts, or `nothing`, leaving the rest unenumerated.
-function _findtiling(pred::F, poly::Polyform; kwargs...) where {F}
+#
+# A cell of one copy is walked by identifying `poly`'s own sites, which is what the question asks.
+# Above one it is the shell search, whose cells are copies of a block -- the walk has no notion of
+# that, its cells being whatever the rules admit.
+function _findtiling(pred::F, poly::Polyform; maxorder::Integer=1) where {F}
     hit = Ref{Union{Nothing,_tilingtype(poly)}}(nothing)
-    tilingenum(poly; kwargs...) do t, _
-        pred(t) || return ACCEPT
-        hit[] = t
-        return BREAK
+    take(t) = (pred(t) || return ACCEPT; hit[] = t; return BREAK)
+    if maxorder == 1
+        _cellclosures(take, poly)
+    else
+        tilingenum((t, _) -> take(t), poly; maxorder)
     end
     return hit[]
 end
