@@ -213,8 +213,10 @@ isunbounded
 growthwitness
 chainstatebound
 canchain
-tilings
-tilingenum
+tilings(::BindingRules)
+tilings(::Polyform)
+tilingenum(::Any, ::BindingRules)
+tilingenum(::Any, ::Polyform)
 Tiling
 unitcell
 latticevectors

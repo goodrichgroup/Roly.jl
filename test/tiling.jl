@@ -294,4 +294,31 @@
             end
         end
     end
+
+    @testset "the reverse search agrees with the shell search" begin
+        # Two backends answer the same question by different means. `tilings(rules; maxsize)` walks
+        # polyforms and identifications together by reverse search; `tilings(poly; maxorder)` grows
+        # cells out of copies of one block and closes each with a shell search over lattice
+        # vectors. Where their scopes coincide -- one species, so every cell is copies of the
+        # monomer -- they have to agree, and neither validates the other unless they do.
+        cases = ((BindingRules([1 1 1 3], UnitSquare), 3),
+                 (BindingRules([1 1 1 3; 1 2 1 4], UnitSquare), 3),
+                 (BindingRules([1 1 1 2; 1 3 1 4], UnitSquare), 2),
+                 (BindingRules([1 1 1 4; 1 2 1 5; 1 3 1 6], UnitHexagon), 2),
+                 (BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))), 2),
+                 (BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube), 2))
+        for (rules, n) in cases
+            walked = tilings(rules; maxsize=n)
+            shells = tilings(first(polygen(rules; maxsize=1)); maxorder=n)
+            @test length(walked) == length(shells)
+            @test all(t -> any(==(t), shells), walked)
+            @test all(t -> any(==(t), walked), shells)
+        end
+
+        # and where they do not: a cell holding two species is not copies of any one monomer, so
+        # only the walk can reach it
+        two = BindingRules([1 4 2 2; 2 1 1 3], UnitSquare)
+        @test length(tilings(two; maxsize=2)) == 1
+        @test isempty(tilings(first(polygen(two; maxsize=1)); maxorder=2))
+    end
 end

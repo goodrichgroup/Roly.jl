@@ -322,25 +322,47 @@ end
 
 ### the entry point
 
-"""
-    rstilings(rules::BindingRules; maxsize)
+# The tiling a state stands for.
+_astiling(s::RSTiling) = Tiling(s.cell, [_contactof(s.cell, c) for c in s.closes])
 
-Enumerate the tilings of `rules` whose cell holds at most `maxsize` particles, by reverse search.
-
-Every polyform of `rules` is reached, and offered every way of identifying a pair of its open
-sites; what comes back are the states that identify at least one, are geometrically sound, and do
-not repeat under a translation their own lattice misses.
 """
-function rstilings(rules::BindingRules; maxsize::Integer)
+    tilingenum(f, rules::BindingRules; maxsize)
+
+Enumerate the periodic closures of `rules` whose cell holds at most `maxsize` particles, streaming
+each to `f` as a [`Tiling`](@ref) together with the number of particles its cell holds.
+
+`f(t, n)` returns `ACCEPT`, `REJECT` to leave that tiling unextended, or `BREAK` to stop.
+
+Every polyform of `rules` is reached and offered every way of identifying a pair of its open
+sites, so a cell is any structure the rules admit rather than copies of one chosen block. What
+comes back identifies at least one pair, is geometrically sound, and does not repeat under a
+translation its own lattice misses.
+"""
+function tilingenum(f::F, rules::BindingRules; maxsize::Integer) where {F}
     v₀ = RSTiling(Polyform(rules))
     BS = sitetype(rules)
-    aux = RSAux(Tuple{BS,SpeciesSiteLoc,Int}[], NTuple{2,Int}[],
-                Set{typeof(v₀.key)}(), Int(maxsize))
+    aux = RSAux(Tuple{BS,SpeciesSiteLoc,Int}[], NTuple{2,Int}[], Set{typeof(v₀.key)}(), Int(maxsize))
     rsys = RSSystem(_rsls!, _rsadj!, v₀; compare=_samestate, aux)
 
-    out = RSTiling[]
     reversesearch(rsys) do s, _
-        isempty(s.closes) || push!(out, copy(s))
+        isempty(s.closes) && return ACCEPT      # a polyform on the way to one, not a tiling
+        return f(_astiling(s), nparticles(s.cell))
+    end
+    return nothing
+end
+
+"""
+    tilings(rules::BindingRules; maxsize)
+
+Return the periodic closures of `rules` whose cell holds at most `maxsize` particles.
+
+See [`tilingenum`](@ref) to take them as they are found, and to stop early.
+"""
+function tilings(rules::BindingRules; maxsize::Integer)
+    out = Tiling{dimension(rules),particletype(rules),typeof(rules),
+                 typeof(graphrep(Polyform(rules))),SVector{dimension(rules),numtype(rules)}}[]
+    tilingenum(rules; maxsize) do t, _
+        push!(out, t)
         return ACCEPT
     end
     return out
