@@ -99,6 +99,7 @@ include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
 include("tiling.jl")
+include("tilingsearch.jl")
 
 include("ruleeditor.jl")
 using .RuleEditor: ruleeditor

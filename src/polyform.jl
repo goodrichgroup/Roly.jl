@@ -607,7 +607,7 @@ function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, t::Integ
     append!(poly.canon2orig, graphvertices(attached_particle, rules))
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
-    poly.sigma = convert(Int, autg.n)
+    poly.sigma = round(Int, autg.n)
     return poly
 end
 
@@ -688,7 +688,7 @@ function _remove_particle!(poly::Polyform, part::Particle)
 
     perm, autg = nauty(graphrep(poly); canonize=true)
     _apply_perm!(poly, perm)
-    poly.sigma = convert(Int, autg.n)
+    poly.sigma = round(Int, autg.n)
     return poly
 end
 
@@ -717,7 +717,7 @@ function subpolyform(poly::Polyform, particleids)
     g = graphrep(poly)[verts]
     # `g` starts out in new-original vertex order, so the canon maps are the permutation itself.
     perm, autg = nauty(g; canonize=true)
-    return typeof(poly)(g, convert(Int, autg.n), collect(Int, perm), invperm(perm), newparticles, rules)
+    return typeof(poly)(g, round(Int, autg.n), collect(Int, perm), invperm(perm), newparticles, rules)
 end
 
 # Species `i` of `from` and species `i` of `rules` should be a "compatible" species. What that means exactly can be
@@ -826,7 +826,7 @@ function recast(poly::Polyform{D}, rules::BindingRules; substitutions=Dict()) wh
     perm, autg = nauty(g; canonize=true)
     cvs = collect(Int, perm)
     return Polyform{D,particletype(rules),typeof(rules),typeof(g)}(
-        g, convert(Int, autg.n), cvs, invperm(cvs), parts, rules
+        g, round(Int, autg.n), cvs, invperm(cvs), parts, rules
     )
 end
 

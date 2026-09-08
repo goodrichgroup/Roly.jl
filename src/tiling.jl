@@ -63,7 +63,7 @@ function _tiling(rules::BindingRules{D}, particles, pairs) where {D}
     perm, autg = nauty(g; canonize=true)
     cvs = collect(Int, perm)
     P, S, G, V = particletype(rules), typeof(rules), typeof(g), SVector{D,numtype(rules)}
-    t = Tiling{D,P,S,G,V}(g, convert(Int, autg.n), cvs, invperm(cvs), particles, rules, V[])
+    t = Tiling{D,P,S,G,V}(g, round(Int, autg.n), cvs, invperm(cvs), particles, rules, V[])
     _canonicalcut!(t)
     _canonicalframe!(t)
     append!(t.vectors, _latticebasis(t))
@@ -368,7 +368,7 @@ function unitcell(t::Tiling{D}) where {D}
     perm, autg = nauty(g; canonize=true)
     cvs = collect(Int, perm)
     P, S, G = particletype(rules), typeof(rules), typeof(g)
-    return Polyform{D,P,S,G}(g, convert(Int, autg.n), cvs, invperm(cvs), copy(t.particles), rules)
+    return Polyform{D,P,S,G}(g, round(Int, autg.n), cvs, invperm(cvs), copy(t.particles), rules)
 end
 
 # Whether the bond between two graph vertices crosses into a translate, which is to say the two
