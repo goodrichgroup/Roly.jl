@@ -245,4 +245,9 @@ using LinearAlgebra: normalize, dot, det, norm
     # ...and a quarter turn apart, which is the point of it.
     @test !isapprox(straight.psi, turned.psi; atol=1e-8)
     @test isapprox(rotation_angle(RotMatrix3(straight.psi * inv(turned.psi))), π / 2; atol=1e-8)
+
+    # a patchy species is a ball, so its bounding radius is its own radius
+    @test bounding_radius(PatchyDisk([0.0, π], 2.5)) == 2.5
+    @test bounding_radius(PatchySphere(Cube(), 1.5)) == 1.5
+
 end

@@ -6,7 +6,7 @@ using Roly: Polyhedron, Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron
             minedgelength, bounding_radius, inradius,
             rotationgroup, faceorbits, dartencoding, cycleencoding,
             facesym, RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral,
-            Icosahedral, grouporder
+            Icosahedral, grouporder, siteorbits, stabilizerorders, check_encoding
 using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
 
 @testset "encoding" begin
@@ -244,4 +244,64 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test_throws ArgumentError Polyhedron([corners(cube); [SVector(0.1, 0.05, 0.0)]])
     # A point outside breaks convexity
     @test_throws ArgumentError Polyhedron([corners(cube); [SVector(9.0, 0.0, 0.0)]], faces(cube))
+
+    @testset "rotations supplied rather than derived" begin
+        # Deriving the rotations from the sites needs the sites to determine the body. A caller
+        # holding the group by other means passes it instead, and each of its elements is tried.
+        tri = SymmetricUnitTriangle
+        poses = [bindingsite(tri, i).pose for i in 1:nsites(tri)]
+        syms = [bindingsite(tri, i).sitesym for i in 1:nsites(tri)]
+        cols = [color(bindingsite(tri, i)) for i in 1:nsites(tri)]
+        c3 = [Angle2d(2π * k / 3) for k in 0:2]
+
+        @test siteorbits(poses, syms, cols; group=c3) == siteorbits(poses, syms, cols)
+        @test stabilizerorders(poses, syms, cols; group=c3) == stabilizerorders(poses, syms, cols)
+
+        # a group holding only the identity relates nothing, so every site is its own orbit
+        @test siteorbits(poses, syms, cols; group=[Angle2d(0.0)]) == [1, 2, 3]
+        # and an element that moves a site off the body is dropped, so it relates nothing either
+        @test siteorbits(poses, syms, cols; group=[Angle2d(0.0), Angle2d(0.4)]) == [1, 2, 3]
+    end
+
+    @testset "a labeling coarser than the geometry is refused" begin
+        # `check_encoding` reads both ways. Labels finer than the rotations are one complaint,
+        # labels coarser than them the other: here two patches a third of a turn apart, which no
+        # rotation of the disk carries onto each other, are declared one orbit.
+        g, ranges = cycleencoding(2; labels=[1, 1])
+        xs = [SVector(0.5, 0.0), SVector(-0.25, 0.25 * sqrt(3))]
+        err = try
+            PatchyParticleSpecies(g, 0.5, xs; vertices=ranges, colors=[1, 1], labels=[1, 1])
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("no rotation maps onto each other", err.msg)
+
+        # the same patches labeled apart describe the arrangement, and are accepted
+        ok, okranges = cycleencoding(2; labels=[1, 2])
+        @test nsites(PatchyParticleSpecies(ok, 0.5, xs; vertices=okranges, colors=[1, 1],
+                                           labels=[1, 2])) == 2
+
+        # A labeling can be right and the graph still wrong, which is the other thing
+        # `check_encoding` is for: it is meant to be called on labels written by hand. Two
+        # patches opposite each other are one orbit and a half turn carries either onto the
+        # other, so the labeling agrees with the geometry -- but labelling all four vertices
+        # alike lets the cycle turn by one vertex too, claiming twice the symmetry the disk has.
+        opposed = [SVector(0.5, 0.0), SVector(-0.5, 0.0)]
+        g4, r4 = cycleencoding(2; labels=[1, 1])
+        wide = PatchyParticleSpecies(g4, 0.5, opposed; vertices=r4, colors=[1, 1], labels=[1, 1])
+        @test symmetrynumber(wide) == 2
+        NautyGraphs.setlabels!(graphrep(wide), Cint[1, 1, 1, 1])
+        err2 = try
+            check_encoding(wide)
+            nothing
+        catch e
+            e
+        end
+        @test err2 isa ArgumentError
+        @test occursin("symmetry number of 4", err2.msg)
+        @test occursin("rotational symmetry of 2", err2.msg)
+    end
+
 end
