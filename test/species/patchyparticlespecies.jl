@@ -55,9 +55,17 @@ using LinearAlgebra: normalize, dot, det, norm
     ps2 = PatchyDisk([0.0, π])
     @test nsites(ps2) == 2
     @test dimension(ps2) == 2
-    @test nv(graphrep(ps2)) == 2
+    @test nv(graphrep(ps2)) == 4   # two sites, each followed by a vertex joining them up
     @test bindingsite(ps2, 1).vertices == 1:1
-    @test bindingsite(ps2, 2).vertices == 2:2
+    @test bindingsite(ps2, 2).vertices == 3:3
+
+    # a hand-built species may leave vertices to no patch, as that encoding does, but may not
+    # claim one twice or claim one the graph has not got
+    let (g, ranges) = Roly.cycleencoding(2), xs = [SVector(0.5, 0.0), SVector(-0.25, 0.433)]
+        @test nsites(PatchyParticleSpecies(g, 0.5, xs; vertices=ranges, colors=1:2)) == 2
+        @test_throws ArgumentError PatchyParticleSpecies(g, 0.5, xs; vertices=[1:1, 1:1], colors=1:2)
+        @test_throws ArgumentError PatchyParticleSpecies(g, 0.5, xs; vertices=[1:1, 9:9], colors=1:2)
+    end
 
     # Two equivalent patches give a symmetry number of 2.
     @test symmetrynumber(PatchyDisk([0.0, π]; colors=[1, 1])) == 2

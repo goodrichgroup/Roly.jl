@@ -72,6 +72,11 @@ end
         ("hexagon",         BindingRules([1 1 1 1], PolygonParticleSpecies(6, 1.0; colors=fill(1, 6))), 3),
         ("triangle, keyed", BindingRules([1 1 1 2], UnitTriangle), 4),
         ("patchy disk",     BindingRules([1 1 1 1], PatchyDisk([0.0, 2π/3, 4π/3]; colors=fill(1, 3))), 4),
+        # Two sites are the case where a particle is one edge of the graph, exactly as a bond is,
+        # so a ring of them once claimed both its rotations and its reflections. Six reaches the
+        # ring, which is where the two differ.
+        ("two patches, keyed", BindingRules([1 1 1 2], PatchyDisk([0.0, 2π/3]; colors=1:2)), 6),
+        ("two patches, alike", BindingRules([1 1 1 1], PatchyDisk([0.0, 2π/3]; colors=[1, 1])), 6),
         ("patchy sphere",   BindingRules([1 1 1 1], PatchySphere(Cube(), 1.0; colors=fill(1, 6))), 3),
         ("polycubes",       BindingRules([1 1 1 1], faced(Cube(), 1:6)), 4),
         ("polyominoes",     BindingRules([1 1 1 1], faced(Prism(4, 1.0; h=2.0), sidefaces(Prism(4, 1.0; h=2.0)))), 4),

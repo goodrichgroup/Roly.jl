@@ -149,11 +149,14 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays
     @test symnum(g) == 1
     @test symnum(cycleencoding(6; labels=fill(1, 6))[1]) == 6
 
-    # Two sites give a plain 2-cycle, one vertex each
+    # A plain cycle over two sites would be `1 -> 2 -> 1`, a bidirectional pair, which is how a
+    # bond is written. So a joining vertex follows each site, giving a four-vertex cycle that runs
+    # one way. The sites keep one vertex each and the joining vertices belong to neither.
     g2, ranges2 = cycleencoding(2)
-    @test nv(g2) == 2
-    @test ne(g2) == 2
-    @test ranges2 == [1:1, 2:2]
+    @test nv(g2) == 4
+    @test ne(g2) == 4
+    @test labels(g2) == [1, 0, 2, 0]
+    @test ranges2 == [1:1, 3:3]
     @test symnum(g2) == 1
     @test symnum(cycleencoding(2; labels=[1, 1])[1]) == 2
 
