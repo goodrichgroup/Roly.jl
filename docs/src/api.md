@@ -11,6 +11,8 @@ Pose
 dimension
 numtype
 posetype
+sitetype
+particletype
 ```
 
 ## Binding sites
@@ -30,6 +32,7 @@ twistfreedom(::BindingSite)
 twistfreedom(::BindingSite, ::BindingSite)
 twist
 standard_twist
+Contact
 contact_pairing
 ```
 
@@ -96,6 +99,7 @@ bindingsites
 nsites
 graphrep
 isconvex
+setcolors!
 symmetrynumber
 bounding_radius
 could_contact
@@ -112,6 +116,9 @@ UnitNgon
 UnitTriangle
 UnitSquare
 UnitHexagon
+SymmetricUnitTriangle
+SymmetricUnitSquare
+SymmetricUnitHexagon
 PolyhedronParticleSpecies
 polyhedron
 UnitTetrahedron
@@ -119,6 +126,11 @@ UnitCube
 UnitOctahedron
 UnitDodecahedron
 UnitIcosahedron
+SymmetricUnitTetrahedron
+SymmetricUnitCube
+SymmetricUnitOctahedron
+SymmetricUnitDodecahedron
+SymmetricUnitIcosahedron
 UnitPyramid
 UnitPrism
 UnitAntiprism
@@ -131,6 +143,7 @@ PatchySphere
 
 ```@docs
 BindingRules
+SpeciesSiteLoc
 interactionmatrix
 nspecies
 nbonds
@@ -145,12 +158,18 @@ isinert
 ## Polyforms
 
 ```@docs
+AbstractPolyform
 Polyform
+ParticleSiteLoc
 nparticles
 bindingrules
 composition
 canonbindingsite
 canonbindingsites
+exposedsites
+opensites
+exposedsitelocs
+opensitelocs
 rotationgroup(::Polyform)
 permutationgroup(::Polyform)
 bonds
@@ -170,6 +189,12 @@ PolyformCount
 
 An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
 A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
+
+## Bonds of a structure
+
+```@docs
+bondtypes
+```
 
 ## Visualization
 
