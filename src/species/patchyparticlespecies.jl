@@ -50,9 +50,15 @@ function PatchyParticleSpecies(
     n = length(patch_positions)
 
     length(vertices) == n || throw(ArgumentError("expected $n vertex ranges, one per patch, got $(length(vertices))"))
+    # Vertices owned by no patch are allowed: an encoding may carry structural ones, as the
+    # two-site cycle does to keep a particle from reading as a bond. What is not allowed is two
+    # patches claiming one vertex, or a patch claiming one the graph has not got.
     owned = collect(Iterators.flatten(vertices))
-    (allunique(owned) && sort!(owned) == 1:nv(g)) ||
-        throw(ArgumentError("the patches' vertex ranges must be disjoint and cover all $(nv(g)) vertices of the graph"))
+    (allunique(owned) && all(v -> 1 <= v <= nv(g), owned)) || throw(
+        ArgumentError(
+            "the patches' vertex ranges must be disjoint and lie within the graph's $(nv(g)) vertices",
+        ),
+    )
 
     tol = sqrt(eps(F)) * r
     poses = [normal_pose(patch_positions[i], patch_twists[i]) for i in 1:n]

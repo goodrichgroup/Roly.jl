@@ -12,6 +12,20 @@
     # self-binding square: site 1 binds site 1 of another copy
     selfrules = BindingRules([1 1 1 1], UnitSquare)
 
+    # `_components` tells a particle from its neighbours by edge direction: a bond is a pair of
+    # opposite edges, everything inside a particle runs one way. A two-site particle is the case
+    # that once broke this, its two sites having been joined by a bidirectional pair of their own.
+    @testset "particles are recovered from edge direction" begin
+        twosite = BindingRules([1 1 1 2], PatchyDisk([0.0, 2π/3], 0.5; colors=1:2))
+        for rules in (twosite, chainrules, selfrules)
+            for poly in polygen(rules; maxsize=4)
+                nparticles(poly) >= 1 || continue
+                _, parts = Roly._components(graphrep(poly))
+                @test length(parts) == nparticles(poly)
+            end
+        end
+    end
+
     chainstrs = polygen(chainrules; maxsize=3)
     trimer = chainstrs[findfirst(s -> nparticles(s) == 3, chainstrs)]
     speciesof(poly, p) = poly.particles[p].speciesindex
