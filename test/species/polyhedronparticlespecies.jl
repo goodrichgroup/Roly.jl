@@ -543,10 +543,4 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test symmetrynumber(plain) == 1
         @test symmetrynumber(sym) == sigma
     end
-
-    # `UnitCube` carries the twists that make opposite faces mate square-on, so a rule set bonding
-    # them tiles space. `SymmetricUnitCube` gets there the other way: one color leaves every face
-    # a fourfold stabilizer, so a bond admits all four twists and the translation is among them
-    @test isunitcell(first(polygen(BindingRules([1 1 1 6; 1 2 1 5; 1 3 1 4], UnitCube); maxsize=1)))
-    @test isunitcell(first(polygen(BindingRules([1 1 1 1], SymmetricUnitCube); maxsize=1)))
 end

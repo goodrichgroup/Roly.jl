@@ -14,8 +14,6 @@ include("testutils.jl")
     include("bindingrules.jl")
     include("polyform.jl")
     include("enumeration.jl")
-    include("environments.jl")
-    include("tiling.jl")
     include("utils.jl")
     include("conventions.jl")
     include("plotting.jl")
@@ -27,7 +25,6 @@ include("testutils.jl")
         include("species/polygonparticlespecies.jl")
         include("species/polyhedronparticlespecies.jl")
         include("species/patchyparticlespecies.jl")
-        include("species/metaparticlespecies.jl")
     end
 end;
 

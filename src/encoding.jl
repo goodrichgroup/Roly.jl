@@ -710,16 +710,12 @@ function cycleencoding(nsites::Integer; labels=1:nsites)
     nsites < 1 && throw(ArgumentError("a particle needs at least one binding site"))
 
     if nsites == 2
-        # Two sites would make the cycle `1 -> 2 -> 1`, a bidirectional pair, which is exactly how
-        # a bond is written -- so an automorphism could trade a particle for a bond, and a ring of
-        # two-site particles would report twice the symmetry it has. Joining the two sites through
-        # a vertex of their own says the same thing about them and cannot be read as a bond. It
-        # stays symmetric, so two sites a rotation interchanges are still interchangeable here.
-        # A joining vertex after each site, so the cycle has four vertices and runs one way. A
-        # bond is a pair of opposite edges, so a one-way edge is never read as one -- which
-        # `_components` relies on to tell a particle from its neighbours, and which stops an
-        # automorphism trading a particle for a bond. Turning the cycle by two carries each site
-        # onto the other, so two sites a rotation interchanges are interchangeable here too.
+        # A cycle over two sites is `1 -> 2 -> 1`, a bidirectional pair, which is exactly how a
+        # bond is written: an automorphism could then trade a particle for a bond, and a ring of
+        # two-site particles would report twice the symmetry it has. So a joining vertex follows
+        # each site, giving a four-vertex cycle that runs one way, and a one-way edge is never
+        # read as a bond. Turning it by two carries each site onto the other, so two sites a
+        # rotation interchanges are interchangeable here too.
         ls = Cint[labels[1], _JOINLABEL, labels[2], _JOINLABEL]
         return NautyDiGraph(cycle_digraph(4); vertex_labels=ls), [1:1, 3:3]
     end
@@ -1052,8 +1048,8 @@ stabilizer.
     Deriving it rests on two things. The sites must have *distinct positions*, which makes a
     rotation determined by where it sends site 1 and the site map injective for free. And the
     sites must determine the body, which an assembled [`Polyform`](@ref) does not: two open sites
-    can sit in symmetric poses with different structures behind them. A
-    [`MetaParticleSpecies`](@ref) fails both and supplies its `Polyform`'s own group instead.
+    can sit in symmetric poses with different structures behind them. A species standing for a
+    whole cluster fails both, and has to supply its own group instead.
 """
 function _eachsitesymmetry(f, poses, sitesyms, sitelabels; group=nothing)
     n = length(poses)

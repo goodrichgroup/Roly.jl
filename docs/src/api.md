@@ -139,19 +139,6 @@ PatchyDisk
 PatchySphere
 ```
 
-### Meta-species
-
-A [`Polyform`](@ref) wrapped as a species, so that assemblies can be built out of assemblies.
-
-```@docs
-MetaParticleSpecies
-BindingRules(::MetaParticleSpecies)
-BindingRules(::AbstractVector{<:MetaParticleSpecies})
-polyform
-inducedrules
-recast
-```
-
 ## Binding rules
 
 ```@docs
@@ -203,29 +190,10 @@ PolyformCount
 An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
 A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
 
-## Tilings and unbounded growth
-
-Whether a rule set admits arbitrarily large structures, and the repeat unit when it does.
-See [Bounded and unbounded rules](growth.md).
+## Bonds of a structure
 
 ```@docs
-isunbounded
-growthwitness
-chainstatebound
-canchain
-tilings(::BindingRules)
-tilings(::Polyform)
-tilingenum(::Any, ::BindingRules)
-tilingenum(::Any, ::Polyform)
-Tiling
-unitcell
-latticevectors
 bondtypes
-iscomplete
-tilingorder
-isunitcell
-tilelatticevectors
-cantile
 ```
 
 ## Visualization
