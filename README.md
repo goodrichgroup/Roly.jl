@@ -16,7 +16,7 @@ pkg> add https://github.com/goodrichgroup/Roly.jl
 
 ## Basic Usage
 Enumeration in Roly.jl starts from a `BindingRules` object, which is a list of building block geometries together with an interaction matrix that specifies which binding sites are allowed to bind to each other.
-The allowed polyforms can then be enumerated with `polyenum`, generated and stored with `polygen`, or counted (exactly or approximately) with `countpolyforms`.
+The allowed polyforms can then be enumerated with `polyenum`, or generated and stored with `polygen`.
 
 ### Defining Binding Rules
 To illustrate the basic process, let's construct a system consisting of four species of triangular building blocks. Binding rules are defined as a list of bonds, where every bond is specified in the form `[species_i site_i species_j site_j]`. For example, `[1 3 2 3]` indicates that site 3 of species 1 is allowed to bind to site 3 of species 2. Roly already comes with definitions for simple polygonal particle geometries (e.g. `UnitTriangle`, `UnitSquare`, `UnitHexagon`), convex polyhedra (e.g. `UnitCube`, `UnitPrism(n)`), as well as patchy particles (e.g. `PatchyDisk`, `PatchySphere`). The `BindingRules` constructor takes either a list of geometries or a single geometry if all building blocks are identically shaped.
@@ -44,14 +44,14 @@ strs = polygen(rules; maxsize=20, maxstrs=100_000)
 ```
 
 ### Counting
-To count polyforms without storing them, or to estimate when full enumeration is too expensive, use `countpolyforms`:
+To count polyforms without storing them, or to estimate the number of polyforms when full enumeration is too expensive, use `countpolyforms`:
 ```julia
 c = countpolyforms(rules)
 c.n            # count (exact or estimated mean)
 c.exact        # true if the count is exact
 c.uncertainty  # standard error of the estimate (0 if exact)
 ```
-`countpolyforms` enumerates exactly up to a configurable budget and switches to importance-sampled estimation beyond it. Pass `maxsize` for systems that allow unbounded growth.
+`countpolyforms` enumerates exactly up to a configurable budget and switches to estimation beyond it. Pass `maxsize` for systems that allow unbounded growth.
 
 ### Incorporating constraints
 It is often desirable to impose additional constraints on generated polyforms. For example, to enumerate only polyforms with at most one particle of species 4:
@@ -67,7 +67,7 @@ Roly.jl provides a [Makie](https://docs.makie.org) extension. Load any Makie bac
 using GLMakie  # or CairoMakie, WGLMakie, ...
 render(s)      # display a single polyform, or a species
 ```
-`render` picks a 2D or 3D axis to match. For 3D use GLMakie or WGLMakie, since CairoMakie sorts primitives rather than depth-testing them. `polyformplot!` can be used to draw onto an existing Makie axis.
+`render` picks a 2D or 3D axis to match. `polyformplot!` can be used to draw onto an existing Makie axis.
 
 ## Citation
 If you use Roly.jl in your work, please cite [our paper](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.134.058204) below:
