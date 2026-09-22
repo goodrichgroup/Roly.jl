@@ -30,39 +30,6 @@ bonds = [1 3 2 3;
 rules = BindingRules(bonds, UnitTriangle)
 ```
 
-The [documentation](https://goodrichgroup.github.io/Roly.jl/dev/workflow/) lists every built-in geometry and shows how coloring a species' binding sites sets its symmetry. In 3D a bond also fixes how the two blocks are turned relative to one another, which the [orientation page](https://goodrichgroup.github.io/Roly.jl/dev/orientation/) explains. To implement your own particle species, see [custom particle species](https://goodrichgroup.github.io/Roly.jl/dev/custom_species/).
-
-### Sketching Binding Rules interactively
-Instead of writing the bonds matrix out by hand, you can build one geometrically with `ruleeditor`, a terminal editor that lets you place building blocks on a lattice and reads the binding rules off every pair of touching sites:
-```julia
-rules = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
-```
-
-Arrow keys move the cursor, `Enter` places a particle, `Space` erases, `r`/`R` rotate, digits `1`–`9` add and switch between species, `q` accepts. A typical session looks like this:
-
-```
-┌ Editor ──────────┐┌ Particles ──────────────────────────┐
-│── Species ──     ││ ┌─────┐ ┌─────┐                     │
-│▶ ■  species 1    ││ │     │ │     │                     │
-│  ■  species 2    ││ │  →  │ │  ←  │                     │
-│                  ││ │     │ │     │                     │
-│── Keys ──────    ││ └─────┘ └─────┘                     │
-│arrows  move      ││ ┌─────┐ ┌─────┐                     │
-│enter   place     ││ │     │ │     │                     │
-│space   erase     ││ │  ↑  │ │  ↑  │                     │
-│r / R   rotate    ││ │     │ │     │                     │
-│1-9     species   ││ └─────┘ └─────┘                     │
-│c       clear     ││                                     │
-│q       accept    ││                                     │
-└──────────────────┘└─────────────────────────────────────┘
-```
-
-Pass `output=:bonds` or `output=:matrix` to get a copy-pasteable representation instead of a `BindingRules`, useful for pinning a specific design in code:
-```julia
-bonds = ruleeditor(UnitSquare; output=:bonds)  # n×4 integer matrix
-rules = BindingRules(bonds, UnitSquare)           # reproduces the same rules
-```
-
 ### Enumeration
 Once you have defined a set of binding rules, use `polyenum` to enumerate all allowed polyforms:
 ```julia
