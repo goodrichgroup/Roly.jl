@@ -179,6 +179,27 @@
     c = countpolyforms(I_polymino; maxsize=9, exact_budget=1, rng=Xoshiro(5))
     @test c.n >= 4
 
+    # A keep probability given outright is used as given, and has to be one.
+    @test_throws ArgumentError countpolyforms(I_polymino; maxsize=9, exact_budget=500, pkeep=0.0)
+    @test_throws ArgumentError countpolyforms(I_polymino; maxsize=9, exact_budget=500, pkeep=1.5)
+    @test countpolyforms(I_polymino; maxsize=7, exact_budget=500, pkeep=0.95, rng=Xoshiro(3)).n > 0
+
+    # Every trial running out of samples leaves nothing to average, which is an error rather
+    # than a count of zero.
+    @test_throws ErrorException countpolyforms(I_polymino; maxsize=9, exact_budget=500,
+                                               pkeep=0.95, maxsamples=1, rng=Xoshiro(3))
+
+    # Calibration walks the keep probability towards one that reaches the bottom of the tree.
+    # Starting far too low, every pilot dies out early, so each doubles it and the last one
+    # stands -- never above `pmax`, which is what the estimate needs to stay a sample.
+    depth, n0 = 5, Roly._count_upto_budget(I_polymino; maxsize=12, budget=500)[1][5]
+    low = Roly._calibrate_pkeep(I_polymino; pkeep=1e-6, depth, n0, maxsize=9,
+                                maxsamples=10^6, rng=Xoshiro(11))
+    @test 1e-6 < low <= 0.95
+    # and one already large enough is returned unchanged rather than raised further
+    @test Roly._calibrate_pkeep(I_polymino; pkeep=0.99, depth, n0, maxsize=9,
+                                maxsamples=10^6, rng=Xoshiro(11)) == 0.95
+
     # replacable species test
 
     # `k` copies of one species, every bonding site compatible across every pair of them, so

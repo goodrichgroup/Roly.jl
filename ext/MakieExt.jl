@@ -2,8 +2,9 @@ module MakieExt
 
 using Roly
 using Makie
-using LinearAlgebra: dot, normalize
+using LinearAlgebra: dot, norm, normalize
 import Roly: species, bindingrules, polyformplot, polyformplot!, render
+import Roly: Pose
 import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, polyhedron, bounding_radius
 
 @recipe PolyformPlot (poly, ) begin
@@ -72,8 +73,10 @@ Draw all particles of `poly` onto `ax`, coloring inert sites with `INERT_COLOR`.
 
 Species that provide a [`particlemesh`](@ref) are merged into one mesh so they depth-sort
 against each other; the rest are drawn one plot per particle.
+
+`alpha` scales the transparency of everything drawn, for showing one polyform behind another.
 """
-function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
+function plot_polyform!(ax, poly::Polyform, pose=nothing; alpha=1, kwargs...)
     rules = bindingrules(poly)
     pts, tris, cols = Point3f[], NTuple{3,Int}[], RGBAf[]
 
@@ -82,13 +85,15 @@ function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
         part_pose = isnothing(pose) ? part.pose : pose * part.pose
         geom = particlemesh(ps, part_pose; rules, kwargs...)
         if isnothing(geom)
-            plot_particlespecies!(ax, ps, part_pose; rules, kwargs...)
+            # a species with no mesh form draws itself, so the transparency has to go with it
+            faded = alpha == 1 ? kwargs : (; kwargs..., alpha)
+            plot_particlespecies!(ax, ps, part_pose; rules, faded...)
             continue
         end
         p, t, c = geom
         offset = length(pts)
         append!(pts, p)
-        append!(cols, c)
+        append!(cols, alpha == 1 ? c : [RGBAf(x.r, x.g, x.b, x.alpha * alpha) for x in c])
         for (a, b, d) in t
             push!(tris, (a + offset, b + offset, d + offset))
         end
