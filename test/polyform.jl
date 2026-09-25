@@ -141,4 +141,22 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
         blocks = sort(reduce(vcat, [collect(graphvertices(pt, sys_pm)) for pt in q.particles]))
         @test blocks == 1:nv(graphrep(q))
     end
+
+    @testset "vertices and sites that name nothing" begin
+        # `bindingsite(p, i)` counts through the particles, and runs out
+        rules = BindingRules([1 1 1 3], UnitSquare)
+        poly = first(q for q in polygen(rules; maxsize=2) if nparticles(q) == 2)
+        @test bindingsite(poly, nsites(poly)) isa BindingSite
+        @test isnothing(bindingsite(poly, nsites(poly) + 1))
+        @test isnothing(bindingsite(poly, 0))
+
+        # and a graph vertex need not belong to a site at all: a two-site particle carries a
+        # vertex joining its sites, which no site owns
+        two = BindingRules([1 1 1 2], PatchyDisk([0.0, 2π/3], 0.5; colors=1:2))
+        disk = first(polygen(two; maxsize=1))
+        owned = [Roly._vertex_to_particle_site(disk, v; canonidxs=false) for v in 1:nv(graphrep(disk))]
+        @test count(isnothing, owned) == 2
+        @test count(!isnothing, owned) == nsites(disk)
+    end
+
 end

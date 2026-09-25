@@ -692,6 +692,10 @@ function dartencoding(fs::Vector{Vector{Int}}; labels=1:length(fs))
     return g, ranges
 end
 
+# The label worn by the vertex that joins a two-site particle's sites. Site labels count up from
+# one, so zero is free and can never be taken for one of them.
+const _JOINLABEL = Cint(0)
+
 """
     cycleencoding(nsites; labels=1:nsites)
 
@@ -705,6 +709,16 @@ function cycleencoding(nsites::Integer; labels=1:nsites)
     length(labels) == nsites || throw(ArgumentError("expected $nsites labels, one per site, got $(length(labels))"))
     nsites < 1 && throw(ArgumentError("a particle needs at least one binding site"))
 
+    if nsites == 2
+        # A cycle over two sites is `1 -> 2 -> 1`, a bidirectional pair, which is exactly how a
+        # bond is written: an automorphism could then trade a particle for a bond, and a ring of
+        # two-site particles would report twice the symmetry it has. So a joining vertex follows
+        # each site, giving a four-vertex cycle that runs one way, and a one-way edge is never
+        # read as a bond. Turning it by two carries each site onto the other, so two sites a
+        # rotation interchanges are interchangeable here too.
+        ls = Cint[labels[1], _JOINLABEL, labels[2], _JOINLABEL]
+        return NautyDiGraph(cycle_digraph(4); vertex_labels=ls), [1:1, 3:3]
+    end
     g = NautyDiGraph(cycle_digraph(nsites); vertex_labels=collect(Cint, labels))
     return g, [i:i for i in 1:nsites]
 end
@@ -1214,10 +1228,15 @@ function _recolor!(sites::AbstractVector{<:BindingSite}, g::NautyDiGraph, colors
     orbits = siteorbits(poses, sitesyms, collect(colors))
     stabs = stabilizerorders(poses, sitesyms, orbits)
 
+    # Site labels go above every label no site owns, so that a structural vertex -- the one
+    # joining a two-site particle's sites, say -- can never come to share a label with a site.
+    # With no such vertex the base is zero and the labels are the orbit numbers themselves.
+    owned = Set(v for s in sites for v in s.vertices)
+    base = maximum((label(g, v) for v in vertices(g) if v ∉ owned); init=0)
     for i in eachindex(sites)
         sites[i] = setstab(setcolor(sites[i], colors[i]), stabs[i])
         for v in sites[i].vertices
-            setlabel!(g, v, orbits[i])
+            setlabel!(g, v, base + orbits[i])
         end
     end
     return nothing

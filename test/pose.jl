@@ -63,4 +63,14 @@ using StaticArrays, Rotations
     @test q.x == p.x
     @test convert(Pose{3,Float64,RotXYZ{Float64}}, q) isa Pose{3,Float64,RotXYZ{Float64}}
     @test convert(typeof(p), p) === p
+
+    # a 3D pose shows its turn as an angle about an axis, where a 2D one has only the angle
+    p3 = Pose{3,Float64}(SVector(1.0, 2.0, 3.0), RotMatrix3(AngleAxis(π / 2, 0.0, 0.0, 1.0)))
+    shown = sprint(show, p3)
+    @test occursin("0.5π", shown)
+    @test occursin("x: [1.0, 2.0, 3.0]", shown)
+    @test occursin(sprint(show, rotation_axis(p3.psi)), shown)
+    # a 2D turn is the angle alone, with no axis after it
+    @test endswith(sprint(show, Pose{2,Float64}(SVector(0.0, 0.0), Angle2d(π))), "1.0π]")
+
 end
