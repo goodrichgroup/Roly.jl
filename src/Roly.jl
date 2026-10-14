@@ -38,7 +38,12 @@ export exposedsites, opensites, exposedsitelocs, opensitelocs
 public bondindex, interior_edges, exterior_edges, subpolyform
 public canonbindingsite, canonbindingsites, rotationcenter
 
-export bondtypes
+# Environments
+export PolyformEnvironment, ParticleEnvironment, BondEnvironment
+export particleenvironments, bondenvironments, crop, rootenvironment
+export Tiling, tilings, tilingenum, isunitcell, tilelatticevectors, cantile, canchain, isunbounded,
+       chainstatebound, growthwitness
+export unitcell, latticevectors, bondtypes, iscomplete, tilingorder
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
@@ -54,6 +59,7 @@ export SymmetricUnitTetrahedron, SymmetricUnitCube, SymmetricUnitOctahedron
 export SymmetricUnitDodecahedron, SymmetricUnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
+export MetaParticleSpecies, polyform, inducedrules, recast
 
 # Public, but not exported: reach for these as `Roly.faces(p)`, or import them by name.
 # They are stable API, but specific enough to a body, an encoding or a species that putting
@@ -86,10 +92,14 @@ include("bindingrules.jl")
 include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
+include("environments.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
+include("species/metaparticlespecies.jl")
+include("tiling.jl")
+include("tilingsearch.jl")
 
 include("ruleeditor.jl")
 using .RuleEditor: ruleeditor

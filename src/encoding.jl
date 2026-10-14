@@ -735,6 +735,21 @@ function _expandperface(x, n::Integer, what::AbstractString)
     return collect(x)
 end
 
+
+# What a twist marks a face with, for the labels to tell faces apart by.
+#
+# A turn by the site's own symmetry angle carries its frame onto an equivalent one, so it marks
+# nothing and has to reduce away: without this a face turned by a whole `2π` -- the identity --
+# would read as distinct from its neighbours and cost the body symmetry it has. What survives the
+# reduction is the part the face's own symmetry cannot absorb, which does mark it.
+function _twistmarks(twists, sitesyms, ::Type{F}) where {F}
+    return map(zip(twists, sitesyms)) do (t, sitesym)
+        step = 2F(π) / sitesym
+        r = mod(F(t), step)
+        return min(r, abs(r - step)) < sqrt(eps(F)) ? zero(F) : r
+    end
+end
+
 """
     _facesites(p, poseof, colors, locking, twists, usecycle, touching_tol, alignment_tol)
 
@@ -764,20 +779,6 @@ A face's first corner is its site's twist reference, and settling it takes three
 [`siteorbits`](@ref) groups by, alongside the color, so that giving two faces of one orbit
 different twists splits the orbit.
 """
-# What a twist marks a face with, for the labels to tell faces apart by.
-#
-# A turn by the site's own symmetry angle carries its frame onto an equivalent one, so it marks
-# nothing and has to reduce away: without this a face turned by a whole `2π` -- the identity --
-# would read as distinct from its neighbours and cost the body symmetry it has. What survives the
-# reduction is the part the face's own symmetry cannot absorb, which does mark it.
-function _twistmarks(twists, sitesyms, ::Type{F}) where {F}
-    return map(zip(twists, sitesyms)) do (t, sitesym)
-        step = 2F(π) / sitesym
-        r = mod(F(t), step)
-        return min(r, abs(r - step)) < sqrt(eps(F)) ? zero(F) : r
-    end
-end
-
 function _facesites(
     p::Polyhedron{F},
     poseof,
@@ -1048,8 +1049,8 @@ stabilizer.
     Deriving it rests on two things. The sites must have *distinct positions*, which makes a
     rotation determined by where it sends site 1 and the site map injective for free. And the
     sites must determine the body, which an assembled [`Polyform`](@ref) does not: two open sites
-    can sit in symmetric poses with different structures behind them. A species standing for a
-    whole cluster fails both, and has to supply its own group instead.
+    can sit in symmetric poses with different structures behind them. A
+    [`MetaParticleSpecies`](@ref) fails both and supplies its `Polyform`'s own group instead.
 """
 function _eachsitesymmetry(f, poses, sitesyms, sitelabels; group=nothing)
     n = length(poses)
