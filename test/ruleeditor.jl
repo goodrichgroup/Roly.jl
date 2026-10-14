@@ -1,6 +1,6 @@
-using Roly: EditorState, SquareLat, TriangleLat, HexLat, Key,
-            inferred_bonds, bonds_matrix, _handle_key!, _visible_species_count,
-            _ensure_species!
+using Roly.RuleEditor: EditorState, SquareLat, TriangleLat, HexLat, Key,
+                      inferred_bonds, bonds_matrix, _handle_key!, _visible_species_count,
+                      _ensure_species!
 
 # Convenience: build a fresh EditorState with just the fields tests care about.
 function _mkstate(lat, sp; cells=Dict{Tuple{Int,Int},Tuple{Int,Int}}(),
@@ -45,8 +45,8 @@ end
     cells = Dict((1,1) => (1, 0), (2,1) => (1, 0), (2,2) => (1, 0))
     s = _mkstate(SquareLat(), UnitSquare; cells=cells)
     bonds = bonds_matrix(s)
-    sys = BindingRules(bonds, UnitSquare)
-    r = polyenum(sys; maxsize=3, maxstrs=100)
+    rules = BindingRules(bonds, UnitSquare)
+    r = polyenum(rules; maxsize=3, maxstrs=100)
     @test r.nstructures > 0
 
      #_visible_species_count"

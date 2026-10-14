@@ -12,10 +12,10 @@ using StaticArrays, Rotations
     p3 = Pose{3,Float32}()
     @test eltype(p3) === Float32
     @test eltype(typeof(p3)) === Float32
-    @test typeof(p3.psi) === RotXYZ{Float32}
+    @test typeof(p3.psi) === RotMatrix3{Float32}
 
     @test isapprox(p3.x, zero(SVector{3,Float64}); atol=1e-12)
-    @test isapprox(p3.psi,  one(RotXYZ{Float64}); atol=1e-12)
+    @test isapprox(p3.psi,  one(RotMatrix3{Float64}); atol=1e-12)
 
     @test Pose{2}() == p2
     @test Pose{3}() == p3
@@ -53,4 +53,24 @@ using StaticArrays, Rotations
     @test isapprox(p6 / p5, Pose(-Z + Z, RZ * RY'); atol=1e-12)
     @test isapprox(p5 \ p6, Pose(-X - Z, RY' * RZ); atol=1e-12)
     @test isapprox(p6 \ p5, Pose(-X - Z, RZ' * RY); atol=1e-12)
+
+    # Rotation types are not closed under multiplication, so a pose can arrive parameterised
+    # differently from the field it is being stored into.
+    p = Pose(SVector(1.0, 2.0, 3.0), RotXYZ(0.1, 0.2, 0.3))
+    q = convert(Pose{3,Float64,RotMatrix3{Float64}}, p)
+    @test q isa Pose{3,Float64,RotMatrix3{Float64}}
+    @test isapprox(q.psi, p.psi; atol=1e-12)
+    @test q.x == p.x
+    @test convert(Pose{3,Float64,RotXYZ{Float64}}, q) isa Pose{3,Float64,RotXYZ{Float64}}
+    @test convert(typeof(p), p) === p
+
+    # a 3D pose shows its turn as an angle about an axis, where a 2D one has only the angle
+    p3 = Pose{3,Float64}(SVector(1.0, 2.0, 3.0), RotMatrix3(AngleAxis(π / 2, 0.0, 0.0, 1.0)))
+    shown = sprint(show, p3)
+    @test occursin("0.5π", shown)
+    @test occursin("x: [1.0, 2.0, 3.0]", shown)
+    @test occursin(sprint(show, rotation_axis(p3.psi)), shown)
+    # a 2D turn is the angle alone, with no axis after it
+    @test endswith(sprint(show, Pose{2,Float64}(SVector(0.0, 0.0), Angle2d(π))), "1.0π]")
+
 end

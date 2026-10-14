@@ -1,2 +1,6 @@
 ignore:
   - "src/ruleeditor.jl"
+  - "ext/MakieExt.jl"
+  - "ext/plot_polygonparticle.jl"
+  - "ext/plot_polyhedronparticle.jl"
+  - "ext/plot_patchyparticle.jl"

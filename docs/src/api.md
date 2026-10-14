@@ -1,5 +1,9 @@
 # API reference
 
+```@meta
+CurrentModule = Roly
+```
+
 ## Poses
 
 ```@docs
@@ -7,6 +11,8 @@ Pose
 dimension
 numtype
 posetype
+sitetype
+particletype
 ```
 
 ## Binding sites
@@ -16,35 +22,128 @@ BindingSite
 color
 ```
 
+### Bonds and twists
+
+How many distinct ways a partner may attach at a site, and which one a given attachment is.
+See [Orientation and twists](orientation.md) for what the numbers mean.
+
+```@docs
+twistfreedom(::BindingSite)
+twistfreedom(::BindingSite, ::BindingSite)
+twist
+standard_twist
+Contact
+contact_pairing
+```
+
+## Polyhedra and graph encodings
+
+```@docs
+Polyhedron
+corners
+faces
+facevertices
+nfaces
+nedges
+facecentroid
+facenormal
+edgemidpoint
+minedgelength
+inradius
+rotationgroup(::Polyhedron)
+rotationgroup(::ParticleSpecies)
+faceorbits
+facesym
+siteorbits
+sitelabel
+permutationgroup
+check_encoding
+stabilizerorders(::ParticleSpecies)
+stabilizerorders(::Any, ::Any, ::Any)
+dartencoding
+cycleencoding
+```
+
+### Rotation groups
+
+```@docs
+RotationGroup
+Cyclic
+Dihedral
+Tetrahedral
+Octahedral
+Icosahedral
+grouporder
+```
+
+### Solids
+
+```@docs
+Tetrahedron
+Cube
+Octahedron
+Dodecahedron
+Icosahedron
+Pyramid
+Prism
+Antiprism
+```
+
 ## Particle species
 
 ```@docs
 ParticleSpecies
+SpeciesAndPose
+bindingsite
 bindingsites
 nsites
 graphrep
 isconvex
+setcolors!
 symmetrynumber
 bounding_radius
 could_contact
 overlap
+sat_overlap
+edgenormals
 ```
 
 ### Built-in species
 
 ```@docs
 PolygonParticleSpecies
+UnitNgon
 UnitTriangle
 UnitSquare
 UnitHexagon
+SymmetricUnitTriangle
+SymmetricUnitSquare
+SymmetricUnitHexagon
+PolyhedronParticleSpecies
+polyhedron
+UnitTetrahedron
+UnitCube
+UnitOctahedron
+UnitDodecahedron
+UnitIcosahedron
+SymmetricUnitTetrahedron
+SymmetricUnitCube
+SymmetricUnitOctahedron
+SymmetricUnitDodecahedron
+SymmetricUnitIcosahedron
+UnitPyramid
+UnitPrism
+UnitAntiprism
 PatchyParticleSpecies
 PatchyDisk
+PatchySphere
 ```
 
 ## Binding rules
 
 ```@docs
 BindingRules
+SpeciesSiteLoc
 interactionmatrix
 nspecies
 nbonds
@@ -59,10 +158,20 @@ isinert
 ## Polyforms
 
 ```@docs
+AbstractPolyform
 Polyform
+ParticleSiteLoc
 nparticles
 bindingrules
 composition
+canonbindingsite
+canonbindingsites
+exposedsites
+opensites
+exposedsitelocs
+opensitelocs
+rotationgroup(::Polyform)
+permutationgroup(::Polyform)
 bonds
 bondindex
 interior_edges
@@ -76,6 +185,25 @@ polyenum
 polygen
 countpolyforms
 PolyformCount
+```
+
+An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
+A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
+
+## Bonds of a structure
+
+```@docs
+bondtypes
+```
+
+## Visualization
+
+Provided by the Makie extension, so a backend has to be loaded.
+
+```@docs
+render
+polyformplot
+polyformplot!
 ```
 
 ## Interactive rule editor

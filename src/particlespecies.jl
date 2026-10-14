@@ -1,12 +1,27 @@
 """
     ParticleSpecies{D,B<:BindingSite}
 
-Abstract supertype of all particle species. `D` is the spatial dimension and `B` is the
-concrete `BindingSite` type.
+Abstract supertype of all particle species in `D` spatial dimensions.
 """
 abstract type ParticleSpecies{D,B<:BindingSite} end
 
+"""
+    SpeciesAndPose{SPC}
+
+A species paired with a placement, `species => pose`.
+
+Use this type when writing methods for [`overlap`](@ref) and [`could_contact`](@ref).
+"""
 const SpeciesAndPose{SPC} = Pair{SPC,<:Pose} where {SPC<:ParticleSpecies}
+
+"""
+    _tilingcell(ps::ParticleSpecies)
+
+Identify the tiling `ps` sits on, or `nothing` if it does not tile.
+
+This function is currently considered internal and it is not recommended to define custom methods.
+"""
+_tilingcell(::ParticleSpecies) = nothing
 
 """
     numtype(::ParticleSpecies)
@@ -25,11 +40,11 @@ posetype(::ParticleSpecies{D,B}) where {D,B} = posetype(B)
 posetype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = posetype(B)
 
 """
-    bindingsites(p::ParticleSpecies, i::Integer)
+    bindingsite(p::ParticleSpecies, i::Integer)
 
 Return the `i`th binding site of particle species `p`.
 """
-function bindingsites end
+function bindingsite end
 
 """
     bindingsites(p::ParticleSpecies)
@@ -37,7 +52,7 @@ function bindingsites end
 Return an iterator over all binding sites of a particle of species `p`.
 """
 function bindingsites(p::ParticleSpecies)
-    return (bindingsites(p, i) for i in 1:nsites(p))
+    return (bindingsite(p, i) for i in 1:nsites(p))
 end
 
 """
@@ -66,7 +81,10 @@ function nsites end
 
 Assign colors to the binding sites of particle species `p`.
 """
-function setcolors! end
+function setcolors!(p::ParticleSpecies, colors::AbstractVector{<:Integer})
+    _recolor!(p, p.sites, colors)
+    return nothing
+end
 
 """
     isconvex(::ParticleSpecies)
@@ -81,7 +99,7 @@ end
 """
     bounding_radius(p::ParticleSpecies)
 
-Return the radius of a bounding sphere centred at the particle's pose origin.
+Return the radius of a bounding sphere centerd at the particle's pose origin.
 """
 function bounding_radius end
 
@@ -115,6 +133,10 @@ The symmetry number is equal to the size of the automorphism group
 of `graphrep(p)`.
 """
 function symmetrynumber(p::ParticleSpecies)
+    # DO NOT `canonize` here: a species' graph must stay in construction order, since
+    # `BindingSite.vertices` indexes it directly and `bindingsite(::Particle, ...)` reaches those
+    # vertices by shifting the range by a leading vertex. Reordering here would silently
+    # decouple the two.
     _, autg = nauty(graphrep(p))
     return convert(Int, autg.n)
 end

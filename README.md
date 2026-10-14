@@ -16,10 +16,10 @@ pkg> add https://github.com/goodrichgroup/Roly.jl
 
 ## Basic Usage
 Enumeration in Roly.jl starts from a `BindingRules` object, which is a list of building block geometries together with an interaction matrix that specifies which binding sites are allowed to bind to each other.
-The allowed polyforms can then be enumerated with `polyenum`, generated and stored with `polygen`, or counted (exactly or approximately) with `countpolyforms`.
+The allowed polyforms can then be enumerated with `polyenum`, or generated and stored with `polygen`.
 
 ### Defining Binding Rules
-To illustrate the basic process, let's construct a system consisting of four species of triangular building blocks. Binding rules are defined as a list of bonds, where every bond is specified in the form `[species_i site_i species_j site_j]`. For example, `[1 3 2 3]` indicates that site 3 of species 1 is allowed to bind to site 3 of species 2. Roly already comes with definitions for simple polygonal building block geometries, including `UnitTriangle`, `UnitSquare`, and `UnitHexagon`. The `BindingRules` constructor takes either a list of geometries or a single geometry if all building blocks are identically shaped.
+To illustrate the basic process, let's construct a system consisting of four species of triangular building blocks. Binding rules are defined as a list of bonds, where every bond is specified in the form `[species_i site_i species_j site_j]`. For example, `[1 3 2 3]` indicates that site 3 of species 1 is allowed to bind to site 3 of species 2. Roly already comes with definitions for simple polygonal particle geometries (e.g. `UnitTriangle`, `UnitSquare`, `UnitHexagon`), convex polyhedra (e.g. `UnitCube`, `UnitPrism(n)`), as well as patchy particles (e.g. `PatchyDisk`, `PatchySphere`). The `BindingRules` constructor takes either a list of geometries or a single geometry if all building blocks are identically shaped.
 ```julia
 using Roly
 
@@ -27,78 +27,47 @@ bonds = [1 3 2 3;
          2 2 3 2;
          2 1 4 1;
          3 1 4 1]
-sys = BindingRules(bonds, UnitTriangle)
-```
-
-### Sketching Binding Rules interactively
-Instead of writing the bonds matrix out by hand, you can build one geometrically with `ruleeditor` — a terminal editor that lets you place building blocks on a lattice and infers the binding rules from every pair of touching sites:
-```julia
-sys = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
-```
-
-Arrow keys move the cursor, `Enter` places a particle, `Space` erases, `r`/`R` rotate, digits `1`–`9` add and switch between species, `q` accepts. A typical session looks like this:
-
-```
-┌ Editor ──────────┐┌ Particles ──────────────────────────┐
-│── Species ──     ││ ┌─────┐ ┌─────┐                     │
-│▶ ■  species 1    ││ │     │ │     │                     │
-│  ■  species 2    ││ │  →  │ │  ←  │                     │
-│                  ││ │     │ │     │                     │
-│── Keys ──────    ││ └─────┘ └─────┘                     │
-│arrows  move      ││ ┌─────┐ ┌─────┐                     │
-│enter   place     ││ │     │ │     │                     │
-│space   erase     ││ │  ↑  │ │  ↑  │                     │
-│r / R   rotate    ││ │     │ │     │                     │
-│1-9     species   ││ └─────┘ └─────┘                     │
-│c       clear     ││                                     │
-│q       accept    ││                                     │
-└──────────────────┘└─────────────────────────────────────┘
-```
-
-Pass `output=:bonds` or `output=:matrix` to get a copy-pasteable representation instead of a `BindingRules`, useful for pinning a specific design in code:
-```julia
-bonds = ruleeditor(UnitSquare; output=:bonds)  # n×4 integer matrix
-sys = BindingRules(bonds, UnitSquare)           # reproduces the same rules
+rules = BindingRules(bonds, UnitTriangle)
 ```
 
 ### Enumeration
 Once you have defined a set of binding rules, use `polyenum` to enumerate all allowed polyforms:
 ```julia
-result = polyenum(sys; maxsize=20, maxstrs=100_000)
+result = polyenum(rules; maxsize=20, maxstrs=100_000)
 result.nstructures   # number of polyforms found
 result.largest_size  # size of the largest polyform found
 result.status        # Finished, MaxDepthReached, MaxVerticesReached, or BreakTriggered
 ```
 The simple system we have chosen here only allows 16 different polyforms to form. In general however, the number of polyforms might be unbounded, so it is advisable to always impose either a maximal size (`maxsize`) or a maximal count (`maxstrs`). To store all polyforms in memory for further processing, use `polygen`, which returns a list sorted by size:
 ```julia
-strs = polygen(sys; maxsize=20, maxstrs=100_000)
+strs = polygen(rules; maxsize=20, maxstrs=100_000)
 ```
 
 ### Counting
-To count polyforms without storing them — or to get an estimate when full enumeration is too expensive — use `countpolyforms`:
+To count polyforms without storing them, or to estimate the number of polyforms when full enumeration is too expensive, use `countpolyforms`:
 ```julia
-c = countpolyforms(sys)
+c = countpolyforms(rules)
 c.n            # count (exact or estimated mean)
 c.exact        # true if the count is exact
 c.uncertainty  # standard error of the estimate (0 if exact)
 ```
-`countpolyforms` enumerates exactly up to a configurable budget and switches to importance-sampled estimation beyond it. Pass `maxsize` for systems that allow unbounded growth.
+`countpolyforms` enumerates exactly up to a configurable budget and switches to estimation beyond it. Pass `maxsize` for systems that allow unbounded growth.
 
 ### Incorporating constraints
 It is often desirable to impose additional constraints on generated polyforms. For example, to enumerate only polyforms with at most one particle of species 4:
 ```julia
 constraint(s, n) = composition(s)[4] <= 1 ? ACCEPT : REJECT
-polyenum(constraint, sys)
+polyenum(constraint, rules)
 ```
 Warning: To ensure well-defined behavior, if a polyform `s` violates the constraint, all larger polyforms that can be generated by adding particles to `s` must also violate the constraint.
 
 ### Visualization
-Roly.jl provides a [Makie](https://docs.makie.org) extension for 2D visualization. Load any Makie backend to activate it:
+Roly.jl provides a [Makie](https://docs.makie.org) extension. Load any Makie backend to activate it:
 ```julia
 using GLMakie  # or CairoMakie, WGLMakie, ...
-render(s)      # display a single polyform
+render(s)      # display a single polyform, or a species
 ```
-`polyformplot!` can be used to draw polyforms onto an existing Makie axis.
+`render` picks a 2D or 3D axis to match. `polyformplot!` can be used to draw onto an existing Makie axis.
 
 ## Citation
 If you use Roly.jl in your work, please cite [our paper](https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.134.058204) below:

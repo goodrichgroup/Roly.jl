@@ -1,8 +1,23 @@
-# `ruleeditor`: a terminal-based geometric editor for constructing `BindingRules` from
-# particle placements.
+"""
+    RuleEditor
+
+A terminal-based geometric editor for constructing [`BindingRules`](@ref) by placing particles
+on a lattice.
+
+Everything here is internal to the editor except its entry point [`ruleeditor`](@ref), which
+`Roly` re-exports, so `Roly.ruleeditor(species)` is the way to reach it.
+This submodule was written by Claude Opus 5.
+"""
+module RuleEditor
 
 using REPL
 using REPL.Terminals: TTYTerminal, raw!
+using StaticArrays: SVector
+using Rotations: Angle2d
+using ..Roly: BindingRules, ParticleSpecies, Pose, bindingsites, color, interactionmatrix, isaligned,
+              istouching, nsites
+
+export ruleeditor
 
 const CSI = "\e["
 const CLR_EOL = "\e[K"
@@ -196,7 +211,7 @@ end
 function screen_pos(lat::TriangleLat, r, c)
     cw, ch = cell_size(lat)
     # Triangles already alternate up/down within a row via (r+c) parity, so no
-    # row offset is needed to tessellate — adjacent rows have flipped parity.
+    # row offset is needed to tessellate; adjacent rows have flipped parity.
     return ((r - 1) * ch + 1, (c - 1) * cw + 1)
 end
 function screen_pos(lat::HexLat, r, c)
@@ -242,7 +257,7 @@ end
 empty_sprite(::SquareLat, _r, _c) = ["┌─────┐", "│     │", "│     │", "│     │", "└─────┘"]
 
 # --- Triangle sprites (braille, 7×4) ---
-# 14 dots wide × 16 dots tall. Aspect ratio 7:8 in real units — near-perfect
+# 14 dots wide × 16 dots tall. Aspect ratio 7:8 in real units, near-perfect
 # equilateral in a 1:2 char aspect terminal.
 const _TRI_UP_SEGMENTS = (
     ((0, 7), (15, 0)),   # left slant
@@ -592,10 +607,10 @@ rotation), digits `1`-`9` pick the active species, `c` clears, `q` accepts. Bond
 inferred from touching site pairs across all placed particles.
 
 `output` controls the return value:
-- `:rules` (default) — a `BindingRules` object, ready for `polyenum`/`polygen`.
-- `:bonds`  — the `nx4` integer bonds matrix `[species1 site1 species2 site2; ...]`,
+- `:rules` (default): a `BindingRules` object, ready for `polyenum`/`polygen`.
+- `:bonds`: the `nx4` integer bonds matrix `[species1 site1 species2 site2; ...]`,
   suitable for pasting back into code as `BindingRules(bonds, species)`.
-- `:matrix` — the `Symmetric{Bool}` color-indexed interaction matrix, suitable for
+- `:matrix`: the `Symmetric{Bool}` color-indexed interaction matrix, suitable for
   pasting back as `BindingRules(intmat, species)`.
 
 If nothing is placed, returns `nothing` regardless of `output`.
@@ -700,3 +715,5 @@ function _handle_key!(state::EditorState, key::Key)
     end
     return false
 end
+
+end # module
