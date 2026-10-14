@@ -124,13 +124,6 @@ Create a pose at point `x`, whose local x axis also points outward along `x`. `t
 the y,z axes about x, which is how a patch's bond twist is chosen: the twist is the site's
 reference direction, and turning it turns the partner it holds.
 """
-# The 3D default is `RotMatrix3`, not an Euler parameterisation, because rotation types are not
-# closed under multiplication: `RotXYZ * RotXYZ` is a `RotMatrix3`. The pose type is threaded
-# through `BindingSite`, `Particle`, `Polyform` and `BindingRules`, so a species whose sites are
-# pinned to `RotXYZ` would need every one of those wrappers to convert on the way past. Using
-# the type that composes to itself -- which `PatchySphere` and `PolyhedronParticleSpecies`
-# already build directly -- means nothing has to, and all 3D species agree on one pose type and
-# can share a `BindingRules`.
 function normal_pose(x, twist=0; orientationtype=length(x) == 2 ? Angle2d : RotMatrix3)
     n = normalize(x)
     φ = atan(n[2], n[1])
@@ -140,3 +133,10 @@ function normal_pose(x, twist=0; orientationtype=length(x) == 2 ? Angle2d : RotM
     R = RotZ(φ) * RotY(θ - π/2) * RotX(twist)
     return Pose(x, orientationtype(R))
 end
+# The 3D default is `RotMatrix3`, not an Euler parameterisation, because rotation types are not
+# closed under multiplication: `RotXYZ * RotXYZ` is a `RotMatrix3`. The pose type is threaded
+# through `BindingSite`, `Particle`, `Polyform` and `BindingRules`, so a species whose sites are
+# pinned to `RotXYZ` would need every one of those wrappers to convert on the way past. Using
+# the type that composes to itself -- which `PatchySphere` and `PolyhedronParticleSpecies`
+# already build directly -- means nothing has to, and all 3D species agree on one pose type and
+# can share a `BindingRules`.
