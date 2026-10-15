@@ -38,8 +38,8 @@ export exposedsites, opensites, exposedsitelocs, opensitelocs
 public bondindex, interior_edges, exterior_edges, subpolyform
 public canonbindingsite, canonbindingsites, rotationcenter
 
-# Tilings, and whether a rule set is bounded
-export Tiling, tilings, tilingenum, unitcell, translations, bondtypes, iscomplete, tilingorder
+export bondtypes
+# Whether a rule set is bounded
 export isbounded
 
 # Enumeration
@@ -94,7 +94,6 @@ include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
-include("tiling.jl")
 include("bounded.jl")
 
 include("ruleeditor.jl")

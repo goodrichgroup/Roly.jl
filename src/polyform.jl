@@ -532,9 +532,6 @@ nbonds(p::AbstractPolyform) = count(Returns(true), bonds(p))
     bondtypes(p::AbstractPolyform)
 
 Return the bond type of every bond of `p`, each one once, indexing `bonded_colors(bindingrules(p))`.
-
-For a [`Tiling`](@ref) these are the bonds of one cell of the infinite structure, the ones a
-translate closes counted alongside the ones inside the cell.
 """
 function bondtypes(p::AbstractPolyform)
     return map(bonds(p)) do (a, b)
