@@ -8,12 +8,12 @@ large ones.
 default, `true` means no repeat was found within the budget.
 """
 function isbounded(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 1)
-    return _unboundedgrowth(rules; maxlength) === nothing
+    return _repeatingstretch(rules; maxlength) === nothing
 end
 
 # A rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
 # structure, as `(; generator, cell, period)`, or `nothing` if none exists within `maxlength`.
-function _unboundedgrowth(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 1)
+function _repeatingstretch(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 1)
     for i in 1:nspecies(rules)
         w = _walkchains(Polyform(rules, i), maxlength)
         w === nothing || return w
@@ -21,15 +21,17 @@ function _unboundedgrowth(rules::BindingRules; maxlength::Integer=_maxchainlengt
     return nothing
 end
 
-# How long a chain of `rules` can get before it must repeat a state: one state per site per
-# distinct twist its mates can arrive with, summed over every species.
+# How long a chain of `rules` can get before it must repeat a state. A state is the species at the
+# chain's end, which of its sites the incoming bond uses, and with which twist: one per site a bond
+# can arrive at, per distinct twist it can arrive with, over every species. A site no bond reaches
+# is never an incoming site and counts for nothing.
 function _maxchainlength(rules::BindingRules)
     total = 0
     for i in 1:nspecies(rules)
         ps = species(rules, i)
         for k in 1:nsites(ps)
             site = bindingsite(ps, k)
-            phases = 1
+            phases = 0
             for loc in compatible_speciessitelocs(rules, color(site))
                 mate = bindingsite(rules, loc)
                 phases = max(phases, _ndistincttwists(mate, site))
@@ -110,19 +112,15 @@ end
 # rotation in 2D, or the identity.
 function _screwclimb(g::Pose{D,F}) where {D,F}
     tol = sqrt(eps(F))
-    # a composed motion accumulates its angle, so a full turn comes back as 2π rather than 0;
-    # wrap to (-π, π] before asking whether it turns at all
     turning = abs(rem(rotation_angle(g.psi), 2 * F(π), RoundNearest)) > tol
     if !turning
-        # with no turn there is no rotation axis, so the translation's own direction serves, and
-        # the climb along it is the whole translation. In the plane this is the only motion that
-        # escapes: a turn there has a center rather than an axis, and nothing to climb along
+        # with no turn there is no rotation axis, so the axis is just the direction of translation
         n = norm(g.x)
         n > tol || return nothing, nothing        # the identity: no repeat at all
         return g.x / n, n
     end
     D == 3 || return nothing, nothing
     axis = rotation_axis(g.psi)
-    climb = dot(g.x, axis)                        # the translation's part along the axis; the rest
-    return axis, abs(climb) > tol ? climb : nothing    # only says where the axis sits
+    climb = dot(g.x, axis)
+    return axis, abs(climb) > tol ? climb : nothing
 end
