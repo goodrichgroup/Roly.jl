@@ -1,7 +1,7 @@
 # Bounded and unbounded rules
 
-Some rule sets run out of structures; others grow forever.
-[`isunbounded`](@ref) settles which, and when the answer is yes, [`growthwitness`](@ref) hands back the motion that repeats and [`tilings`](@ref) the repeat unit, if there is one.
+Some rule sets run out of structures and others grow forever.
+[`isbounded`](@ref) settles which, and [`tilings`](@ref) finds the periodic structures an unbounded set forms.
 
 The figures below use CairoMakie because the documentation builds headless.
 For 3D of your own, prefer GLMakie or WGLMakie, which depth-test instead of sorting.
@@ -17,10 +17,12 @@ Squares whose site 1 binds site 2 can only turn the same way at every bond, so a
 
 ```@example growth
 ring = BindingRules([1 1 1 2], UnitSquare)
-isunbounded(ring)
+isbounded(ring)
 ```
 
-`false` here is a proof rather than a search giving up: the motion between two repeats of a chain state is a quarter turn, and every copy of a pure rotation stays the same distance from its axis, so infinitely many of them cannot fit.
+`true` here is a proof rather than a search giving up.
+A chain long enough must repeat one of finitely many states, and the motion between the two repeats is then applied forever.
+Here that motion is a quarter turn, and every copy of a pure rotation stays the same distance from its axis, so infinitely many of them cannot fit.
 The whole system is therefore finite and [`countpolyforms`](@ref) counts it exactly.
 
 ```@example growth
@@ -39,56 +41,53 @@ nparticles(biggest), nbonds(biggest), length(opensitelocs(biggest))
 render(biggest)
 ```
 
-## An unbounded system, and its repeat unit
+## An unbounded system, and its periodic structures
 
 Binding opposite sides of a square instead gives the square lattice.
 
 ```@example growth
 square = BindingRules([1 2 1 4; 1 3 1 1], UnitSquare)
-isunbounded(square)
+isbounded(square)
 ```
 
-[`growthwitness`](@ref) says *why*: a single particle repeats under a pure translation.
-The angle comes back as `2π` rather than `0` because the motion accumulates its turn, which is why the test wraps before asking whether it turns at all.
+A single square repeats under a pure translation, which is the simplest way to be unbounded.
+It is also a tiling: one particle whose open sites all close onto translated copies of itself.
+[`tilings`](@ref) enumerates every periodic structure whose cell holds at most `maxsize` particles.
+Each one knows its cell, the translations its periodic bonds name, which of the rules' bonds it spends, and whether it leaves any site open.
 
 ```@example growth
-w = growthwitness(square)
-(period = w.period, translation = w.generator.x, angle = rotation_angle(w.generator.psi))
-```
-
-Here the repeat is also a *tiling*: one particle whose open sites all close onto translated copies of itself.
-[`tilings`](@ref) finds the closures, and each one carries the lattice vectors, which of the rules' bonds it spends, and whether it leaves any site open.
-
-```@example growth
-cell = first(polygen(square; maxsize=1))
-complete = filter(t -> iscomplete(t), tilings(cell))
+ts = tilings(square; maxsize=1)
+complete = filter(iscomplete, ts)
 first(complete)
 ```
 
 ```@example growth
-tilelatticevectors(cell)
+translations(first(complete))
 ```
 
-Two vectors, so the cell tiles the plane.
-`tilings` also returns the partial closures — one vector only, which is an infinite strip rather than a tiling — so filter on `complete` when you want the real thing.
+Two translations, so the cell tiles the plane.
+`tilings` also returns the partial closures, with one translation only, which are infinite strips rather than tilings, so filter on `iscomplete` when you want the plane covered.
 
 ```@example growth
-length(tilings(cell)), length(complete)
+length(ts), length(complete)
 ```
 
-The cell itself is the repeat unit:
+The cell is the repeat unit, and a tiling is drawn as a patch of it.
 
 ```@example growth
-render(cell; bindingrules=square)
+render(first(complete))
 ```
 
-A cell that needs several copies is found by raising `maxorder`; with the default of `1` a system whose neighbour is rotated rather than translated reports no tiling at all.
+A cell may need several particles.
+Squares whose site 1 binds site 2 and site 3 binds site 4 turn their neighbour by a quarter, so no translation carries one onto a bonded copy, and the cell holds two of them.
 
 ```@example growth
 turn = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
-mono = first(polygen(turn; maxsize=1))
-length(tilings(mono; maxorder=1)), length(tilings(mono; maxorder=2))
+length(tilings(turn; maxsize=1)), length(tilings(turn; maxsize=2))
 ```
+
+Every structure is reported once, by its smallest cell.
+Raising `maxsize` adds cells that genuinely need more particles and never a supercell of one already found.
 
 ## Counting what cannot be enumerated
 
@@ -100,32 +99,25 @@ countpolyforms(square; maxsize=9)
 ```
 
 The `≈` and the error bar mark an estimate rather than a count.
-Raising `maxsize` costs time but not memory: `maxsize=14` gives about `1.0e7` structures, and the estimate stays within a couple of percent across trials.
 
 ## Unbounded without ever repeating
 
-In the plane, growing forever and closing periodically are the same thing.
-In space they are not, and regular tetrahedra are the standard example: glued face to face they form the Boerdijk–Coxeter helix, whose twist per tetrahedron is an irrational fraction of a turn.
+In the plane, growing forever and closing periodically are the same thing: a repeated motion is a translation or a rotation, and only a translation escapes.
+In space a motion can be a screw, a turn about an axis together with a climb along it, and a screw escapes whether or not its turn ever adds up to a whole one.
+Regular tetrahedra are the standard example.
+Glued face to face they form the Boerdijk-Coxeter helix, whose twist per tetrahedron is `acos(-2/3)`, an irrational fraction of a turn.
 
 ```@example growth
 tetrahedra = PolyhedronParticleSpecies(Tetrahedron(); colors=fill(1, 4))
 helixrules = BindingRules([1 1 1 1], tetrahedra)
-w = growthwitness(helixrules)
-axis = rotation_axis(w.generator.psi)
-(angle = rotation_angle(w.generator.psi), acos_minus_two_thirds = acos(-2/3), pitch = dot(w.generator.x, axis))
+isbounded(helixrules)
 ```
 
-The motion is a screw: it turns by `acos(-2/3)` and climbs by `0.316` along its axis every tetrahedron.
-Copies far enough apart along that axis can never touch, which is what makes the growth infinite — and no multiple of that angle is ever a full turn, so the chain never closes.
-[`canchain`](@ref), which looks for a *periodic* closure, therefore finds nothing here, while `isunbounded` still says yes.
+Copies far enough apart along the axis can never touch, which is what makes the growth infinite, and no multiple of the angle is ever a full turn, so the chain never closes.
+This is the case a search for periodic closures cannot decide, and the reason [`isbounded`](@ref) looks at the repeating motion itself.
 
-```@example growth
-canchain(helixrules), isunbounded(helixrules)
-```
-
-This is the one place the two disagree, and the reason to reach for `isunbounded`.
-
-The helix is visible in the structures themselves. Among the chains of eight tetrahedra, the longest reaches well short of eight straight steps, because it is curling.
+The helix is visible in the structures.
+Among the chains of eight tetrahedra, the longest reaches well short of eight straight steps, because it is curling.
 
 ```@example growth
 function ischain(p)
@@ -140,7 +132,7 @@ end
 chains = filter(ischain, polygen(helixrules; maxsize=8))
 helix = chains[argmax(nparticles.(chains))]
 xs = [p.pose.x for p in helix.particles]
-(endtoend = norm(xs[end] - xs[1]), straight = (nparticles(helix) - 1) * norm(w.generator.x))
+norm(xs[end] - xs[1]) / (nparticles(helix) - 1)
 ```
 
 ```@example growth

@@ -4,17 +4,17 @@ using Roly
 using Makie
 using LinearAlgebra: dot, norm, normalize
 import Roly: species, bindingrules, polyformplot, polyformplot!, render
-import Roly: Tiling, unitcell, latticevectors, Pose
+import Roly: Tiling, unitcell, translations, Pose
 import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, polyhedron, bounding_radius
 
 @recipe PolyformPlot (poly, ) begin
     bindingrules = nothing
     pose = nothing
-    "How many cells to draw along each lattice vector, when the thing drawn is a `Tiling`."
+    "How many cells to draw along each translation, when the thing drawn is a `Tiling`."
     repeats = 2
     "How solid the repeated cells are drawn against the one cell, for a `Tiling`. `1` draws them alike."
     ghost = 0.4
-    "Whether to draw a `Tiling`'s lattice vectors, from the cell they repeat."
+    "Whether to draw a `Tiling`'s translations, from the cell they repeat."
     showlattice = true
     Makie.mixin_generic_plot_attributes()...
 end
@@ -32,12 +32,12 @@ function Makie.plot!(p::PolyformPlot{<:Tuple{<:ParticleSpecies}})
     return p
 end
 
-# A tiling is drawn as a patch of itself: its cell, repeated along each lattice vector. One cell
+# A tiling is drawn as a patch of itself: its cell, repeated along each translation. One cell
 # with `repeats = 1`, and enough to read the pattern by default.
 function Makie.plot!(p::PolyformPlot{<:Tuple{<:Tiling}})
     t = p.poly[]
     cell = unitcell(t)
-    vs = latticevectors(t)
+    vs = translations(t)
     base = p.pose[]
     n = max(1, p.repeats[])
     origin = sum(q.pose.x for q in cell.particles) / nparticles(cell)

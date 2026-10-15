@@ -203,29 +203,21 @@ PolyformCount
 An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
 A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
 
-## Tilings and unbounded growth
+## Tilings and bounded growth
 
-Whether a rule set admits arbitrarily large structures, and the repeat unit when it does.
+Whether a rule set admits arbitrarily large structures, and the periodic structures it forms.
 See [Bounded and unbounded rules](growth.md).
 
 ```@docs
-isunbounded
-growthwitness
-chainstatebound
-canchain
-tilings(::BindingRules)
-tilings(::Polyform)
-tilingenum(::Any, ::BindingRules)
-tilingenum(::Any, ::Polyform)
+isbounded
+tilings
+tilingenum
 Tiling
 unitcell
-latticevectors
+translations
 bondtypes
 iscomplete
 tilingorder
-isunitcell
-tilelatticevectors
-cantile
 ```
 
 ## Visualization

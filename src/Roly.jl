@@ -38,9 +38,9 @@ export exposedsites, opensites, exposedsitelocs, opensitelocs
 public bondindex, interior_edges, exterior_edges, subpolyform
 public canonbindingsite, canonbindingsites, rotationcenter
 
-export Tiling, tilings, tilingenum, isunitcell, tilelatticevectors, cantile, canchain, isunbounded,
-       chainstatebound, growthwitness
-export unitcell, latticevectors, bondtypes, iscomplete, tilingorder
+# Tilings, and whether a rule set is bounded
+export Tiling, tilings, tilingenum, unitcell, translations, bondtypes, iscomplete, tilingorder
+export isbounded
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
@@ -95,7 +95,7 @@ include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
 include("tiling.jl")
-include("tilingsearch.jl")
+include("bounded.jl")
 
 include("ruleeditor.jl")
 using .RuleEditor: ruleeditor

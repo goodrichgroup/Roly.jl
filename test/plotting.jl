@@ -74,9 +74,9 @@
     @test length(geom[1]) == nparticles(metaseed) * length(one[1])
     @test length(geom[2]) == nparticles(metaseed) * length(one[2])
 
-    # a tiling draws as a patch of itself: its cell, repeated along each lattice vector
+    # a tiling draws as a patch of itself: its cell, repeated along each translation
     lattice = BindingRules([1 2 1 4; 1 3 1 1], UnitSquare)
-    tiled = first(filter(iscomplete, tilings(first(polygen(lattice; maxsize=1)))))
+    tiled = first(filter(iscomplete, tilings(lattice; maxsize=1)))
     @test render(tiled) isa Figure
     @test render(tiled; repeats=1) isa Figure
     @test render(tiled; ghost=1, showlattice=false) isa Figure
