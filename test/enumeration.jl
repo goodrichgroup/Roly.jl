@@ -135,6 +135,15 @@
     @test c.uncertainty == 0.0
     @test !c.size_truncated
 
+    # Bounded but too large for the budget: estimated, and with no cutoff the estimate covers
+    # every structure there is.
+    c = polycount(I137; exact_budget=20, rng=Xoshiro(2))
+    @test !c.exact
+    @test !c.size_truncated
+    @test abs(c.n - 137) / 137 < 0.5
+    # with the check waived nothing says the estimate would terminate, so it is refused
+    @test_throws ArgumentError polycount(I137; exact_budget=20, checkbounded=false)
+
     # Capped by maxsize, but still exactly enumerated up to that cap.
     c = polycount(I_polymino; maxsize=6)
     @test c.exact

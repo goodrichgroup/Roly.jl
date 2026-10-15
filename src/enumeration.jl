@@ -172,7 +172,9 @@ function _calibrate_pkeep(rules::BindingRules; pkeep, depth, n0, maxsize, maxsam
         pilot = _estimatecount(rules; pkeep, depth, n0, maxsize, maxsamples, rng)
         if pilot.status == MaxVerticesReached # if we reached maxsamples, reduce pkeep
             pkeep = pkeep / 2
-        elseif pilot.largest < maxsize # if we didnt reach the bottom of the tree, increase pkeep
+        elseif pilot.largest < (isfinite(maxsize) ? maxsize : depth + 1)
+            # the sample died out before the bottom of the tree, or with no cap before it got
+            # anywhere past the exact part, so increase pkeep
             pkeep = min(pmax, 2pkeep)
         else
             return pkeep
@@ -187,9 +189,9 @@ end
 Estimate the number of polyforms allowed by `rules`, returning a [`PolyformCount`](@ref).
 
 The count is exact whenever the enumeration can fit into `exact_budget`, and is otherwise estimated by randomly
-subsampling the reverse-search tree beyond the budget. Only polyforms of at most `maxsize` particles are counted,
-and finite `maxsize` is required for inexact counting. A bounded rule set given no `maxsize` is counted exactly,
-whatever `exact_budget`.
+subsampling the reverse-search tree beyond the budget. Only polyforms of at most `maxsize` particles are counted.
+With no `maxsize` the rule set has to be bounded, which is checked first, and the estimate then covers every
+structure there is.
 
 - `maxsize=Inf`: only count structures with at most this many particles.
 - `exact_budget=5000`: how many structures to enumerate exactly before switching to estimation.
@@ -200,8 +202,7 @@ whatever `exact_budget`.
 - `maxsamples=10^6`: how many structures a single trial may generate beyond the exact budget.
 - `rng=Random.default_rng()`: generator used for the subsampling.
 - `checkbounded=isinf(maxsize)`: refuse a rule set that admits arbitrarily large structures, see
-  [`isbounded`](@ref), rather than count until the budget runs out. One that passes is counted
-  exactly when no `maxsize` is given.
+  [`isbounded`](@ref), rather than count until the budget runs out.
 
 References:
 
@@ -224,11 +225,6 @@ function polycount(
     checkbounded::Bool=isinf(maxsize),
 )
     checkbounded && _checkbounded(rules)
-    if isinf(maxsize) && checkbounded
-        # rules are bounded
-        res = polyenum(rules; checkbounded=false)
-        return PolyformCount(res.nstructures, res.largest_size, false)
-    end
     budget = max(exact_budget, nspecies(rules) + nbonds(rules) + 1) # ensure we visit at least all monomers and dimers
     counts, largest, status = _count_upto_budget(rules; maxsize, budget)
 
@@ -236,12 +232,14 @@ function polycount(
         return PolyformCount(counts[end], largest, status == MaxDepthReached)
     end
 
-    if isinf(maxsize)
+    # past the budget with no cap, the estimate terminates only on a bounded rule set, which the
+    # check has established unless it was waived
+    if isinf(maxsize) && !checkbounded
         throw(
             ArgumentError(
-                "`rules` allows structures of unbounded size, of which there are " *
-                "infinitely many. Pass an explicit `maxsize` to count the structures " *
-                "up to a given number of particles.",
+                "`rules` may allow structures of unbounded size, of which there are infinitely " *
+                "many. Pass `maxsize` to count up to a given number of particles, or " *
+                "`checkbounded=true` to establish that the rules are bounded.",
             ),
         )
     end
@@ -267,7 +265,7 @@ function polycount(
         )
     end
 
-    return PolyformCount(samples, largest, true)
+    return PolyformCount(samples, largest, isfinite(maxsize))
 end
 
 # What an enumeration without a cap runs first.
