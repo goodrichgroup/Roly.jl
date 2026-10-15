@@ -1,5 +1,5 @@
 """
-    isbounded(rules::BindingRules; maxlength=_maxchainlength(rules) + 1)
+    isbounded(rules::BindingRules; maxlength=_maxchainlength(rules) + 2)
 
 Return `true` if every structure `rules` admits is finite, and `false` if it admits arbitrarily
 large ones.
@@ -7,13 +7,16 @@ large ones.
 `maxlength` bounds the chains tried. Lower it only to trade certainty for speed: below the
 default, `true` means no repeat was found within the budget.
 """
-function isbounded(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 1)
+function isbounded(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 2)
     return _repeatingstretch(rules; maxlength) === nothing
 end
 
 # A rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
 # structure, as `(; generator, cell, period)`, or `nothing` if none exists within `maxlength`.
-function _repeatingstretch(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 1)
+#
+# A chain of `n` particles carries `n - 1` states, the first particle having no incoming bond, so
+# the shortest chain certain to repeat one has two particles more than there are states.
+function _repeatingstretch(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 2)
     for i in 1:nspecies(rules)
         w = _walkchains(Polyform(rules, i), maxlength)
         w === nothing || return w
