@@ -44,14 +44,14 @@ strs = polygen(rules; maxsize=20, maxstrs=100_000)
 ```
 
 ### Counting
-To count polyforms without storing them, or to estimate the number of polyforms when full enumeration is too expensive, use `countpolyforms`:
+To count polyforms without storing them, or to estimate the number of polyforms when full enumeration is too expensive, use `polycount`:
 ```julia
-c = countpolyforms(rules)
+c = polycount(rules)
 c.n            # count (exact or estimated mean)
 c.exact        # true if the count is exact
 c.uncertainty  # standard error of the estimate (0 if exact)
 ```
-`countpolyforms` enumerates exactly up to a configurable budget and switches to estimation beyond it. Pass `maxsize` for systems that allow unbounded growth.
+`polycount` enumerates exactly up to a configurable budget and switches to estimation beyond it. Pass `maxsize` for systems that allow unbounded growth.
 
 ### Incorporating constraints
 It is often desirable to impose additional constraints on generated polyforms. For example, to enumerate only polyforms with at most one particle of species 4:

@@ -194,23 +194,15 @@ exterior_edges
 ## Enumeration
 
 ```@docs
+isbounded
 polyenum
 polygen
-countpolyforms
+polycount
 PolyformCount
 ```
 
 An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
 A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
-
-## Bounded growth
-
-Whether a rule set admits arbitrarily large structures.
-See [Bounded and unbounded rules](growth.md).
-
-```@docs
-isbounded
-```
 
 ## Bonds of a structure
 

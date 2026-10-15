@@ -137,10 +137,10 @@ julia> length(polys)
 
 ## Counting polyforms
 
-`countpolyforms` counts without storing anything, switching to an unbiased sampled estimate when exact enumeration gets too expensive.
+`polycount` counts without storing anything, switching to an unbiased sampled estimate when exact enumeration gets too expensive.
 
 ```jldoctest workflow
-julia> c = countpolyforms(rules);
+julia> c = polycount(rules);
 
 julia> c.n
 16.0

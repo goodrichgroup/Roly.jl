@@ -48,13 +48,19 @@ constraints.
 To ensure well-defined behavior, the function `f` may not accept the offspring of structures
 that it rejects.
 
+`checkbounded` refuses a rule set that admits arbitrarily large structures, see
+[`isbounded`](@ref), by throwing an `ArgumentError`. It defaults to `true` when neither `maxsize`
+nor `maxstrs` caps the enumeration.
+
 All other keyword arguments are passed to the underlying `reversesearch` routine.
 
 Returns a `NamedTuple` `(; nstructures, largest_size, status)`, where `status` is the `RSStatus` of
 the underlying reverse search: `Finished` if the enumeration ran to completion, and otherwise
 `MaxDepthReached`, `MaxVerticesReached`, or `BreakTriggered` to indicate why it stopped early.
 """
-function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
+function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf,
+                  checkbounded::Bool=isinf(maxsize) && isinf(maxstrs), kwargs...)
+    checkbounded && _checkbounded(rules)
     v₀ = Polyform(rules)
     BS = sitetype(rules)
     aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,SpeciesSiteLoc,Int}[])
@@ -69,7 +75,7 @@ polyenum(rules::BindingRules; kwargs...) = polyenum(nothing, rules; kwargs...)
 """
     polygen(rules::BindingRules; kwargs...)
 
-Enumerate all polyforms allowed by `rules` and return them as a `Vector`, sorted by number
+Return a list of all polyforms allowed by `rules`, sorted by number
 of particles. Keyword arguments are forwarded to [`polyenum`](@ref).
 """
 function polygen(rules; kwargs...)
@@ -157,8 +163,7 @@ function _estimatecount(rules::BindingRules; pkeep, depth, n0, maxsize, maxsampl
     return (; estimate=estimate[], largest=largest[], res.status)
 end
 
-# A subsampled search that dies out before reaching `maxsize` misses the deepest structures entirely,
-# and one that explodes is unaffordable. Optimize `pkeep` on throwaway pilot runs so the estimate more likely
+# Optimize `pkeep` on throwaway pilot runs so the estimate more likely
 # reaches the bottom of the search tree, without oversampling.
 function _calibrate_pkeep(rules::BindingRules; pkeep, depth, n0, maxsize, maxsamples, rng, npilots=4, pmax=0.95)
     pkeep = clamp(pkeep, eps(float(pkeep)), pmax)
@@ -177,13 +182,14 @@ function _calibrate_pkeep(rules::BindingRules; pkeep, depth, n0, maxsize, maxsam
 end
 
 """
-    countpolyforms(rules::BindingRules; maxsize=Inf, exact_budget=5000, kwargs...)
+    polycount(rules::BindingRules; maxsize=Inf, exact_budget=5000, kwargs...)
 
 Estimate the number of polyforms allowed by `rules`, returning a [`PolyformCount`](@ref).
 
-The count is exact whenever the enumeration can fit into `exact_budget`, and is otherwise estimated by randomly 
-subsampling the reverse-search tree beyond the budget. Only polyforms of at most `maxsize` particles are counted, 
-and finite `maxsize` is required for inexact counting.
+The count is exact whenever the enumeration can fit into `exact_budget`, and is otherwise estimated by randomly
+subsampling the reverse-search tree beyond the budget. Only polyforms of at most `maxsize` particles are counted,
+and finite `maxsize` is required for inexact counting. A bounded rule set given no `maxsize` is counted exactly,
+whatever `exact_budget`.
 
 - `maxsize=Inf`: only count structures with at most this many particles.
 - `exact_budget=5000`: how many structures to enumerate exactly before switching to estimation.
@@ -193,6 +199,9 @@ and finite `maxsize` is required for inexact counting.
 - `pkeep=nothing`: set the keep probability directly, disabling `eta` and the automatic refinement.
 - `maxsamples=10^6`: how many structures a single trial may generate beyond the exact budget.
 - `rng=Random.default_rng()`: generator used for the subsampling.
+- `checkbounded=isinf(maxsize)`: refuse a rule set that admits arbitrarily large structures, see
+  [`isbounded`](@ref), rather than count until the budget runs out. One that passes is counted
+  exactly when no `maxsize` is given.
 
 References:
 
@@ -203,7 +212,7 @@ References:
 
 See also [`polyenum`](@ref), [`polygen`](@ref).
 """
-function countpolyforms(
+function polycount(
     rules::BindingRules;
     maxsize=Inf,
     exact_budget=5_000,
@@ -212,7 +221,14 @@ function countpolyforms(
     pkeep=nothing,
     maxsamples=10^6,
     rng=Random.default_rng(),
+    checkbounded::Bool=isinf(maxsize),
 )
+    checkbounded && _checkbounded(rules)
+    if isinf(maxsize) && checkbounded
+        # rules are bounded
+        res = polyenum(rules; checkbounded=false)
+        return PolyformCount(res.nstructures, res.largest_size, false)
+    end
     budget = max(exact_budget, nspecies(rules) + nbonds(rules) + 1) # ensure we visit at least all monomers and dimers
     counts, largest, status = _count_upto_budget(rules; maxsize, budget)
 
@@ -252,4 +268,144 @@ function countpolyforms(
     end
 
     return PolyformCount(samples, largest, true)
+end
+
+# What an enumeration without a cap runs first.
+function _checkbounded(rules::BindingRules)
+    isbounded(rules) && return nothing
+    throw(
+        ArgumentError(
+            "`rules` allows infinitely many structures and cannot be enumerated completely. " *
+            "Pass `maxsize` or `maxstrs` to enumerate up to a bound, or set `checkbounded=false` to disable this error.",
+        ),
+    )
+end
+
+"""
+    isbounded(rules::BindingRules; maxchainlength=_nchainstates(rules) + 2)
+
+Return `true` if `rules` admits finitely many structures and `false` otherwise.
+
+The answer is computed by enumerating one-dimensional chains and checking if any chain can repeat indefinitely.
+`maxchainlength` sets the length of the longest chain tested. Decreasing `maxchainlength` from its default can 
+introduce false positive results.
+"""
+function isbounded(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
+    return _repeatingchain(rules; maxchainlength) === nothing
+end
+
+# A rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
+# structure, as `(; generator, cell, period)`, or `nothing` if none exists within `maxchainlength`.
+#
+# A chain of `n` particles carries `n - 1` states, the first particle having no incoming bond, so
+# the shortest chain certain to repeat one has two particles more than there are states.
+function _repeatingchain(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
+    for i in 1:nspecies(rules)
+        w = _walkchains(Polyform(rules, i), maxchainlength)
+        w === nothing || return w
+    end
+    return nothing
+end
+
+# How long a chain of `rules` can get before it must repeat a state. A state is the species at the
+# chain's end, which of its sites the incoming bond uses, and with which twist: one per site a bond
+# can arrive at, per distinct twist it can arrive with, over every species.
+function _nchainstates(rules::BindingRules)
+    total = 0
+    for i in 1:nspecies(rules)
+        ps = species(rules, i)
+        for k in 1:nsites(ps)
+            site = bindingsite(ps, k)
+            phases = 0
+            for loc in compatible_speciessitelocs(rules, color(site))
+                mate = bindingsite(rules, loc)
+                phases = max(phases, _ndistincttwists(mate, site))
+            end
+            total += phases
+        end
+    end
+    return total
+end
+
+# Depth-first over directed chains of up to `maxchainlength` particles, extending only at the particle
+# last added, so the states a chain has passed through are exactly the chain read from its start.
+# Returns the first repeat whose motion escapes. `raise!` forms every geometric contact, so a chain
+# may cross-link back onto itself; that is a valid structure, and the newest particle is extended
+# regardless.
+function _walkchains(poly::Polyform, maxchainlength)
+    rules = bindingrules(poly)
+    root = (speciesindex(poly.particles[1]), 0, 0)       # the first particle has no incoming bond
+    stack = [(poly, [root])]
+    while !isempty(stack)
+        poly, states = pop!(stack)
+        n = nparticles(poly)
+
+        # the stretch between two occurrences of a state repeats under one motion
+        j = findlast(==(states[end]), view(states, 1:(n - 1)))
+        if !isnothing(j)
+            w = _screwescape(poly, j, n)
+            isnothing(w) || return w
+        end
+        n < maxchainlength || continue
+
+        part = poly.particles[end]
+        children = empty(stack)
+        for k in 1:nsites(part, rules)
+            site = bindingsite(part, rules, k)
+            _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
+            isinert(rules, color(site)) && continue
+            for loc in compatible_speciessitelocs(rules, color(site))
+                mate = bindingsite(rules, loc)
+                for r in 0:(_ndistincttwists(site, mate) - 1)
+                    child = copy(poly)
+                    ismissing(raise!(child, site, loc, r)) && continue
+                    push!(children, (child, push!(copy(states), (loc.species, loc.site, Int(r)))))
+                end
+            end
+        end
+        append!(stack, reverse!(children))      # first child first, as the recursion had it
+    end
+    return nothing
+end
+
+# The stretch between two occurrences of a state repeats under `g`. Whether that goes on forever
+# is decided by how far the screw climbs, and if it can, by finitely many placements.
+function _screwescape(poly::Polyform, i::Integer, j::Integer)
+    rules = bindingrules(poly)
+    cell = poly.particles[i:(j - 1)]
+    g = poly.particles[j].pose * inv(poly.particles[i].pose)
+
+    axis, h = _screwclimb(g)
+    isnothing(h) && return nothing               # a pure rotation cannot escape its own annulus
+
+    us = (dot(p.pose.x, axis) for p in cell)
+    rmax = maximum(bounding_radius(species(rules, speciesindex(p))) for p in cell)
+    extent = maximum(us) - minimum(us) + 2 * rmax
+    gm = g
+    for _ in 1:ceil(Int, extent / abs(h))
+        for p in cell
+            moved = gm * p
+            first(_overlap_and_contacts(cell, moved, rules)) === true && return nothing
+        end
+        gm = gm * g
+    end
+    return (; generator=g, cell=cell, period=length(cell))
+end
+
+# `(axis, climb)` of a rigid motion: the direction it carries things along, and how far per
+# application. `(nothing, nothing)` when it carries them nowhere: a pure rotation in 3D, any
+# rotation in 2D, or the identity.
+function _screwclimb(g::Pose{D,F}) where {D,F}
+    tol = sqrt(eps(F))
+    turning = abs(rem(rotation_angle(g.psi), 2 * F(π), RoundNearest)) > tol
+    if !turning
+        # with no turn there is no rotation axis, so the axis is just the direction of translation
+        n = norm(g.x)
+        n > tol || return nothing, nothing        # the identity: no repeat at all
+        return g.x / n, n
+    end
+    D == 3 || return nothing, nothing
+    axis = rotation_axis(g.psi)
+    climb = dot(g.x, axis)
+    return axis, abs(climb) > tol ? climb : nothing
 end

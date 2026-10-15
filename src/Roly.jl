@@ -39,13 +39,11 @@ public bondindex, interior_edges, exterior_edges, subpolyform
 public canonbindingsite, canonbindingsites, rotationcenter
 
 export bondtypes
-# Whether a rule set is bounded
-export isbounded
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
 export RSStatus, Finished, MaxVerticesReached, MaxDepthReached, BreakTriggered
-export polyenum, polygen, countpolyforms, PolyformCount
+export polyenum, polygen, polycount, PolyformCount, isbounded
 
 # Species
 export PolygonParticleSpecies, UnitNgon, UnitTriangle, UnitSquare, UnitHexagon
@@ -94,7 +92,6 @@ include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
-include("bounded.jl")
 
 include("ruleeditor.jl")
 using .RuleEditor: ruleeditor

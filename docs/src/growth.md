@@ -24,10 +24,10 @@ isbounded(ring)
 Any connected part of a valid structure is valid, and an infinite structure contains an infinite chain, so it is enough to grow chains one particle at a time.
 A chain long enough must repeat one of finitely many states, and the rigid motion between the two repeats can then be applied forever.
 Here that motion is a quarter turn, and every copy of a pure rotation stays the same distance from its axis, so infinitely many of them cannot fit.
-The whole system is therefore finite and [`countpolyforms`](@ref) counts it exactly.
+The whole system is therefore finite and [`polycount`](@ref) counts it exactly.
 
 ```@example growth
-countpolyforms(ring)
+polycount(ring)
 ```
 
 Four structures, and the largest closes into a ring with no open site left.
@@ -64,11 +64,11 @@ render(polygen(square; maxsize=6)[end])
 
 ## Counting what cannot be enumerated
 
-An unbounded system has infinitely many structures, so [`countpolyforms`](@ref) needs a `maxsize`.
+An unbounded system has infinitely many structures, so [`polycount`](@ref) needs a `maxsize`.
 Up to that size it enumerates exactly while the count is small, and switches to sampling the reverse-search tree beyond `exact_budget`.
 
 ```@example growth
-countpolyforms(square; maxsize=9)
+polycount(square; maxsize=9)
 ```
 
 The `≈` and the error bar mark an estimate rather than a count.
