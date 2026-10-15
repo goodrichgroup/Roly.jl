@@ -8,7 +8,7 @@ large ones.
 default, `true` means no repeat was found within the budget.
 """
 function isbounded(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 2)
-    return _repeatingstretch(rules; maxlength) === nothing
+    return _repeatingchain(rules; maxlength) === nothing
 end
 
 # A rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
@@ -16,7 +16,7 @@ end
 #
 # A chain of `n` particles carries `n - 1` states, the first particle having no incoming bond, so
 # the shortest chain certain to repeat one has two particles more than there are states.
-function _repeatingstretch(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 2)
+function _repeatingchain(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 2)
     for i in 1:nspecies(rules)
         w = _walkchains(Polyform(rules, i), maxlength)
         w === nothing || return w

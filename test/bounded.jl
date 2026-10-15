@@ -19,13 +19,13 @@
     @test !isbounded(BindingRules([1 4 2 2; 2 1 1 3], UnitSquare))
 
     # the motion behind the answer
-    w = Roly._repeatingstretch(chainlike)
+    w = Roly._repeatingchain(chainlike)
     @test w !== nothing && w.period == 1
-    @test Roly._repeatingstretch(dimerrules) === nothing
-    @test Roly._repeatingstretch(ring) === nothing
+    @test Roly._repeatingchain(dimerrules) === nothing
+    @test Roly._repeatingchain(ring) === nothing
     # the motion accumulates a full 2pi over the two turns, which has to be wrapped before it is
     # judged to be turning at all
-    wt = Roly._repeatingstretch(turnrules)
+    wt = Roly._repeatingchain(turnrules)
     @test wt !== nothing && wt.period == 2
     @test isapprox(rem(rotation_angle(wt.generator.psi), 2pi, RoundNearest), 0; atol=1e-8)
     @test norm(wt.generator.x) ≈ 2
@@ -48,7 +48,7 @@
     tetra = PolyhedronParticleSpecies(Tetrahedron(); colors=fill(1, 4))
     helix = BindingRules([1 1 1 1], tetra)
     @test !isbounded(helix)
-    wh = Roly._repeatingstretch(helix)
+    wh = Roly._repeatingchain(helix)
     @test isapprox(rotation_angle(wh.generator.psi), acos(-2 / 3); atol=1e-6)
     @test abs(dot(wh.generator.x, rotation_axis(wh.generator.psi))) > 0.1
 end
