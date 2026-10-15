@@ -52,5 +52,5 @@
     @test eltype(exposedsitelocs(dimer)) == ParticleSiteLoc
     @test opensitelocs(dimer) ⊆ exposedsitelocs(dimer)
     @test all(l -> bindingsite(dimer, l) isa BindingSite, exposedsitelocs(dimer))
-    @test eltype(Roly.possible_attachments(rules, 1)) == SpeciesSiteLoc
+    @test eltype(Roly.compatible_speciessitelocs(rules, 1)) == SpeciesSiteLoc
 end

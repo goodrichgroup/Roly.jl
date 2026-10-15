@@ -15,7 +15,7 @@ end
 # structure, as `(; generator, cell, period)`, or `nothing` if none exists within `maxlength`.
 function _unboundedgrowth(rules::BindingRules; maxlength::Integer=_maxchainlength(rules) + 1)
     for i in 1:nspecies(rules)
-        w = _walkchains(Polyform(rules, i), [(i, 0, 0)], maxlength)
+        w = _walkchains(Polyform(rules, i), maxlength)
         w === nothing || return w
     end
     return nothing
@@ -30,7 +30,7 @@ function _maxchainlength(rules::BindingRules)
         for k in 1:nsites(ps)
             site = bindingsite(ps, k)
             phases = 1
-            for loc in possible_attachments(rules, color(site))
+            for loc in compatible_speciessitelocs(rules, color(site))
                 mate = bindingsite(rules, loc)
                 phases = max(phases, _ndistincttwists(mate, site))
             end
@@ -40,38 +40,43 @@ function _maxchainlength(rules::BindingRules)
     return total
 end
 
-# Depth-first over directed chains, extending only at the particle last added, so the states seen
-# so far are exactly the chain read from its start. Returns the first repeat whose motion escapes.
-function _walkchains(poly::Polyform, states, maxlength)
+# Depth-first over directed chains of up to `maxlength` particles, extending only at the particle
+# last added, so the states a chain has passed through are exactly the chain read from its start.
+# Returns the first repeat whose motion escapes. `raise!` forms every geometric contact, so a chain
+# may cross-link back onto itself; that is a valid structure, and the newest particle is extended
+# regardless.
+function _walkchains(poly::Polyform, maxlength)
     rules = bindingrules(poly)
-    n = nparticles(poly)
-    part = poly.particles[end]
-    for k in 1:nsites(part, rules)
-        site = bindingsite(part, rules, k)
-        _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
-        isinert(rules, color(site)) && continue
-        for loc in possible_attachments(rules, color(site))
-            mate = bindingsite(rules, loc)
-            for r in 0:(_ndistincttwists(site, mate) - 1)
-                child = copy(poly)
-                ismissing(raise!(child, site, loc, r)) && continue
-                # `raise!` forms every geometric contact, so growth may cross-link back onto the
-                # chain. That is a valid structure and often the interesting one; the walk only
-                # insists that one particle was added, and always extends the newest
-                nparticles(child) == n + 1 || continue
+    root = (speciesindex(poly.particles[1]), 0, 0)       # the first particle has no incoming bond
+    stack = [(poly, [root])]
+    while !isempty(stack)
+        poly, states = pop!(stack)
+        n = nparticles(poly)
 
-                state = (loc.species, loc.site, Int(r))
-                j = findlast(==(state), states)
-                if j !== nothing
-                    w = _screwescape(child, j, n + 1)
-                    w === nothing || return w
-                end
-                if n + 1 < maxlength
-                    w = _walkchains(child, push!(copy(states), state), maxlength)
-                    w === nothing || return w
+        # the stretch between two occurrences of a state repeats under one motion
+        j = findlast(==(states[end]), view(states, 1:(n - 1)))
+        if !isnothing(j)
+            w = _screwescape(poly, j, n)
+            isnothing(w) || return w
+        end
+        n < maxlength || continue
+
+        part = poly.particles[end]
+        children = empty(stack)
+        for k in 1:nsites(part, rules)
+            site = bindingsite(part, rules, k)
+            _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
+            isinert(rules, color(site)) && continue
+            for loc in compatible_speciessitelocs(rules, color(site))
+                mate = bindingsite(rules, loc)
+                for r in 0:(_ndistincttwists(site, mate) - 1)
+                    child = copy(poly)
+                    ismissing(raise!(child, site, loc, r)) && continue
+                    push!(children, (child, push!(copy(states), (loc.species, loc.site, Int(r)))))
                 end
             end
         end
+        append!(stack, reverse!(children))      # first child first, as the recursion had it
     end
     return nothing
 end
@@ -84,7 +89,7 @@ function _screwescape(poly::Polyform, i::Integer, j::Integer)
     g = poly.particles[j].pose * inv(poly.particles[i].pose)
 
     axis, h = _screwpitch(g)
-    h === nothing && return nothing               # a pure rotation cannot escape its own annulus
+    isnothing(h) && return nothing               # a pure rotation cannot escape its own annulus
 
     us = (dot(p.pose.x, axis) for p in cell)
     rmax = maximum(bounding_radius(species(rules, speciesindex(p))) for p in cell)

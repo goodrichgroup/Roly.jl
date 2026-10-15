@@ -41,7 +41,7 @@ struct BindingRules{D,PS<:ParticleSpecies}
     _bondlist::Vector{NTuple{2,Int}}
     _bonded_sites::Vector{NTuple{2,Vector{SpeciesSiteLoc}}}
     _bonded_species::Vector{NTuple{2,Int}}
-    _possible_attachments::Vector{Vector{SpeciesSiteLoc}}
+    _compatible_speciessitelocs::Vector{Vector{SpeciesSiteLoc}}
     _distinct_attachments::Vector{Vector{SpeciesSiteLoc}}
     _isinert::BitVector
     _onlattice::Bool
@@ -312,7 +312,7 @@ end
 
 The sites a particle may be attached through to a site of `color`, one per symmetry orbit.
 
-[`possible_attachments`](@ref) contains every site the interaction matrix permits, this only lists the
+[`compatible_speciessitelocs`](@ref) contains every site the interaction matrix permits, this only lists the
 ones that lead to distinguishable structures.
 """
 @inline distinct_attachments(rules::BindingRules, color::Integer) = rules._distinct_attachments[color]
@@ -371,13 +371,13 @@ function graphrep(rules::BindingRules)
 end
 
 """
-    possible_attachments(rules::BindingRules, color::Integer)
+    compatible_speciessitelocs(rules::BindingRules, color::Integer)
 
 The sites a particle may be attached through to a site of `color`, every one the interaction
 matrix permits. See [`distinct_attachments`](@ref).
 """
-@inline function possible_attachments(rules::BindingRules, color::Integer)
-    return rules._possible_attachments[color]
+@inline function compatible_speciessitelocs(rules::BindingRules, color::Integer)
+    return rules._compatible_speciessitelocs[color]
 end
 
 function Base.show(io::Core.IO, rules::BindingRules)
