@@ -38,9 +38,6 @@ export exposedsites, opensites, exposedsitelocs, opensitelocs
 public bondindex, interior_edges, exterior_edges, subpolyform
 public canonbindingsite, canonbindingsites, rotationcenter
 
-# Environments
-export PolyformEnvironment, ParticleEnvironment, BondEnvironment
-export particleenvironments, bondenvironments, crop, rootenvironment
 export Tiling, tilings, tilingenum, isunitcell, tilelatticevectors, cantile, canchain, isunbounded,
        chainstatebound, growthwitness
 export unitcell, latticevectors, bondtypes, iscomplete, tilingorder
@@ -92,7 +89,6 @@ include("bindingrules.jl")
 include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
-include("environments.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
