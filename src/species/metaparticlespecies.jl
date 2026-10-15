@@ -301,7 +301,6 @@ function _underlying_particles(meta::MetaPolyform)
     return _substitute_particles(meta, subs)
 end
 
-# A meta-species substitutes the polyform it wraps
 function _defaultsubstitution(ps::MetaParticleSpecies, ::BindingRules, rules::BindingRules, ::Integer)
     return _checkspecies(polyform(ps), rules)
 end
