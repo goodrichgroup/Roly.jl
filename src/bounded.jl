@@ -82,13 +82,13 @@ function _walkchains(poly::Polyform, maxlength)
 end
 
 # The stretch between two occurrences of a state repeats under `g`. Whether that goes on forever
-# is decided by the screw's pitch, and if it can, by finitely many placements.
+# is decided by how far the screw climbs, and if it can, by finitely many placements.
 function _screwescape(poly::Polyform, i::Integer, j::Integer)
     rules = bindingrules(poly)
     cell = poly.particles[i:(j - 1)]
     g = poly.particles[j].pose * inv(poly.particles[i].pose)
 
-    axis, h = _screwpitch(g)
+    axis, h = _screwclimb(g)
     isnothing(h) && return nothing               # a pure rotation cannot escape its own annulus
 
     us = (dot(p.pose.x, axis) for p in cell)
@@ -105,20 +105,24 @@ function _screwescape(poly::Polyform, i::Integer, j::Integer)
     return (; generator=g, cell=cell, period=length(cell))
 end
 
-# `(axis, pitch)` of a rigid motion, or `(nothing, nothing)` when it has no translation along its
-# axis: a pure rotation in 3D, any rotation in 2D, or the identity.
-function _screwpitch(g::Pose{D,F}) where {D,F}
+# `(axis, climb)` of a rigid motion: the direction it carries things along, and how far per
+# application. `(nothing, nothing)` when it carries them nowhere: a pure rotation in 3D, any
+# rotation in 2D, or the identity.
+function _screwclimb(g::Pose{D,F}) where {D,F}
     tol = sqrt(eps(F))
     # a composed motion accumulates its angle, so a full turn comes back as 2π rather than 0;
     # wrap to (-π, π] before asking whether it turns at all
     turning = abs(rem(rotation_angle(g.psi), 2 * F(π), RoundNearest)) > tol
     if !turning
+        # with no turn there is no rotation axis, so the translation's own direction serves, and
+        # the climb along it is the whole translation. In the plane this is the only motion that
+        # escapes: a turn there has a center rather than an axis, and nothing to climb along
         n = norm(g.x)
         n > tol || return nothing, nothing        # the identity: no repeat at all
-        return g.x / n, n                         # a pure translation is a screw of zero angle
+        return g.x / n, n
     end
-    D == 3 || return nothing, nothing             # in the plane a turn has no axis to climb
+    D == 3 || return nothing, nothing
     axis = rotation_axis(g.psi)
-    pitch = dot(g.x, axis)
-    return axis, abs(pitch) > tol ? pitch : nothing
+    climb = dot(g.x, axis)                        # the translation's part along the axis; the rest
+    return axis, abs(climb) > tol ? climb : nothing    # only says where the axis sits
 end
