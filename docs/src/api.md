@@ -139,6 +139,19 @@ PatchyDisk
 PatchySphere
 ```
 
+### Meta-species
+
+A [`Polyform`](@ref) wrapped as a species, so that assemblies can be built out of assemblies.
+
+```@docs
+MetaParticleSpecies
+BindingRules(::MetaParticleSpecies)
+BindingRules(::AbstractVector{<:MetaParticleSpecies})
+polyform
+inducedrules
+recast
+```
+
 ## Binding rules
 
 ```@docs
@@ -181,13 +194,15 @@ exterior_edges
 ## Enumeration
 
 ```@docs
+isbounded
 polyenum
 polygen
-countpolyforms
+polycount
 PolyformCount
+EnumerationStatus
 ```
 
-An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
+An enumeration reports why it stopped as an `EnumerationStatus`: `Complete`, `MaxSizeReached`, `MaxPolysReached` or `Interrupted`.
 A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
 
 ## Bonds of a structure

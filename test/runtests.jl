@@ -25,6 +25,7 @@ include("testutils.jl")
         include("species/polygonparticlespecies.jl")
         include("species/polyhedronparticlespecies.jl")
         include("species/patchyparticlespecies.jl")
+        include("species/metaparticlespecies.jl")
     end
 end;
 

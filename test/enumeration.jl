@@ -25,9 +25,9 @@
          4 2 1 1],
         UnitTriangle)
 
-    nstrs_16_enum = polyenum(I16)[1]
-    nstrs_137_enum = polyenum(I137)[1]
-    nstrs_cyc_enum = polyenum(Icyc)[1]
+    nstrs_16_enum = polyenum(I16).n
+    nstrs_137_enum = polyenum(I137).n
+    nstrs_cyc_enum = polyenum(Icyc).n
 
     @test nstrs_16_enum == 16
     @test nstrs_137_enum == 137
@@ -79,7 +79,7 @@
         # one twist per bond, so it cannot leave the lattice.
         @test all(i -> Roly._ndistincttwists(Roly.bindingsite(ps, i), Roly.bindingsite(ps, i)) == 1,
                   sticky)
-        @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == cumsum(want)
+        @test [polyenum(rules; maxsize=i).n for i in eachindex(want)] == cumsum(want)
     end
 
     # The same two tilings from prisms whose side faces are *squares* rather than rectangles.
@@ -90,7 +90,7 @@
         b = Roly.bindingsite(species(rules, 1), first(sidefaces(shp)))
         @test (b.sitesym, b.stab) == (4, 2)
         @test Roly._ndistincttwists(b, b) == 1
-        @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
+        @test [polyenum(rules; maxsize=i).n for i in eachindex(want)] == want
     end
 
     # setting locking=false, allows out of plane binding
@@ -102,17 +102,17 @@
         @test Roly.twistfreedom(b) == b.sitesym == 4
         @test Roly._ndistincttwists(b, b) == 2
         rules = BindingRules([1 first(sides) 1 first(sides)], ps)
-        @test [polyenum(rules; maxsize=i)[1] for i in eachindex(want)] == want
+        @test [polyenum(rules; maxsize=i).n for i in eachindex(want)] == want
     end
 
     # 2D hexagons (one-sided) vs 3D hexagons (free)
     hexagons = BindingRules([1 1 1 1], PolygonParticleSpecies(6, 1.0; colors=fill(1, 6)))
     n_polyhexes_onesided = [1, 1, 3, 10, 33, 147]     # https://oeis.org/A006535
-    @test [polyenum(hexagons; maxsize=i)[1] for i in eachindex(n_polyhexes_onesided)] ==
+    @test [polyenum(hexagons; maxsize=i).n for i in eachindex(n_polyhexes_onesided)] ==
           cumsum(n_polyhexes_onesided)
 
-    nstrs_polymino_enum = [polyenum(I_polymino, maxsize=i)[1] for i in 1:length(n_polyminoes_cumulative)]
-    nstrs_polyiamond_enum = [polyenum(I_polyiamond, maxsize=i)[1] for i in 1:length(n_polyiamonds_cumulative)]
+    nstrs_polymino_enum = [polyenum(I_polymino, maxsize=i).n for i in 1:length(n_polyminoes_cumulative)]
+    nstrs_polyiamond_enum = [polyenum(I_polyiamond, maxsize=i).n for i in 1:length(n_polyiamonds_cumulative)]
 
     @test nstrs_polymino_enum == n_polyminoes_cumulative
     @test nstrs_polyiamond_enum == n_polyiamonds_cumulative
@@ -124,38 +124,47 @@
     # @test nstrs_polyiamond_gen == n_polyiamonds_cumulative
 
     # Count polyforms
-    @test polyenum(I16).status == Finished
-    @test polyenum(I_polymino; maxsize=6).status == MaxDepthReached
-    @test polyenum(I_polymino; maxstrs=50).status == MaxVerticesReached
+    @test polyenum(I16).status == Complete
+    @test polyenum(I_polymino; maxsize=6).status == MaxSizeReached
+    @test polyenum(I_polymino; maxpolys=50).status == MaxPolysReached
 
     # Small enough to enumerate exactly, so no estimation should happen at all.
-    c = countpolyforms(I137)
+    c = polycount(I137)
     @test c.exact
     @test c.n == 137
-    @test c.uncertainty == 0.0
-    @test !c.size_truncated
+    @test c.err == 0.0
+    @test (c.status == Complete)
+
+    # Bounded but too large for the budget: estimated, and with no cutoff the estimate covers
+    # every structure there is.
+    c = polycount(I137; budget=20, rng=Xoshiro(2))
+    @test !c.exact
+    @test (c.status == Complete)
+    @test abs(c.n - 137) / 137 < 0.5
+    # with the check waived nothing says the estimate would terminate, so it is refused
+    @test_throws ArgumentError polycount(I137; budget=20, checkbounded=false)
 
     # Capped by maxsize, but still exactly enumerated up to that cap.
-    c = countpolyforms(I_polymino; maxsize=6)
+    c = polycount(I_polymino; maxsize=6)
     @test c.exact
     @test c.n == n_polyminoes_cumulative[6]
-    @test c.size_truncated
-    @test c.largest_size == 6
+    @test (c.status == MaxSizeReached)
+    @test c.maxsize == 6
 
     # Polyominoes are unbounded, so a count without a maxsize should error.
-    @test_throws ArgumentError countpolyforms(I_polymino; exact_budget=500)
+    @test_throws ArgumentError polycount(I_polymino; budget=500)
 
     for maxsamples in (300, 3000)
-        c = countpolyforms(I_polymino; maxsize=9, exact_budget=500, maxsamples, rng=Xoshiro(7))
+        c = polycount(I_polymino; maxsize=9, budget=500, maxsamples, rng=Xoshiro(7))
         @test c.n >= 285 # we should get at least this many from the exact budget
         @test abs(c.n - n_polyminoes_cumulative[9]) / n_polyminoes_cumulative[9] < 0.5
     end
 
     # Estimation. The tolerance is deliberately loose
-    c = countpolyforms(I_polymino; maxsize=9, exact_budget=500, ntrials=5, rng=Xoshiro(1))
+    c = polycount(I_polymino; maxsize=9, budget=500, ntrials=5, rng=Xoshiro(1))
     @test !c.exact
-    @test c.size_truncated
-    @test c.largest_size == 9
+    @test (c.status == MaxSizeReached)
+    @test c.maxsize == 9
     @test c.n >= 285 # we should get at least this many from the exact budget
     @test abs(c.n - n_polyminoes_cumulative[9]) / n_polyminoes_cumulative[9] < 0.25
     @test length(c.trials) == 5
@@ -163,7 +172,7 @@
 
     # Counts per size
     counts, _, status = Roly._count_upto_budget(Icyc; maxsize=12, budget=40)
-    @test status == MaxVerticesReached
+    @test status == MaxPolysReached
     @test counts == [4, 9, 15, 22, 31]
     @test let counts_per_size = diff([0; counts]); counts_per_size[end] / counts_per_size[end-1] end ≈ 9 / 7
 
@@ -176,17 +185,17 @@
     end
 
     # A budget too small to reach size 2 is raised to one that can, instead of failing.
-    c = countpolyforms(I_polymino; maxsize=9, exact_budget=1, rng=Xoshiro(5))
+    c = polycount(I_polymino; maxsize=9, budget=1, rng=Xoshiro(5))
     @test c.n >= 4
 
     # A keep probability given outright is used as given, and has to be one.
-    @test_throws ArgumentError countpolyforms(I_polymino; maxsize=9, exact_budget=500, pkeep=0.0)
-    @test_throws ArgumentError countpolyforms(I_polymino; maxsize=9, exact_budget=500, pkeep=1.5)
-    @test countpolyforms(I_polymino; maxsize=7, exact_budget=500, pkeep=0.95, rng=Xoshiro(3)).n > 0
+    @test_throws ArgumentError polycount(I_polymino; maxsize=9, budget=500, pkeep=0.0)
+    @test_throws ArgumentError polycount(I_polymino; maxsize=9, budget=500, pkeep=1.5)
+    @test polycount(I_polymino; maxsize=7, budget=500, pkeep=0.95, rng=Xoshiro(3)).n > 0
 
     # Every trial running out of samples leaves nothing to average, which is an error rather
     # than a count of zero.
-    @test_throws ErrorException countpolyforms(I_polymino; maxsize=9, exact_budget=500,
+    @test_throws ErrorException polycount(I_polymino; maxsize=9, budget=500,
                                                pkeep=0.95, maxsamples=1, rng=Xoshiro(3))
 
     # Calibration walks the keep probability towards one that reaches the bottom of the tree.
@@ -257,7 +266,7 @@
                 rules = BindingRules(bonds, [chainspecies(alike) for _ in 1:k])
                 @test nspecies(rules) == k
                 want = alike ? [(k^n + k^cld(n, 2)) ÷ 2 for n in 1:N] : [k^n for n in 1:N]
-                @test [polyenum(rules; maxsize=n)[1] for n in 1:N] == cumsum(want)
+                @test [polyenum(rules; maxsize=n).n for n in 1:N] == cumsum(want)
             end
         end
     end
@@ -302,4 +311,96 @@
     @test mismatches == String[]
     # Guards against a truncated or unreadable data file passing silently.
     @test nchecked == 2725
+    @testset "bounded" begin
+        chainlike = BindingRules([1 1 1 3], UnitSquare)
+        squarerules = BindingRules([1 2 1 4; 1 3 1 1], UnitSquare)
+        dimerrules = BindingRules([1 1 2 1], UnitSquare)
+        ring = BindingRules([1 1 1 2], UnitSquare)
+        turnrules = BindingRules([1 1 1 2; 1 3 1 4], UnitSquare)
+        shifted = BindingRules([1 4 2 2; 2 1 1 3], UnitSquare)
+        cubes = PolyhedronParticleSpecies(Cube(); colors=fill(1, 6))
+        stack = BindingRules([1 1 1 1], cubes)
+        # one bondable face per cube: dimers and nothing else
+        capped = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=[1, 2, 2, 2, 2, 2]))
+        helix = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Tetrahedron(); colors=fill(1, 4)))
+        # patches a third of a turn apart close into a hexagon; opposite ones run on forever
+        hexring = BindingRules([1 1 1 2], PatchyDisk([0.0, 2π / 3], 0.5; colors=1:2))
+        rod = BindingRules([1 1 1 2], PatchyDisk([0.0, π], 0.5; colors=1:2))
+
+        # non-convex meta-particles, in the plane and in space: an L of three squares or cubes,
+        # whose notch the overlap test has to see. Exposing one site leaves dimers; exposing them
+        # all under the squares' own rules lets the Ls chain and tile
+        notcollinear(p) = rank(reduce(hcat, [q.pose.x - p.particles[1].pose.x for q in p.particles])) > 1
+        L = first(p for p in polygen(squarerules; maxsize=3) if nparticles(p) == 3 && notcollinear(p))
+        cubeL = first(p for p in polygen(stack; maxsize=3) if nparticles(p) == 3 && notcollinear(p))
+        single(shape) = BindingRules([1 1 1 1], MetaParticleSpecies(shape, opensitelocs(shape)[1:1]; colors=[1]))
+        whole(shape) = BindingRules(MetaParticleSpecies(shape))
+
+        bounded = [dimerrules, ring, capped, hexring, single(L), single(cubeL)]
+        unbounded = [chainlike, squarerules, turnrules, shifted, stack, helix, rod, whole(L), whole(cubeL)]
+        @test all(isbounded, bounded)
+        @test !any(isbounded, unbounded)
+
+        # against enumeration, which knows nothing of chains or motions. A bounded system is one
+        # whose exact enumeration finishes
+        for r in bounded
+            @test polyenum(r; checkbounded=false).status == Complete
+        end
+        # an unbounded one does not finish, and its witness lays down copies that neither collide
+        # nor circle: ten of them, judged by geometry alone
+        function escapes((g, C), rules; copies=10)
+            parts = copy(C)
+            gm = g
+            for _ in 1:copies
+                for p in C
+                    moved = gm * p
+                    first(Roly._overlap_and_contacts(parts, moved, rules)) && return false
+                    push!(parts, moved)
+                end
+                gm = gm * g
+            end
+            span = maximum(norm(p.pose.x - q.pose.x) for p in C, q in C)
+            return norm(parts[end].pose.x - parts[1].pose.x) > span
+        end
+        for r in unbounded
+            @test polyenum(r; maxpolys=20, checkbounded=false).status == MaxPolysReached
+            w = Roly._escapingrepeat(r)
+            @test w !== nothing && escapes(w, r)
+        end
+
+        # an enumeration with no cap refuses an unbounded system before it starts; a cap, or
+        # asking it not to check, lets it run
+        @test_throws ArgumentError polyenum(squarerules)
+        @test_throws ArgumentError polygen(squarerules)
+        @test_throws ArgumentError polycount(squarerules)
+        @test polyenum(squarerules; maxsize=3).status == MaxSizeReached
+        @test polyenum(squarerules; maxpolys=5).status == MaxPolysReached
+        @test polyenum(squarerules; checkbounded=false, maxpolys=5).status == MaxPolysReached
+        @test length(polygen(ring)) == 4
+
+        # the motion behind the answer
+        @test length(last(Roly._escapingrepeat(chainlike))) == 1
+        @test Roly._escapingrepeat(ring) === nothing
+        # two quarter turns compose to a translation over two particles; the motion accumulates a
+        # full 2pi, which has to be wrapped before it is judged to be turning at all
+        gt, Ct = Roly._escapingrepeat(turnrules)
+        @test length(Ct) == 2
+        @test isapprox(rem(rotation_angle(gt.psi), 2pi, RoundNearest), 0; atol=1e-8)
+        @test norm(gt.x) ≈ 2
+        # the helix repeats under a screw whose turn is irrational, so it never closes, and whose
+        # climb is what escapes
+        gh, _ = Roly._escapingrepeat(helix)
+        @test isapprox(rotation_angle(gh.psi), acos(-2 / 3); atol=1e-6)
+        @test abs(dot(gh.x, rotation_axis(gh.psi))) > 0.1
+
+        # the chain length is derived from the states a chain can be in, counting only the sites
+        # a bond can reach: three species of squares with four bondable sites between them
+        @test Roly._nchainstates(BindingRules([1 1 2 1; 2 2 3 1], UnitSquare)) == 4
+        # below the default, `true` is a budget running out: this repeat needs two particles
+        @test isbounded(turnrules; maxchainlength=1)
+        @test !isbounded(turnrules; maxchainlength=4)
+        # with no bond at all there is nothing to grow, and one particle is the whole system
+        inert = BindingRules(falses(4, 4), UnitSquare)
+        @test isbounded(inert) && length(polygen(inert)) == 1
+    end
 end;

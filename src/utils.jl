@@ -114,3 +114,9 @@ function blockdiag!(g::AbstractNautyGraph, h::AbstractNautyGraph)
     end
     return g
 end
+
+# Use ReverseSearch to implement a basic backtrack search. Assumes that adj! already doesnt not lead to duplicates.
+function _backtrack(f, adj!, v₀; aux=nothing, kwargs...)
+    rsys = RSSystem((k, _) -> k, adj!, v₀; compare=Returns(true), aux)
+    return reversesearch(f, rsys; cache=CacheAll(), kwargs...)
+end

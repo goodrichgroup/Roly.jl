@@ -1,11 +1,11 @@
 using Roly: nspecies, nbonds, nsites, dimension, species,
             interactionmatrix, bonded_colors, bonded_sites, bonded_species,
-            sitesofcolor, speciesofcolor, isinert, possible_attachments
+            sitesofcolor, speciesofcolor, isinert, compatible_speciessitelocs
 
 using Roly: PolygonParticleSpecies, PolyhedronParticleSpecies, PatchyDisk, Cube, Prism,
             Tetrahedron, Polyhedron, facenormal, nfaces
 
-using Roly: possible_attachments, distinct_attachments, collect_attachments,
+using Roly: compatible_speciessitelocs, distinct_attachments, collect_attachments,
             raise!, Polyform, graphrep, PolyhedronParticleSpecies, PolygonParticleSpecies,
             Cube, Prism, nfaces, color, bindingsites
 
@@ -46,8 +46,8 @@ using StaticArrays: SVector
     @test !isinert(rules, c1)
     @test !isinert(rules, SpeciesSiteLoc(1, 1))
 
-    @test possible_attachments(rules, c1) == [SpeciesSiteLoc(1, 3)]
-    @test possible_attachments(rules, c3) == [SpeciesSiteLoc(1, 1)]
+    @test compatible_speciessitelocs(rules, c1) == [SpeciesSiteLoc(1, 3)]
+    @test compatible_speciessitelocs(rules, c3) == [SpeciesSiteLoc(1, 1)]
 
     sys1bond = BindingRules([1 1 1 3], UnitSquare)
     c2 = color(sys1bond, SpeciesSiteLoc(1, 2))
@@ -121,11 +121,11 @@ using StaticArrays: SVector
                       (6, [1, 1, 3, 10, 33, 147]))          # https://oeis.org/A006535
         rules = BindingRules([1 1 1 1], poly(n))
         @test rules._onlattice
-        counts = [polyenum(rules; maxsize=i)[1] for i in eachindex(want)]
+        counts = [polyenum(rules; maxsize=i).n for i in eachindex(want)]
         @test counts == cumsum(want)
         slow = withoutlattice(rules)
         @test !slow._onlattice
-        @test [polyenum(slow; maxsize=i)[1] for i in eachindex(want)] == counts
+        @test [polyenum(slow; maxsize=i).n for i in eachindex(want)] == counts
     end
     
     # orbit testing
@@ -133,13 +133,13 @@ using StaticArrays: SVector
     # A cube with every face alike has one orbit of six sites, so six compatible mates collapse
     # to one representative. With every face distinct there is nothing to collapse.
     alike = BindingRules([1 1 1 1], PolyhedronParticleSpecies(Cube(); colors=fill(1, 6)))
-    @test length(possible_attachments(alike, 1)) == 6
+    @test length(compatible_speciessitelocs(alike, 1)) == 6
     @test length(distinct_attachments(alike, 1)) == 1
 
     distinct = BindingRules(reduce(vcat, [[1 i 1 j] for i in 1:6 for j in i:6]),
                             PolyhedronParticleSpecies(Cube()))
     for c in 1:Roly.ncolors(distinct)
-        @test length(distinct_attachments(distinct, c)) == length(possible_attachments(distinct, c))
+        @test length(distinct_attachments(distinct, c)) == length(compatible_speciessitelocs(distinct, c))
     end
 
     # check that representatives are enough, and everything else is just duplicates
@@ -178,7 +178,7 @@ using StaticArrays: SVector
     for (name, rules) in systems
         poly = Polyform(rules, 1)
         for _ in 1:3     # monomer, then grow, so the host is asymmetric in later rounds too
-            @test children(poly, possible_attachments) == children(poly, distinct_attachments)
+            @test children(poly, compatible_speciessitelocs) == children(poly, distinct_attachments)
             nxt = nothing
             for (site, loc, r) in collect_attachments(poly)
                 trial = copy(poly)

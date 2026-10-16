@@ -46,8 +46,8 @@ end
     s = _mkstate(SquareLat(), UnitSquare; cells=cells)
     bonds = bonds_matrix(s)
     rules = BindingRules(bonds, UnitSquare)
-    r = polyenum(rules; maxsize=3, maxstrs=100)
-    @test r.nstructures > 0
+    r = polyenum(rules; maxsize=3, maxpolys=100)
+    @test r.n > 0
 
      #_visible_species_count"
     s = _mkstate(SquareLat(), UnitSquare)

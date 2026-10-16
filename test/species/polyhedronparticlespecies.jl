@@ -437,7 +437,7 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
     shp = Prism(3)
     sides = [i for i in 1:nfaces(shp) if abs(Roly.facenormal(shp, i)[3]) < 1e-8]
     colors = [i in sides ? 1 : 2 for i in 1:nfaces(shp)]
-    counts(rules) = [polyenum(rules; maxsize=i)[1] for i in 1:5]
+    counts(rules) = [polyenum(rules; maxsize=i).n for i in 1:5]
 
     # Turning a whole orbit by the same amount turns the partner by twice that, since the offset
     # lands on both sides of the face-to-face flip. Here that is 2*90 = 180 degrees, which is a
@@ -543,4 +543,5 @@ using Graphs, NautyGraphs, LinearAlgebra, StaticArrays, Rotations, Random
         @test symmetrynumber(plain) == 1
         @test symmetrynumber(sym) == sigma
     end
+
 end

@@ -42,8 +42,8 @@ export bondtypes
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
-export RSStatus, Finished, MaxVerticesReached, MaxDepthReached, BreakTriggered
-export polyenum, polygen, countpolyforms, PolyformCount
+export EnumerationStatus, Complete, MaxSizeReached, MaxPolysReached, Interrupted
+export polyenum, polygen, polycount, PolyformCount, isbounded
 
 # Species
 export PolygonParticleSpecies, UnitNgon, UnitTriangle, UnitSquare, UnitHexagon
@@ -54,6 +54,7 @@ export SymmetricUnitTetrahedron, SymmetricUnitCube, SymmetricUnitOctahedron
 export SymmetricUnitDodecahedron, SymmetricUnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
+export MetaParticleSpecies, polyform, inducedrules, recast
 
 # Public, but not exported: reach for these as `Roly.faces(p)`, or import them by name.
 # They are stable API, but specific enough to a body, an encoding or a species that putting
@@ -90,6 +91,7 @@ include("enumeration.jl")
 include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
+include("species/metaparticlespecies.jl")
 
 include("ruleeditor.jl")
 using .RuleEditor: ruleeditor
