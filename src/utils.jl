@@ -115,10 +115,7 @@ function blockdiag!(g::AbstractNautyGraph, h::AbstractNautyGraph)
     return g
 end
 
-# Runs a depth-first search over a tree given by its children alone, on `reversesearch`.
-# `adj!(u, v, j, aux)` writes the `j`-th child of `v` into `u`, `missing` for none at `j` and
-# `nothing` past the last; `f(v, depth)` returns `ACCEPT`, `REJECT` or `BREAK`. Every node has one
-# parent, so the parent check is idle, and the cache keeps the way back up, hence `CacheAll`.
+# Use ReverseSearch to implement a basic backtrack search. Assumes that adj! already doesnt not lead to duplicates.
 function _backtrack(f, adj!, v₀; aux=nothing, kwargs...)
     rsys = RSSystem((k, _) -> k, adj!, v₀; compare=Returns(true), aux)
     return reversesearch(f, rsys; cache=CacheAll(), kwargs...)

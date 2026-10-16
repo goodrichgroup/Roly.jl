@@ -411,7 +411,7 @@ function _screwescape(c::_Chain, i::Integer, j::Integer)
     for _ in 1:ceil(Int, extent / abs(h))
         for p in C
             moved = gm * p
-            first(_overlap_and_contacts(C, moved, rules)) === true && return nothing
+            _overlap_and_contacts(C, moved, rules)[1] && return nothing
         end
         gm = gm * g
     end
