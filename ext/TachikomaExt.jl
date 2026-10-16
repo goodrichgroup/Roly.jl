@@ -15,7 +15,9 @@ using Roly:
     color,
     composition,
     corners,
-    countpolyforms,
+    polycount,
+    isbounded,
+    SpeciesSiteLoc,
     dimension,
     facenormal,
     facevertices,
@@ -839,7 +841,7 @@ const DOTS_PER_PARTICLE_3D = 24
 const ZOOM_STEP = 1.3
 const ZOOM_RANGE = 16.0
 
-# `maxstrs` is what keeps the enumeration cheap: the search stops after that many structures
+# `maxpolys` is what keeps the enumeration cheap: the search stops after that many structures
 # however permissive the rules are. Neither bound has a ceiling, since what is worth waiting for
 # is the user's to judge.
 const MINSIZE = 1
@@ -896,9 +898,13 @@ const DETAIL_W = 24
     # the listing stopped short of them.
     expected::String = ""
     truncated::Bool = false
+    # Whether the rules admit finitely many structures at all, and how many in total when they
+    # do. `nothing` until a run has been asked for, both being searches of their own.
+    bounded::Union{Nothing,Bool} = nothing
+    total::String = ""
     selected::Int = 1
     maxsize::Int = 6
-    maxstrs::Int = 200
+    maxpolys::Int = 200
     stale::Bool = true
     # How many thumbnails the last frame fitted across, so that up and down move a whole row.
     gridcols::Int = 1
@@ -1222,6 +1228,8 @@ function refresh!(m::EditorModel; near=nothing)
     n = totalcolors(m)
     m.pair = (clamp(m.pair[1], 1, max(n, 1)), clamp(m.pair[2], 1, max(n, 1)))
     m.stale = true
+    m.bounded = nothing
+    m.total = ""
     if near === nothing
         m.anchor = isempty(m.free) ? 1 : mod1(m.anchor, length(m.free))
     else
@@ -1329,7 +1337,7 @@ Enumerate the polyforms the current rules allow, for the preview pane.
 
 Run only when asked, since a permissive rules set can take long enough to be felt between
 keystrokes, and it is the one part of the editor whose cost is not bounded by the size of the
-drawing. `m.maxstrs` is what actually bounds it: the search stops after that many structures
+drawing. `m.maxpolys` is what actually bounds it: the search stops after that many structures
 however many the rules admit. A rules set that fails to enumerate leaves the pane empty with a
 message rather than taking the editor down.
 """
@@ -1340,21 +1348,29 @@ function enumerate!(m::EditorModel)
     m.expected = ""
     m.truncated = false
     m.enuminfo = ""
+    m.bounded = nothing
+    m.total = ""
     rules = m.rules
     if rules === nothing || nbonds(rules) == 0
         m.enuminfo = "no bonds"
         return m
     end
     try
+        # Whether the rules admit finitely many structures at all. A design that does not is
+        # usually not what was intended, and nothing in the listing itself says so: a run cut
+        # off at `maxsize` looks the same either way.
+        m.bounded = isbounded(rules)
         # How many there are, before finding out which. The count is exact while the enumeration
         # fits its own budget and an estimate beyond that, so it reports the size of the problem
         # even where listing every structure is out of reach, which is what says whether the
-        # listing below is the whole of it.
-        m.expected = countlabel(countpolyforms(rules; maxsize=m.maxsize))
-        polys = polygen(rules; maxsize=m.maxsize, maxstrs=m.maxstrs)
+        # listing below is the whole of it. With bounded rules it is also worth having over every
+        # size, which is the number the design is really after.
+        m.expected = countlabel(polycount(rules; maxsize=m.maxsize))
+        m.bounded && (m.total = countlabel(polycount(rules)))
+        polys = polygen(rules; maxsize=m.maxsize, maxpolys=m.maxpolys)
         filter!(p -> nparticles(p) > 0, polys)
         append!(m.polyforms, polys)
-        m.truncated = length(polys) >= m.maxstrs
+        m.truncated = length(polys) >= m.maxpolys
     catch err
         err isa InterruptException && rethrow()
         m.enuminfo = "cannot enumerate"
@@ -1382,16 +1398,42 @@ Return the line the enumeration pane is titled with: how many structures the las
 many there are, and whether the run reached the end of them.
 
 Saying only how many were found leaves no way to tell a complete enumeration from one that
-stopped at `maxstrs`, which is the difference between a finished design and a partial view of
+stopped at `maxpolys`, which is the difference between a finished design and a partial view of
 one.
 """
 function enumlabel(m::EditorModel)
     isempty(m.enuminfo) || return m.enuminfo
-    bound = string("size ≤ ", m.maxsize)
-    m.stale && return string(bound, ", e to run")
+    m.stale && return string("size ≤ ", m.maxsize, ", e to run")
     found = length(m.polyforms)
-    m.truncated && return string(found, " of ", m.expected, ", ", bound, ", cut off")
-    return string("all ", found, ", ", bound)
+    tags = String[m.truncated ? string(found, " of ", m.expected) : string(found)]
+    # Why the listing stops where it does: the count bound, the size bound, or nothing, in which
+    # case it holds every structure the rules admit.
+    if m.truncated
+        push!(tags, string("cut off at ", m.maxpolys))
+    elseif m.bounded === true && m.total == string(found)
+        push!(tags, "complete")
+    else
+        push!(tags, string("size ≤ ", m.maxsize))
+    end
+    # Unbounded rules admit arbitrarily large structures, so no run of them is ever the whole of
+    # it however far it got.
+    m.bounded === nothing || push!(tags, m.bounded ? "bounded" : "unbounded")
+    return join(tags, ", ")
+end
+
+"""
+    boundslabel(m)
+
+Return what the sidebar says about the rules themselves: whether they admit finitely many
+structures, and how many in all when they do.
+
+A property of the rules rather than of the last run, and the one a design is usually aiming at,
+so it is worth stating separately from how far the listing got.
+"""
+function boundslabel(m::EditorModel)
+    m.bounded === nothing && return ("  bounds unknown", tstyle(:text_dim))
+    m.bounded || return ("  unbounded", tstyle(:warning))
+    return (string("  bounded", isempty(m.total) ? "" : string(", ", m.total, " total")), tstyle(:success))
 end
 
 """
@@ -1785,7 +1827,7 @@ end
 
 """
     setmaxsize!(m, step)
-    setmaxstrs!(m, step)
+    setmaxpolys!(m, step)
 
 Move the enumeration's bounds one notch. Changing either marks the last run as out of date
 rather than re-running, since the point of bounding a run is to decide before paying for it.
@@ -1813,10 +1855,10 @@ function stepscale(v::Int, step::Int)
     return i === nothing ? v : ladder[i]
 end
 
-function setmaxstrs!(m::EditorModel, step::Int)
-    new = stepscale(m.maxstrs, step)
-    new == m.maxstrs && return m
-    m.maxstrs = new
+function setmaxpolys!(m::EditorModel, step::Int)
+    new = stepscale(m.maxpolys, step)
+    new == m.maxpolys && return m
+    m.maxpolys = new
     m.stale = true
     return m
 end
@@ -1894,9 +1936,9 @@ function update!(m::EditorModel, evt::KeyEvent)
         elseif k === :char && c == 'S'
             setmaxsize!(m, 1)
         elseif k === :char && c == 'x'
-            setmaxstrs!(m, -1)
+            setmaxpolys!(m, -1)
         elseif k === :char && c == 'X'
-            setmaxstrs!(m, 1)
+            setmaxpolys!(m, 1)
         end
         return nothing
     end
@@ -2152,7 +2194,8 @@ function draw_sidebar(m::EditorModel, rect::Rect, buf::Buffer)
 
     enum = [
         header("Enumeration", :enumeration),
-        (string("  size ", m.maxsize, "  max ", m.maxstrs), tstyle(m.stale ? :warning : :text)),
+        (string("  size ", m.maxsize, "  max ", m.maxpolys), tstyle(m.stale ? :warning : :text)),
+        boundslabel(m),
         key("e", m.stale ? "run (stale)" : "run"),
         key("s / S", "size"),
         key("x / X", "max"),
@@ -2801,7 +2844,7 @@ function assemble(m::EditorModel)
     poly = Roly.Polyform(rules, ps[1][1])
     sites = absolutesites(ps, m.species)
     for (n, (i, k, incoming, t)) in enumerate(steps(m))
-        grown = Roly.raise!(poly, sites[i][k], (ps[n + 1][1], incoming), t)
+        grown = Roly.raise!(poly, sites[i][k], SpeciesSiteLoc(ps[n + 1][1], incoming), t)
         grown === missing && error("replaying attachment $n was refused, which the editor should not have allowed")
         poly = grown
     end

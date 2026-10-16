@@ -6,7 +6,8 @@ using Graphs, NautyGraphs
 using ReverseSearch
 
 # Geometry primitives
-export Pose, dimension, numtype, posetype
+export Pose, dimension, translate, translate!
+public numtype, posetype, sitetype, particletype
 export Rotation, Angle2d, RotXYZ, RotMatrix3, rotation_angle, rotation_axis, SVector
 
 # Binding sites
@@ -18,29 +19,42 @@ export Tetrahedron, Cube, Octahedron, Dodecahedron, Icosahedron, Pyramid, Prism,
 export RotationGroup, Cyclic, Dihedral, Tetrahedral, Octahedral, Icosahedral, grouporder
 
 # Particle species
-export ParticleSpecies, SpeciesAndPose
+export ParticleSpecies
+public SpeciesAndPose
 export nsites, bindingsite, bindingsites, graphrep, symmetrynumber
 
 # Assembly system
-export BindingRules, interactionmatrix
-export ncolors, nspecies, nbonds, bonded_colors, bonded_sites, bonded_species, isinert, species
+export BindingRules, SpeciesSiteLoc, interactionmatrix
+export ncolors, nspecies, nbonds, isinert, species
+public bonded_colors, bonded_sites, bonded_species, sitesofcolor, speciesofcolor
 
 # Polyforms
-export Polyform, nparticles, bindingrules, composition
-export bonds, bondindex, interior_edges, exterior_edges
-public canonbindingsite, canonbindingsites
+export AbstractPolyform, Polyform, ParticleSiteLoc, nparticles, bindingrules, composition, bonds
+export exposedsites, opensites, exposedsitelocs, opensitelocs
+
+# The graph a polyform carries, and the vertices it is written in, are an implementation detail:
+# every one of these takes or yields bare graph vertices, whose numbering (canonical or original)
+# a caller has to get right. Nothing exported does, so that hazard stops at the boundary.
+public bondindex, interior_edges, exterior_edges, subpolyform
+public canonbindingsite, canonbindingsites, rotationcenter
+
+export bondtypes
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
-export RSStatus, Finished, MaxVerticesReached, MaxDepthReached, BreakTriggered
-export polyenum, polygen, countpolyforms, PolyformCount
+export EnumerationStatus, Complete, MaxSizeReached, MaxPolysReached, Interrupted
+export polyenum, polygen, polycount, PolyformCount, isbounded
 
 # Species
 export PolygonParticleSpecies, UnitNgon, UnitTriangle, UnitSquare, UnitHexagon
+export SymmetricUnitTriangle, SymmetricUnitSquare, SymmetricUnitHexagon
 export PolyhedronParticleSpecies
 export UnitTetrahedron, UnitCube, UnitOctahedron, UnitDodecahedron, UnitIcosahedron
+export SymmetricUnitTetrahedron, SymmetricUnitCube, SymmetricUnitOctahedron
+export SymmetricUnitDodecahedron, SymmetricUnitIcosahedron
 export UnitPyramid, UnitPrism, UnitAntiprism
 export PatchyParticleSpecies, PatchyDisk, PatchySphere
+export MetaParticleSpecies, polyform, inducedrules, recast
 
 # Public, but not exported: reach for these as `Roly.faces(p)`, or import them by name.
 # They are stable API, but specific enough to a body, an encoding or a species that putting
@@ -57,7 +71,7 @@ public rotationgroup, faceorbits, facesym, siteorbits, stabilizerorders, sitelab
 public permutationgroup, check_encoding
 
 # What a bond fixes about relative orientation
-public contact_pairing, standard_twist, twistfreedom, twist
+public contact_pairing, standard_twist, twistfreedom, twist, Contact
 
 # The `ParticleSpecies` interface, implemented rather than called
 public isconvex, bounding_radius, could_contact, overlap
@@ -76,6 +90,7 @@ include("enumeration.jl")
 include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
+include("species/metaparticlespecies.jl")
 
 export editrules, editpolyform
 export render, polyformplot, polyformplot!
@@ -162,11 +177,15 @@ changing the rules marks the last run out of date rather than repeating it. `s`/
 largest structure to look for and `x`/`X` the number to stop after, which is what bounds the
 work. Neither has a ceiling, what is worth waiting for being the user's to judge.
 
-Each run counts the structures before listing them, exactly while the count fits its own budget
-and by subsampling the search tree beyond it, and the pane is titled with both: `all 28, size ≤ 4`
-for a listing that reached the end of them, and `200 of ≈1.2e4, size ≤ 6, cut off` for one that
-stopped at the limit. Reporting only how many were found leaves no way to tell a finished design
-from a partial view of one. Structures are numbered by their position in the run; with the pane focused the arrow keys
+Each run first asks `isbounded` whether the rules admit finitely many structures at all and
+`polycount` how many there are, exactly while the count fits its own budget and by subsampling
+the search tree beyond it. The pane title then carries the found count and a tag for each thing
+that bounds it: `16, complete, bounded` for a listing that holds every structure the rules admit,
+`15, size ≤ 4, bounded` for one the size bound stops short of the 16 there are, and
+`200 of ≈1.2e4, cut off at 200, unbounded` for one stopped by the count bound under rules that
+admit arbitrarily large structures. The sidebar carries the same verdict on the rules themselves,
+`bounded, 16 total` against `unbounded`. Reporting only how many were found leaves no way to tell
+a finished design from a partial view of one. Structures are numbered by their position in the run; with the pane focused the arrow keys
 pick one, and the box beside the grid redraws it as large as the pane allows, titled with its
 number, naming every site in its own color and writing both colors where two meet, with its
 composition vector underneath.
@@ -232,7 +251,7 @@ every other polyform has, which also means its particles are in canonical rather
 order.
 
 The rules come from the structure, so they are exactly as permissive as its contacts require and
-generally admit other structures too. Use [`countpolyforms`](@ref) or [`polyenum`](@ref) on
+generally admit other structures too. Use [`polycount`](@ref) or [`polyenum`](@ref) on
 `bindingrules(poly)` to see what else they allow.
 """
 function editpolyform end

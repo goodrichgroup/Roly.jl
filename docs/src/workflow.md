@@ -161,7 +161,7 @@ rules = bindingrules(poly)
 
 The structure is replayed through Roly's own attachment rather than assembled from the poses on screen, so it arrives with the graph, the bonds and the canonical ordering that every other polyform has.
 That canonical ordering is also why its particles are not in the order they were placed.
-The rules come from the structure, so they are exactly as permissive as its contacts require and generally admit other structures too: pass `bindingrules(poly)` to [`countpolyforms`](@ref) to see how many.
+The rules come from the structure, so they are exactly as permissive as its contacts require and generally admit other structures too: pass `bindingrules(poly)` to [`polycount`](@ref) to see how many.
 
 Seating a particle against the chosen site can put it against several at once, which is how a ring closes.
 Every contact the pending particle would make is labelled before it is committed, and the sidebar counts the ones beyond the site aimed at, so a closure is visible in advance rather than only after the fact.
@@ -184,8 +184,19 @@ It runs only when `e` is pressed, since a permissive rules set can take long eno
 `s` and `S` set the largest structure to look for and `x` and `X` the number to stop after, the latter being what actually bounds the work: the search gives up after that many however many the rules admit.
 Neither has a ceiling, what is worth waiting for being the user's to judge.
 
-Each run counts the structures before listing them, exactly while the count fits its own budget and by subsampling the reverse-search tree beyond it, and the pane title carries both numbers.
-A listing that reached the end of them is titled `all 28, size ≤ 4`, and one that stopped at the limit `200 of ≈1.2e4, size ≤ 6, cut off`.
+Each run first asks [`isbounded`](@ref) whether the rules admit finitely many polyforms at all, and [`polycount`](@ref) how many there are, exactly while the count fits its own budget and by subsampling the reverse-search tree beyond it.
+Both are searches of their own, which is why they run with the listing rather than on every keystroke.
+
+The pane title then carries the number found and a tag for each thing that bounds it.
+
+| Title | Meaning |
+|:--|:--|
+| `16, complete, bounded` | the listing holds every polyform the rules admit |
+| `15, size ≤ 4, bounded` | complete up to the size bound, which stops it short of the 16 there are |
+| `91, size ≤ 5, unbounded` | complete up to the size bound, and the rules admit arbitrarily large polyforms |
+| `200 of ≈1.2e4, cut off at 200, unbounded` | the count bound stopped it, against an estimated 1.2e4 |
+
+The sidebar carries the same verdict on the rules themselves, `bounded, 16 total` against `unbounded`, since that is a property of the design rather than of how far the last run got.
 Reporting only how many were found leaves no way to tell a finished design from a partial view of one.
 
 Each structure is numbered by its position in the run.
@@ -300,30 +311,42 @@ rules   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
 
 ## Enumerating polyforms
 
-`polyenum` walks every polyform the rules allow.
+Once you have defined a set of binding rules, use `polyenum` to enumerate all allowed polyforms.
 
 ```jldoctest workflow
-julia> result = polyenum(rules; maxsize=20, maxstrs=100_000);
+julia> result = polyenum(rules);
 
-julia> result.nstructures
+julia> result.n
 16
 
-julia> result.largest_size
+julia> result.maxsize
 5
 
 julia> result.status
-Finished::RSStatus = 0
+Complete::EnumerationStatus = 0
 ```
 
-Cap `maxsize` (particles per polyform) or `maxstrs` (total polyforms) when the rules allow unbounded growth.
-`status` says why the run stopped: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
+This system allows 16 polyforms, and `polyenum` enumerates all of them.
+In general, binding rules may allow infinitely many polyforms.
+Before an enumeration, Roly automatically checks if the set of allowed polyforms is finite, which can also be done manually with [`isbounded`](@ref); see [Bounded and unbounded rules](growth.md).
+It is also possible to enumerate only to a certain size of polyforms (`maxsize`) or to limit the total number of polyforms enumerated (`maxpolys`).
+
+```jldoctest workflow
+julia> isbounded(rules)
+true
+
+julia> polyenum(rules; maxsize=3).status
+MaxSizeReached::EnumerationStatus = 1
+```
+
+`status` says why the enumeration stopped: `Complete`, `MaxSizeReached`, `MaxPolysReached` or `Interrupted`.
 
 ## Storing polyforms
 
-`polygen` returns the polyforms in a `Vector`, sorted by size.
+To store all polyforms in memory for further processing, use `polygen`, which returns a list sorted by size.
 
 ```jldoctest workflow
-julia> polys = polygen(rules; maxsize=20);
+julia> polys = polygen(rules);
 
 julia> length(polys)
 16
@@ -331,40 +354,43 @@ julia> length(polys)
 
 ## Counting polyforms
 
-`countpolyforms` counts without storing anything, switching to an unbiased sampled estimate when exact enumeration gets too expensive.
+To count polyforms without storing them, or to estimate the number of polyforms when full enumeration is too expensive, use `polycount`.
 
 ```jldoctest workflow
-julia> c = countpolyforms(rules);
+julia> result = polycount(rules);
 
-julia> c.n
-16.0
+julia> result.n
+16
 
-julia> c.exact
+julia> result.exact
 true
 
-julia> c.uncertainty
+julia> result.err
 0.0
 ```
 
-It requires an explicit `maxsize` when the rules allow polyforms of unbounded size.
+`polycount` enumerates exactly up to a configurable number of polyforms and switches to estimation beyond that.
+Like `polyenum`, it first checks that the set of allowed polyforms is finite; an unbounded set of rules needs a `maxsize`.
 
-## Applying constraints
+## Incorporating constraints
 
+It is often desirable to impose additional constraints on generated polyforms.
 `polyenum` takes a callback that runs at each polyform, receiving it and its size and returning one of three signals:
 
 - `ACCEPT` counts the polyform and keeps exploring it,
 - `REJECT` skips the polyform and everything grown from it,
 - `BREAK` stops the enumeration.
 
-```jldoctest workflow
-julia> constraint(s, _) = composition(s)[4] <= 1 ? ACCEPT : REJECT;
+For example, to enumerate only polyforms with at most one particle of species 4:
 
-julia> polyenum(constraint, rules).nstructures
+```jldoctest workflow
+julia> constraint(s, n) = composition(s)[4] <= 1 ? ACCEPT : REJECT;
+
+julia> polyenum(constraint, rules).n
 14
 ```
 
-`REJECT` prunes a whole subtree, so the constraint must be monotone.
-If a polyform violates it, everything grown from it must violate it too.
+To ensure well-defined behavior, if a polyform `s` violates the constraint, all larger polyforms that can be generated by adding particles to `s` must also violate the constraint.
 
 ## Visualizing polyforms
 

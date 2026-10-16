@@ -81,5 +81,5 @@ end
     # all-alike coloring left above.
     setcolors!(r, [1, 2, 1, 2])
     rules = BindingRules([1 1 1 1; 1 2 1 2], r)
-    @test [polyenum(rules; maxsize=i)[1] for i in 1:5] == cumsum([1, 2, 4, 13, 35])
+    @test [polyenum(rules; maxsize=i).n for i in 1:5] == cumsum([1, 2, 4, 13, 35])
 end

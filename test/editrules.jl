@@ -362,7 +362,7 @@ end
     _attach!(m, 1, 2, 4)
     rules = RE.buildrules(RE.placements(m), m.species)
     @test rules isa BindingRules
-    @test polyenum(rules; maxsize=3, maxstrs=100).nstructures > 0
+    @test polyenum(rules; maxsize=3, maxpolys=100).n > 0
 
     # Rendering: every pane is drawn, and the rules pane shows both tables at once.
     m = RE.EditorModel(UnitSquare)
@@ -437,7 +437,7 @@ end
     _attach!(m, 1, 1, 3)
     _attach!(m, 1, 2, 4)
     m.focus = :rules
-    @test length(bonded_colors(m.rules)) == 2
+    @test length(Roly.bonded_colors(m.rules)) == 2
     m.pair = (1, 1)
     RE.update!(m, Tachikoma.KeyEvent(:right))
     @test m.pair == (1, 2)  # a column step, not a jump to the next listed bond
@@ -453,7 +453,7 @@ end
     @test !isempty(m.polyforms)
     @test all(p -> nparticles(p) > 0, m.polyforms)
     @test all(p -> nparticles(p) <= m.maxsize, m.polyforms)
-    @test length(m.polyforms) <= m.maxstrs
+    @test length(m.polyforms) <= m.maxpolys
     chain = length(m.polyforms)
     @test !isnothing(Tachikoma.find_text(_render(m), "╭─ Enumeration"))
 
@@ -476,16 +476,16 @@ end
     _enumerate!(m)
     @test !m.stale
     m.focus = :enumeration
-    size0, strs0 = m.maxsize, m.maxstrs
+    size0, strs0 = m.maxsize, m.maxpolys
     RE.update!(m, Tachikoma.KeyEvent('S'))
     @test m.maxsize == size0 + 1
     @test m.stale
     RE.update!(m, Tachikoma.KeyEvent('s'))
     @test m.maxsize == size0
     RE.update!(m, Tachikoma.KeyEvent('X'))
-    @test m.maxstrs > strs0
+    @test m.maxpolys > strs0
     RE.update!(m, Tachikoma.KeyEvent('x'))
-    @test m.maxstrs == strs0
+    @test m.maxpolys == strs0
     # Neither bound has a ceiling: what is worth waiting for is the user's to judge.
     for _ in 1:40
         RE.update!(m, Tachikoma.KeyEvent('S'))
@@ -494,14 +494,14 @@ end
     for _ in 1:20
         RE.update!(m, Tachikoma.KeyEvent('X'))
     end
-    @test m.maxstrs > 10^6
+    @test m.maxpolys > 10^6
     # Both stop at one on the way down, there being nothing below a single structure.
     for _ in 1:80
         RE.update!(m, Tachikoma.KeyEvent('s'))
         RE.update!(m, Tachikoma.KeyEvent('x'))
     end
     @test m.maxsize == RE.MINSIZE
-    @test m.maxstrs == 1
+    @test m.maxpolys == 1
 
     # The count ladder runs 1, 2, 5, 10, ... in both directions.
     @test [RE.stepscale(v, 1) for v in (1, 2, 5, 10, 25, 200)] == [2, 5, 10, 20, 50, 500]
@@ -1374,7 +1374,7 @@ end
     # Every bond names a distinct pair of colors, which is what addressable means: with a
     # species per particle, a color pair identifies the two particles it joins.
     @test allunique(i for (i, _) in RE.placements(m))
-    @test nbonds(m.rules) == length(unique(bonded_colors(m.rules)))
+    @test nbonds(m.rules) == length(unique(Roly.bonded_colors(m.rules)))
     @test nbonds(m.rules) >= length(RE.placements(m)) - 1
     # Coming back up drops the species with the particle.
     for n in 4:-1:1
@@ -1459,14 +1459,14 @@ end
     m.maxsize = 5
     _enumerate!(m)
     @test !m.truncated
-    @test RE.enumlabel(m) == string("all ", length(m.polyforms), ", size ≤ 5")
+    @test startswith(RE.enumlabel(m), string(length(m.polyforms), ", size ≤ 5"))
     @test m.expected == string(length(m.polyforms))   # the count agreed with the listing
-    m.maxstrs = 2
+    m.maxpolys = 2
     m.maxsize = 8
     _enumerate!(m)
     @test m.truncated
     @test length(m.polyforms) == 2
-    @test occursin("cut off", RE.enumlabel(m))
+    @test occursin(string("cut off at ", m.maxpolys), RE.enumlabel(m))
     @test occursin("2 of ", RE.enumlabel(m))
     @test !isnothing(_render(m))
     # No bonds is an answer rather than a count.
@@ -1474,9 +1474,56 @@ end
     _enumerate!(empty_rules)
     @test RE.enumlabel(empty_rules) == "no bonds"
 
+    # The rules themselves are reported too: whether they admit finitely many structures at all,
+    # and how many in total when they do, which is the number a design is usually aiming at.
+    bounded = BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle)
+    @test isbounded(bounded)
+    m = RE.EditorModel(collect(Roly.species(bounded)); shape=1:nspecies(bounded))
+    mat = interactionmatrix(bounded)
+    for c1 in axes(mat, 1), c2 in axes(mat, 2)
+        mat[c1, c2] && (m.overrides[(c1, c2)] = true)
+    end
+    RE.refresh!(m)
+    @test isnothing(m.bounded)                       # not known until a run asks
+    @test occursin("unknown", RE.boundslabel(m)[1])
+    m.maxsize = 9
+    _enumerate!(m)
+    @test m.bounded === true
+    @test m.total == string(length(m.polyforms))
+    @test occursin("bounded", RE.boundslabel(m)[1])
+    @test occursin(m.total, RE.boundslabel(m)[1])
+    # With the size bound beyond every structure there is, the run is tagged complete.
+    @test RE.enumlabel(m) == string(length(m.polyforms), ", complete, bounded")
+    # With it biting, the title says how far the run got and the sidebar how many there are.
+    m.maxsize = 4
+    _enumerate!(m)
+    @test length(m.polyforms) < parse(Int, m.total)
+    @test RE.enumlabel(m) == string(length(m.polyforms), ", size ≤ 4, bounded")
+    @test !occursin("complete", RE.enumlabel(m))
+    @test occursin(m.total, RE.boundslabel(m)[1])
+
+    # Unbounded rules are never completely enumerated however far a run gets, which the title
+    # says outright rather than leaving it to be inferred from a truncated listing.
+    strip = RE.EditorModel(UnitSquare)
+    for pr in ((1, 3), (2, 4))
+        RE.togglebond!(strip, pr)
+    end
+    @test !isbounded(strip.rules)
+    strip.maxsize = 4
+    _enumerate!(strip)
+    @test strip.bounded === false
+    @test isempty(strip.total)                       # no total to count when there is no end
+    @test occursin("unbounded", RE.enumlabel(strip))
+    @test occursin("unbounded", RE.boundslabel(strip)[1])
+    @test !isnothing(_render(strip))
+    # Changing the rules unlearns it, rather than leaving a claim the rules no longer support.
+    RE.togglebond!(strip, (2, 4))
+    @test isnothing(strip.bounded)
+    @test isempty(strip.total)
+
     # `countlabel` reads an exact count as the number and an estimate with a leading `≈`.
-    @test RE.countlabel(Roly.PolyformCount(42, 3, false)) == "42"
-    est = Roly.PolyformCount([1.0e5, 1.2e5], 6, true)
+    @test RE.countlabel(Roly.PolyformCount(42, 3, Complete)) == "42"
+    est = Roly.PolyformCount([1.0e5, 1.2e5], 6, MaxSizeReached)
     @test startswith(RE.countlabel(est), "≈")
     @test occursin("e", RE.countlabel(est))
 end
@@ -1525,7 +1572,7 @@ end
     @test nparticles(shared) == nparticles(addressed)
     @test nspecies(bindingrules(addressed)) == nparticles(addressed) + 1
     @test nbonds(bindingrules(addressed)) == nparticles(addressed) - 1
-    @test length(unique(bonded_colors(bindingrules(addressed)))) == nparticles(addressed) - 1
+    @test length(unique(Roly.bonded_colors(bindingrules(addressed)))) == nparticles(addressed) - 1
 
     # Build-only shows the construction pane alone, and the keys that drive the other panes do
     # not move the focus off it.
