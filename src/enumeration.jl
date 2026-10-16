@@ -322,45 +322,79 @@ function _nchainstates(rules::BindingRules)
     return total
 end
 
-# Depth-first over directed chains of up to `maxchainlength` particles, extending only at the particle
-# last added, so the states a chain has passed through are exactly the chain read from its start.
-# Returns the first repeat whose motion escapes. Attaching forms every geometric contact, so a chain
-# may cross-link back onto itself; that is a valid structure, and the newest particle is extended
-# regardless.
-function _walkchains(poly::Polyform, maxchainlength)
+# A chain as the search holds it: the polyform, and per particle the state it was added in, the
+# species together with the site and twist its incoming bond uses. The first particle's is
+# `(species, 0, 0)`, having no incoming bond.
+mutable struct _Chain{P<:Polyform}
+    poly::P
+    states::Vector{NTuple{3,Int}}
+end
+Base.copy(c::_Chain) = _Chain(copy(c.poly), copy(c.states))
+function Base.copy!(dst::_Chain, src::_Chain)
+    copy!(dst.poly, src.poly)
+    copy!(dst.states, src.states)
+    return dst
+end
+
+mutable struct _ChainAux{BS}
+    attachments::Vector{Tuple{BS,SpeciesSiteLoc,Int}}
+end
+Base.copy(a::_ChainAux) = _ChainAux(copy(a.attachments))
+
+# Every way to attach a particle at an open site of the newest particle of `poly`: the site, the
+# mating site, and the twist.
+function _endattachments!(out, poly::Polyform)
     rules = bindingrules(poly)
-    root = (speciesindex(poly.particles[1]), 0, 0)       # the first particle has no incoming bond
-    stack = [(poly, [root])]
-    while !isempty(stack)
-        poly, states = pop!(stack)
-        n = nparticles(poly)
-
-        # the stretch between two occurrences of a state repeats under one motion
-        j = findlast(==(states[end]), view(states, 1:(n - 1)))
-        if !isnothing(j)
-            w = _screwescape(poly, j, n)
-            isnothing(w) || return w
-        end
-        n < maxchainlength || continue
-
-        part = poly.particles[end]
-        children = empty(stack)
-        for k in 1:nsites(part, rules)
-            site = bindingsite(part, rules, k)
-            _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
-            isinert(rules, color(site)) && continue
-            for loc in compatible_speciessitelocs(rules, color(site))
-                mate = bindingsite(rules, loc)
-                for r in 0:(_ndistincttwists(site, mate) - 1)
-                    child = copy(poly)
-                    ismissing(add_particle!(child, site, loc, r; canonize=false)) && continue
-                    push!(children, (child, push!(copy(states), (loc.species, loc.site, Int(r)))))
-                end
+    part = poly.particles[end]
+    empty!(out)
+    for k in 1:nsites(part, rules)
+        site = bindingsite(part, rules, k)
+        _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
+        isinert(rules, color(site)) && continue
+        for loc in compatible_speciessitelocs(rules, color(site))
+            mate = bindingsite(rules, loc)
+            for r in 0:(_ndistincttwists(site, mate) - 1)
+                push!(out, (site, loc, r))
             end
         end
-        append!(stack, reverse!(children))      # first child first, as the recursion had it
     end
-    return nothing
+    return out
+end
+
+# The `j`-th extension of the chain `v` at its newest particle, written into `u`. Attaching forms
+# every geometric contact, so a chain may cross-link back onto itself; that is a valid structure,
+# and the newest particle is extended regardless. No graph is ever compared, so none is canonized.
+function _extendchain!(u::_Chain, v::_Chain, j::Integer, aux::_ChainAux)
+    j == 1 && _endattachments!(aux.attachments, v.poly)
+    j > length(aux.attachments) && return nothing
+    site, loc, r = aux.attachments[j]
+    copy!(u.poly, v.poly)
+    ismissing(add_particle!(u.poly, site, loc, r; canonize=false)) && return missing
+    copy!(u.states, v.states)
+    push!(u.states, (loc.species, loc.site, r))
+    return u
+end
+
+# Depth-first over directed chains of up to `maxchainlength` particles, returning the first repeat
+# whose motion escapes. The states a chain has passed through are exactly the chain read from its
+# start, so a repeated state is a stretch that repeats under one motion.
+function _walkchains(poly::Polyform, maxchainlength)
+    # one particle has no incoming bond to repeat. Said here rather than left to the search, whose
+    # depth limit of zero is not honored
+    maxchainlength > 1 || return nothing
+    root = _Chain(poly, [(speciesindex(poly.particles[1]), 0, 0)])
+    aux = _ChainAux(Tuple{sitetype(bindingrules(poly)),SpeciesSiteLoc,Int}[])
+    witness = Ref{Any}(nothing)
+    _backtrack(_extendchain!, root; aux, maxdepth=maxchainlength - 1) do c, _
+        n = nparticles(c.poly)
+        j = findlast(==(c.states[end]), view(c.states, 1:(n - 1)))
+        isnothing(j) && return ACCEPT
+        w = _screwescape(c.poly, j, n)
+        isnothing(w) && return ACCEPT
+        witness[] = w
+        return BREAK
+    end
+    return witness[]
 end
 
 # The stretch between two occurrences of a state repeats under `g`. Whether that goes on forever

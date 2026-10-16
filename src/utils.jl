@@ -114,3 +114,11 @@ function blockdiag!(g::AbstractNautyGraph, h::AbstractNautyGraph)
     end
     return g
 end
+
+# Use ReverseSearch.jl to imlpement a simple backtracking search.
+# This only works if adj! already ensures that the nodes are traversed as a tree. We then just turn of ls!, 
+# and equality comparisons, and use CacheAll to store the search tree.
+function _backtrack(f, adj!, v₀; aux=nothing, kwargs...)
+    rsys = RSSystem((k, _) -> k, adj!, v₀; compare=Returns(true), aux)
+    return reversesearch(f, rsys; cache=CacheAll(), kwargs...)
+end
