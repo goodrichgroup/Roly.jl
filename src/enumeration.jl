@@ -32,10 +32,10 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
 end
 
 """
-    polyenum([f], rules::BindingRules; maxsize=Inf, maxstrs=Inf, kwargs...)
+    polyenum([f], rules::BindingRules; maxsize=Inf, maxpolys=Inf, kwargs...)
 
 Iterate over all polyforms allowed by `rules` using _reverse search_.
-Polyforms are generated up to size `maxsize`, and the enumeration terminates after `maxstrs`
+Polyforms are generated up to size `maxsize`, and the enumeration terminates after `maxpolys`
 structures have been generated. Use the function `f` to process generated structures and impose
 constraints.
 
@@ -50,16 +50,16 @@ that it rejects.
 
 `checkbounded` refuses a rule set that admits arbitrarily large structures, see
 [`isbounded`](@ref), by throwing an `ArgumentError`. It defaults to `true` when neither `maxsize`
-nor `maxstrs` caps the enumeration.
+nor `maxpolys` caps the enumeration.
 
 All other keyword arguments are passed to the underlying `reversesearch` routine.
 
-Returns a `NamedTuple` `(; nstructures, largest_size, status)`, where `status` is the `RSStatus` of
+Returns a `NamedTuple` `(; n, maxsize, status)`, where `status` is the `RSStatus` of
 the underlying reverse search: `Finished` if the enumeration ran to completion, and otherwise
 `MaxDepthReached`, `MaxVerticesReached`, or `BreakTriggered` to indicate why it stopped early.
 """
-function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf,
-                  checkbounded::Bool=isinf(maxsize) && isinf(maxstrs), kwargs...)
+function polyenum(f, rules::BindingRules; maxsize=Inf, maxpolys=Inf,
+                  checkbounded::Bool=isinf(maxsize) && isinf(maxpolys), kwargs...)
     checkbounded && _checkbounded(rules)
     v₀ = Polyform(rules)
     BS = sitetype(rules)
@@ -67,8 +67,8 @@ function polyenum(f, rules::BindingRules; maxsize=Inf, maxstrs=Inf,
     rsys = RSSystem(ls!, adj!, v₀; aux)
 
     frs = isnothing(f) ? nothing : (v, _) -> f(v, nparticles(v))
-    result = reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs+1, kwargs...)
-    return (; nstructures=result.nvertices - 1, largest_size=result.depth_reached, status=result.status)
+    result = reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxpolys+1, kwargs...)
+    return (; n=result.nvertices - 1, maxsize=result.depth_reached, status=result.status)
 end
 polyenum(rules::BindingRules; kwargs...) = polyenum(nothing, rules; kwargs...)
 
@@ -87,44 +87,44 @@ function polygen(rules; kwargs...)
 end
 
 """
-    PolyformCount(n::Integer, largest_size, size_truncated)
-    PolyformCount(trials::AbstractVector, largest_size, size_truncated)
+    PolyformCount(n::Integer, maxsize, size_truncated)
+    PolyformCount(trials::AbstractVector, maxsize, size_truncated)
 
 Represent the number of polyforms allowed by a set of binding rules, or an estimate thereof.
 
 - `n`: the number of allowed structures.
 - `exact`: `true` if `n` was obtained by complete enumeration, `false` if it was estimated.
-- `uncertainty`: the standard error of the estimate.
-- `largest_size`: the size of the largest structure. If not exact, this is a *lower bound* of the true largest size.
+- `err`: the standard error of the estimate.
+- `maxsize`: the size of the largest structure. If not exact, this is a *lower bound* of the true largest size.
 - `size_truncated`: `true` if the count covers only structures up to a given cutoff size
 - `trials`: the individual estimates that `n` averages; empty if exact.
 """
 struct PolyformCount
     n::Float64
     exact::Bool
-    uncertainty::Float64
-    largest_size::Int
+    err::Float64
+    maxsize::Int
     size_truncated::Bool
     trials::Vector{Float64}
 end
 
-function PolyformCount(n::Integer, largest_size, size_truncated)
-    PolyformCount(Float64(n), true, 0.0, largest_size, size_truncated, Float64[])
+function PolyformCount(n::Integer, maxsize, size_truncated)
+    PolyformCount(Float64(n), true, 0.0, maxsize, size_truncated, Float64[])
 end
 
-function PolyformCount(trials::AbstractVector{<:Real}, largest_size, size_truncated)
-    uncertainty = length(trials) > 1 ? std(trials) / sqrt(length(trials)) : NaN
-    return PolyformCount(mean(trials), false, uncertainty, largest_size, size_truncated, trials)
+function PolyformCount(trials::AbstractVector{<:Real}, maxsize, size_truncated)
+    err = length(trials) > 1 ? std(trials) / sqrt(length(trials)) : NaN
+    return PolyformCount(mean(trials), false, err, maxsize, size_truncated, trials)
 end
 
 function Base.show(io::Core.IO, c::PolyformCount)
-    bound = c.exact ? "largest=$(c.largest_size)" : "largest≥$(c.largest_size)"
+    bound = c.exact ? "maxsize=$(c.maxsize)" : "maxsize≥$(c.maxsize)"
     trunc = c.size_truncated ? ", truncated" : ""
     if c.exact
         return print(io, "PolyformCount[n=$(round(Int, c.n)), exact, $bound$trunc]")
     end
     n = round(c.n; sigdigits=3)
-    err = round(c.uncertainty; sigdigits=2)
+    err = round(c.err; sigdigits=2)
     return print(io, "PolyformCount[n≈$n ± $err, $bound$trunc]")
 end
 
@@ -134,11 +134,11 @@ function _count_upto_budget(rules::BindingRules; maxsize, budget)
     counts = Int[]
     largest = 0
     while length(counts) < maxsize
-        res = polyenum(rules; maxsize=length(counts)+1, maxstrs=budget)
+        res = polyenum(rules; maxsize=length(counts)+1, maxpolys=budget)
         res.status == MaxVerticesReached && return counts, largest, res.status
 
-        push!(counts, res.nstructures)
-        largest = res.largest_size
+        push!(counts, res.n)
+        largest = res.maxsize
         res.status == Finished && return counts, largest, res.status
     end
     return counts, largest, MaxDepthReached
@@ -159,7 +159,7 @@ function _estimatecount(rules::BindingRules; pkeep, depth, n0, maxsize, maxsampl
         return ACCEPT
     end
 
-    res = polyenum(f, rules; maxsize, maxstrs=n0+maxsamples)
+    res = polyenum(f, rules; maxsize, maxpolys=n0+maxsamples)
     return (; estimate=estimate[], largest=largest[], res.status)
 end
 
@@ -274,7 +274,7 @@ function _checkbounded(rules::BindingRules)
     throw(
         ArgumentError(
             "`rules` allows infinitely many structures and cannot be enumerated completely. " *
-            "Pass `maxsize` or `maxstrs` to enumerate up to a bound, or set `checkbounded=false` to disable this error.",
+            "Pass `maxsize` or `maxpolys` to enumerate up to a bound, or set `checkbounded=false` to disable this error.",
         ),
     )
 end

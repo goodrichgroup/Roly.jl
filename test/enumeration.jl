@@ -126,13 +126,13 @@
     # Count polyforms
     @test polyenum(I16).status == Finished
     @test polyenum(I_polymino; maxsize=6).status == MaxDepthReached
-    @test polyenum(I_polymino; maxstrs=50).status == MaxVerticesReached
+    @test polyenum(I_polymino; maxpolys=50).status == MaxVerticesReached
 
     # Small enough to enumerate exactly, so no estimation should happen at all.
     c = polycount(I137)
     @test c.exact
     @test c.n == 137
-    @test c.uncertainty == 0.0
+    @test c.err == 0.0
     @test !c.size_truncated
 
     # Bounded but too large for the budget: estimated, and with no cutoff the estimate covers
@@ -149,7 +149,7 @@
     @test c.exact
     @test c.n == n_polyminoes_cumulative[6]
     @test c.size_truncated
-    @test c.largest_size == 6
+    @test c.maxsize == 6
 
     # Polyominoes are unbounded, so a count without a maxsize should error.
     @test_throws ArgumentError polycount(I_polymino; exact_budget=500)
@@ -164,7 +164,7 @@
     c = polycount(I_polymino; maxsize=9, exact_budget=500, ntrials=5, rng=Xoshiro(1))
     @test !c.exact
     @test c.size_truncated
-    @test c.largest_size == 9
+    @test c.maxsize == 9
     @test c.n >= 285 # we should get at least this many from the exact budget
     @test abs(c.n - n_polyminoes_cumulative[9]) / n_polyminoes_cumulative[9] < 0.25
     @test length(c.trials) == 5
@@ -363,7 +363,7 @@
             return norm(parts[end].pose.x - parts[1].pose.x) > span
         end
         for r in unbounded
-            @test polyenum(r; maxstrs=20, checkbounded=false).status == MaxVerticesReached
+            @test polyenum(r; maxpolys=20, checkbounded=false).status == MaxVerticesReached
             w = Roly._escapingrepeat(r)
             @test w !== nothing && escapes(w, r)
         end
@@ -374,8 +374,8 @@
         @test_throws ArgumentError polygen(squarerules)
         @test_throws ArgumentError polycount(squarerules)
         @test polyenum(squarerules; maxsize=3).status == MaxDepthReached
-        @test polyenum(squarerules; maxstrs=5).status == MaxVerticesReached
-        @test polyenum(squarerules; checkbounded=false, maxstrs=5).status == MaxVerticesReached
+        @test polyenum(squarerules; maxpolys=5).status == MaxVerticesReached
+        @test polyenum(squarerules; checkbounded=false, maxpolys=5).status == MaxVerticesReached
         @test length(polygen(ring)) == 4
 
         # the motion behind the answer

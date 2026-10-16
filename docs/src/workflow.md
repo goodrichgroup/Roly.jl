@@ -109,19 +109,30 @@ rules   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
 `polyenum` walks every polyform the rules allow.
 
 ```jldoctest workflow
-julia> result = polyenum(rules; maxsize=20, maxstrs=100_000);
+julia> result = polyenum(rules);
 
-julia> result.nstructures
+julia> result.n
 16
 
-julia> result.largest_size
+julia> result.maxsize
 5
 
 julia> result.status
 Finished::RSStatus = 0
 ```
 
-Cap `maxsize` (particles per polyform) or `maxstrs` (total polyforms) when the rules allow unbounded growth.
+Some rules allow arbitrarily large polyforms, and so infinitely many.
+Before an uncapped enumeration starts, `polyenum` decides which case it is in with [`isbounded`](@ref), and throws rather than run forever on an unbounded rule set.
+Cap `maxsize` (particles per polyform) or `maxpolys` (total polyforms) to enumerate such a rule set up to a bound; see [Bounded and unbounded rules](growth.md).
+
+```jldoctest workflow
+julia> isbounded(rules)
+true
+
+julia> polyenum(rules; maxsize=3).status
+MaxDepthReached::RSStatus = 2
+```
+
 `status` says why the run stopped: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
 
 ## Storing polyforms
@@ -129,7 +140,7 @@ Cap `maxsize` (particles per polyform) or `maxstrs` (total polyforms) when the r
 `polygen` returns the polyforms in a `Vector`, sorted by size.
 
 ```jldoctest workflow
-julia> polys = polygen(rules; maxsize=20);
+julia> polys = polygen(rules);
 
 julia> length(polys)
 16
@@ -148,11 +159,12 @@ julia> c.n
 julia> c.exact
 true
 
-julia> c.uncertainty
+julia> c.err
 0.0
 ```
 
-It requires an explicit `maxsize` when the rules allow polyforms of unbounded size.
+A bounded rule set is counted without a `maxsize`, exactly while that fits the budget and by estimate beyond it.
+An unbounded one has infinitely many polyforms and needs a `maxsize`.
 
 ## Applying constraints
 
@@ -165,7 +177,7 @@ It requires an explicit `maxsize` when the rules allow polyforms of unbounded si
 ```jldoctest workflow
 julia> constraint(s, _) = composition(s)[4] <= 1 ? ACCEPT : REJECT;
 
-julia> polyenum(constraint, rules).nstructures
+julia> polyenum(constraint, rules).n
 14
 ```
 
