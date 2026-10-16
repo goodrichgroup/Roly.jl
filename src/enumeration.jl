@@ -379,9 +379,6 @@ end
 # whose motion escapes. The states a chain has passed through are exactly the chain read from its
 # start, so a repeated state is a stretch that repeats under one motion.
 function _walkchains(poly::Polyform, maxchainlength)
-    # one particle has no incoming bond to repeat. Said here rather than left to the search, whose
-    # depth limit of zero is not honored
-    maxchainlength > 1 || return nothing
     root = _Chain(poly, [(speciesindex(poly.particles[1]), 0, 0)])
     aux = _ChainAux(Tuple{sitetype(bindingrules(poly)),SpeciesSiteLoc,Int}[])
     witness = Ref{Any}(nothing)
