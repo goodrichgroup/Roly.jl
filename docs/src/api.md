@@ -199,9 +199,10 @@ polyenum
 polygen
 polycount
 PolyformCount
+EnumerationStatus
 ```
 
-An enumeration reports why it stopped as an `RSStatus`: `Finished`, `MaxDepthReached`, `MaxVerticesReached` or `BreakTriggered`.
+An enumeration reports why it stopped as an `EnumerationStatus`: `Complete`, `MaxSizeReached`, `MaxPolysReached` or `Interrupted`.
 A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](workflow.md#Applying-constraints).
 
 ## Bonds of a structure

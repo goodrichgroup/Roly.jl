@@ -121,11 +121,11 @@ using StaticArrays: SVector
                       (6, [1, 1, 3, 10, 33, 147]))          # https://oeis.org/A006535
         rules = BindingRules([1 1 1 1], poly(n))
         @test rules._onlattice
-        counts = [polyenum(rules; maxsize=i)[1] for i in eachindex(want)]
+        counts = [polyenum(rules; maxsize=i).n for i in eachindex(want)]
         @test counts == cumsum(want)
         slow = withoutlattice(rules)
         @test !slow._onlattice
-        @test [polyenum(slow; maxsize=i)[1] for i in eachindex(want)] == counts
+        @test [polyenum(slow; maxsize=i).n for i in eachindex(want)] == counts
     end
     
     # orbit testing

@@ -42,7 +42,7 @@ export bondtypes
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
-export RSStatus, Finished, MaxVerticesReached, MaxDepthReached, BreakTriggered
+export EnumerationStatus, Complete, MaxSizeReached, MaxPolysReached, Interrupted
 export polyenum, polygen, polycount, PolyformCount, isbounded
 
 # Species

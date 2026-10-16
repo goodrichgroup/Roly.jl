@@ -83,7 +83,7 @@
         @test nsites(MetaParticleSpecies(dimer)) == length(opensitelocs(dimer))
 
         activerules = BindingRules([1 1 1 2], activated)
-        @test [polyenum(activerules; maxsize=k)[1] for k in 1:3] == [1, 2, 3]
+        @test [polyenum(activerules; maxsize=k).n for k in 1:3] == [1, 2, 3]
         # the squares behind those sites cannot meet under `chainlike`, so recasting onto it
         # fails; the rules those meta bonds induce bond the pair they stand for, and it works
         activepair = polygen(activerules; maxsize=2)[end]
@@ -186,7 +186,7 @@
 
         # and blocks assemble out of blocks in 3D too
         metasys = BindingRules([1 1 1 1], cmp)
-        @test polyenum(metasys; maxsize=2)[1] >= 2
+        @test polyenum(metasys; maxsize=2).n >= 2
     end
 
     @testset "setcolors! relabels the sites and leaves the interior alone" begin
@@ -220,7 +220,7 @@
     @testset "assembling blocks out of blocks" begin
         metasys = BindingRules([1 1 1 2], MetaParticleSpecies(dimer))
         # the two ends are distinguishable, so blocks chain in exactly one way per length
-        @test [polyenum(metasys; maxsize=k)[1] for k in 1:4] == [1, 2, 3, 4]
+        @test [polyenum(metasys; maxsize=k).n for k in 1:4] == [1, 2, 3, 4]
         blocks = polygen(metasys; maxsize=3)
         @test sort(nparticles.(blocks)) == [1, 2, 3]
         triple = blocks[findfirst(s -> nparticles(s) == 3, blocks)]

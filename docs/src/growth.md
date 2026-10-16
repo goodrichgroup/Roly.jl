@@ -65,7 +65,7 @@ render(polygen(square; maxsize=6)[end])
 ## Counting what cannot be enumerated
 
 An unbounded system has infinitely many structures, so [`polycount`](@ref) needs a `maxsize`.
-Up to that size it enumerates exactly while the count is small, and switches to sampling the reverse-search tree beyond `exact_budget`.
+Up to that size it enumerates exactly while the count is small, and switches to sampling the reverse-search tree beyond `budget`.
 
 ```@example growth
 polycount(square; maxsize=9)
