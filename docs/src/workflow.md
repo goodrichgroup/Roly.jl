@@ -106,8 +106,8 @@ It is left off wherever the particle is drawn too small for it to read as a dire
 Only the last can be dropped, so that the colors of the others do not shift under bonds already set, and one carrying a bond or a placement is kept with a note in the status line rather than silently taking those with it.
 
 A color is written as one character while one is enough to tell them all apart, `1` to `9`, then `a` to `z`, then `A` to `Z`, since a site label has to sit on the drawing at the site it names.
-Past those 61 it takes two, in decimal, which reads without counting through the alphabet, and the matrix and the pair list widen to match.
-Two characters run out at 99, and the editor stops adding species there rather than naming two different sites the same way: with a species of `n` sites that is `99 ÷ n` of them, three for icosahedra and sixteen for squares.
+Past those 61 it takes as many decimal digits as the count needs, which reads without counting through the alphabet, and the matrix and the pair list widen to match.
+There is no limit on the number of species: once the tables no longer fit the window they say so, which is the honest outcome, rather than the editor refusing to add another.
 
 ### Building a structure
 
@@ -122,6 +122,46 @@ Structures are built in construction windows, one arrangement each.
 The rules are read off every window at once, so an arrangement can be kept on the books while the next is built beside it, which is how two rules that no single structure can show at the same time are collected.
 `c` clears the window in front, and takes with it the bonds that only that window produced: one another window still produces, or that was set by hand, stays.
 Clearing a window that is already empty closes it, so the cycle does not fill up with empties, and the last window is cleared rather than closed.
+
+### Fully addressable structures
+
+`f` turns on fully addressable mode.
+Every placement then takes a species of its own: the editor adds one as each particle goes down and drops it again as each comes back up, so the species list holds one per particle plus the spare the next placement will use.
+No two particles share a binding site color, so each bond in the rules names one particular pair of particles rather than a pair of species, which is what makes a structure fully addressable: the rules admit that structure and little else.
+Turning the mode on over a structure already built renumbers that structure, rather than asking for it to be rebuilt.
+
+This is also how a design with more species than the digit keys can reach is built, since the species advances by itself and never has to be selected.
+
+### Several shapes
+
+Given a vector of species rather than one, the editor may set any of its species to any of those shapes, and `p` and `P` step the active species through them.
+Every shape has to be the same dimension and carry the same pose type, a window's placements being held in one array.
+
+```julia
+rules = editrules([UnitSquare, UnitTriangle, UnitHexagon])
+```
+
+Passing a `BindingRules` instead opens on that system's species with its bonds already set, so an existing design can be worked on further.
+The bonds come in as hand-set ones, so they hold against whatever is built afterwards.
+
+```julia
+rules = editrules(rules)
+```
+
+### Building one structure
+
+[`editpolyform`](@ref) opens the construction pane on its own and returns the structure built in the window in front, as a [`Polyform`](@ref) carrying the rules its own contacts imply.
+The keys are the construction keys above, the panes it has no use for being left off.
+
+```julia
+poly = editpolyform(UnitCube)
+poly = editpolyform(UnitCube; addressable=true)   # a species per particle
+rules = bindingrules(poly)
+```
+
+The structure is replayed through Roly's own attachment rather than assembled from the poses on screen, so it arrives with the graph, the bonds and the canonical ordering that every other polyform has.
+That canonical ordering is also why its particles are not in the order they were placed.
+The rules come from the structure, so they are exactly as permissive as its contacts require and generally admit other structures too: pass `bindingrules(poly)` to [`countpolyforms`](@ref) to see how many.
 
 Seating a particle against the chosen site can put it against several at once, which is how a ring closes.
 Every contact the pending particle would make is labelled before it is committed, and the sidebar counts the ones beyond the site aimed at, so a closure is visible in advance rather than only after the fact.
@@ -142,6 +182,11 @@ A bond set by hand stays set as the structure grows, and one cleared by hand sta
 The rightmost pane draws the polyforms the current rules allow, smallest first.
 It runs only when `e` is pressed, since a permissive rules set can take long enough to be felt between keystrokes; changing the rules marks the last run out of date rather than repeating it, and the pane header says so.
 `s` and `S` set the largest structure to look for and `x` and `X` the number to stop after, the latter being what actually bounds the work: the search gives up after that many however many the rules admit.
+Neither has a ceiling, what is worth waiting for being the user's to judge.
+
+Each run counts the structures before listing them, exactly while the count fits its own budget and by subsampling the reverse-search tree beyond it, and the pane title carries both numbers.
+A listing that reached the end of them is titled `all 28, size ≤ 4`, and one that stopped at the limit `200 of ≈1.2e4, size ≤ 6, cut off`.
+Reporting only how many were found leaves no way to tell a finished design from a partial view of one.
 
 Each structure is numbered by its position in the run.
 With the pane focused the arrow keys pick one, and the box beside the grid redraws the selection as large as the pane allows, titled with its number.

@@ -187,4 +187,5 @@ Provided by the Tachikoma extension, so `import Tachikoma` is required.
 
 ```@docs
 editrules
+editpolyform
 ```

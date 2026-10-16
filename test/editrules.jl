@@ -82,13 +82,14 @@ function _chars(buf, rect)
     ]
 end
 
-# Cells holding one of the axis indicator's letters, which it draws bold. The sidebar's own text
-# has letters in it too, so the style is what tells them apart.
+# Cells holding one of the axis indicator's letters. Panel titles and key legends have those
+# letters in them too, so the indicator's own style is what tells them apart.
 function _axisletters(tb)
+    want = Tachikoma.tstyle(:text_dim; bold=true)
     n = 0
     for x in 1:tb.width, y in 1:tb.height
         cell = tb.buf.content[Tachikoma.buf_index(tb.buf, x, y)]
-        n += (cell.char in ('x', 'y', 'z') && cell.style.bold)
+        n += (cell.char in ('x', 'y', 'z') && cell.style == want)
     end
     return n
 end
@@ -485,14 +486,27 @@ end
     @test m.maxstrs > strs0
     RE.update!(m, Tachikoma.KeyEvent('x'))
     @test m.maxstrs == strs0
-    for _ in 1:20
-        RE.update!(m, Tachikoma.KeyEvent('s'))
+    # Neither bound has a ceiling: what is worth waiting for is the user's to judge.
+    for _ in 1:40
+        RE.update!(m, Tachikoma.KeyEvent('S'))
     end
-    @test m.maxsize == first(RE.MAXSIZE_RANGE)   # clamped
+    @test m.maxsize > 40
     for _ in 1:20
         RE.update!(m, Tachikoma.KeyEvent('X'))
     end
-    @test m.maxstrs == last(RE.MAXSTRS_RANGE)
+    @test m.maxstrs > 10^6
+    # Both stop at one on the way down, there being nothing below a single structure.
+    for _ in 1:80
+        RE.update!(m, Tachikoma.KeyEvent('s'))
+        RE.update!(m, Tachikoma.KeyEvent('x'))
+    end
+    @test m.maxsize == RE.MINSIZE
+    @test m.maxstrs == 1
+
+    # The count ladder runs 1, 2, 5, 10, ... in both directions.
+    @test [RE.stepscale(v, 1) for v in (1, 2, 5, 10, 25, 200)] == [2, 5, 10, 20, 50, 500]
+    @test [RE.stepscale(v, -1) for v in (2, 5, 10, 20, 50, 500)] == [1, 2, 5, 10, 20, 200]
+    @test RE.stepscale(1, -1) == 1
 
     # A smaller cap really does cut the run short.
     m = RE.EditorModel(UnitSquare)
@@ -1301,25 +1315,26 @@ end
     # Past that they are two characters, in decimal, which reads without counting the alphabet.
     @test RE.colorlabel(7, 2) == "07"
     @test RE.colorlabel(62, 2) == "62"
-    @test length(unique(RE.colorlabel(c, 2) for c in 1:RE.MAX_COLORS)) == RE.MAX_COLORS
+    @test length(unique(RE.colorlabel(c, 2) for c in 1:99)) == 99
+    # Past two characters a label simply takes a third, so there is no ceiling on the colors.
+    @test RE.labelwidth(100) == 3
+    @test RE.labelwidth(1000) == 4
+    @test RE.colorlabel(260, 3) == "260"
+    @test length(unique(RE.colorlabel(c, 3) for c in 1:999)) == 999
 
-    # A species is refused once its colors would run past what can be labelled, rather than the
-    # labels wrapping round.
+    # Species can be added without limit, the tables that then outgrow the window saying so
+    # rather than the editor refusing to go on.
     big = RE.EditorModel(UnitIcosahedron)
-    while RE.roomforspecies(big)
-        n = length(big.species)
+    for want in 2:14
         RE.update!(big, Tachikoma.KeyEvent('a'))
-        @test length(big.species) == n + 1
+        @test length(big.species) == want
     end
-    @test RE.totalcolors(big) + nsites(UnitIcosahedron) > RE.MAX_COLORS
-    n = length(big.species)
-    RE.update!(big, Tachikoma.KeyEvent('a'))
-    @test length(big.species) == n
-    @test occursin("no room", big.message)
+    @test RE.totalcolors(big) == 14 * nsites(UnitIcosahedron)
+    @test big.labelw == 3
+    @test !isnothing(_render(big))   # and it still draws
     big.focus = :construction
-    RE.update!(big, Tachikoma.KeyEvent('9'))  # a digit naming a species there is no room for
-    @test length(big.species) == n
-    @test occursin("no room", big.message)
+    RE.update!(big, Tachikoma.KeyEvent('9'))
+    @test big.active_species == 9
 
     # The label width follows the color count, and the matrix widens to match.
     small = RE.EditorModel(UnitCube)
@@ -1335,4 +1350,195 @@ end
     @test RE.label(wide, 62) == "62"
     @test RE.label(small, 6) == "6"
     @test !isnothing(_render(wide))  # and the whole editor still draws at that width
+end
+
+@testset "editrules modes" begin
+    # Fully addressable mode gives every particle a species of its own, adding one as each goes
+    # down and dropping it again as each comes back up, so no two particles share a binding site
+    # color and every bond names one particular pair of particles.
+    m = RE.EditorModel(UnitSquare)
+    m.focus = :construction
+    @test !m.addressable
+    RE.update!(m, Tachikoma.KeyEvent('f'))
+    @test m.addressable
+    @test length(m.species) == 2          # the one placed, plus the spare the next will use
+    @test m.active_species == 2
+    for n in 2:5
+        m.incoming = 3
+        RE.update!(m, Tachikoma.KeyEvent(:enter))
+        @test length(RE.placements(m)) == n
+        @test [i for (i, _) in RE.placements(m)] == collect(1:n)
+        @test length(m.species) == n + 1
+        @test m.active_species == n + 1
+    end
+    # Every bond names a distinct pair of colors, which is what addressable means: with a
+    # species per particle, a color pair identifies the two particles it joins.
+    @test allunique(i for (i, _) in RE.placements(m))
+    @test nbonds(m.rules) == length(unique(bonded_colors(m.rules)))
+    @test nbonds(m.rules) >= length(RE.placements(m)) - 1
+    # Coming back up drops the species with the particle.
+    for n in 4:-1:1
+        RE.update!(m, Tachikoma.KeyEvent(:backspace))
+        @test length(RE.placements(m)) == n
+        @test length(m.species) == n + 1
+    end
+    # Turning it off leaves the species where they are, and turning it on over a structure built
+    # beforehand renumbers that structure rather than asking for it to be rebuilt.
+    RE.update!(m, Tachikoma.KeyEvent('f'))
+    @test !m.addressable
+    m2 = RE.EditorModel(UnitSquare)
+    m2.focus = :construction
+    _attach!(m2, 1, 1, 3)
+    _attach!(m2, 1, 2, 4)
+    @test length(m2.species) == 1
+    RE.update!(m2, Tachikoma.KeyEvent('f'))
+    @test [i for (i, _) in RE.placements(m2)] == [1, 2, 3]
+    @test length(m2.species) == 4
+    @test nbonds(m2.rules) == 2
+
+    # A catalog of shapes: any species can be set to any of them, and `p` steps through.
+    m = RE.EditorModel([UnitSquare, UnitTriangle, UnitHexagon])
+    m.focus = :construction
+    @test length(m.catalog) == 3
+    @test m.shape == [1]
+    @test nsites(m.species[1]) == nsites(UnitSquare)
+    RE.update!(m, Tachikoma.KeyEvent('p'))
+    @test m.shape == [2]
+    @test nsites(m.species[1]) == nsites(UnitTriangle)
+    RE.update!(m, Tachikoma.KeyEvent('P'))
+    @test m.shape == [1]
+    # A new species takes the shape being worked on, so a run of one shape stays that shape.
+    RE.update!(m, Tachikoma.KeyEvent('p'))
+    m.focus = :rules        # `a` and `d` belong to the rules pane
+    RE.update!(m, Tachikoma.KeyEvent('a'))
+    @test m.shape == [2, 2]
+    @test nsites(m.species[2]) == nsites(UnitTriangle)
+    # Dropping one takes its shape with it.
+    RE.update!(m, Tachikoma.KeyEvent('d'))
+    @test m.shape == [2]
+    m.focus = :construction
+    @test !isnothing(_render(m))
+    # One shape only leaves nothing to step to.
+    one_shape = RE.EditorModel(UnitSquare)
+    RE.update!(one_shape, Tachikoma.KeyEvent('p'))
+    @test one_shape.shape == [1]
+
+    # A catalog has to be consistent in dimension and pose type, every window's placements being
+    # held in one array.
+    @test_throws ArgumentError RE.EditorModel(Roly.ParticleSpecies[])
+    @test_throws ArgumentError RE.EditorModel([UnitSquare, UnitCube])
+    @test_throws ArgumentError RE.EditorModel([UnitSquare]; shape=[2])
+
+    # `shape` says how many species the editor opens with and what each one is.
+    m = RE.EditorModel([UnitSquare, UnitTriangle]; shape=[1, 2, 1])
+    @test length(m.species) == 3
+    @test m.shape == [1, 2, 1]
+    @test nsites.(m.species) == [4, 3, 4]
+
+    # Existing rules open with their bonds already set, so a system can be worked on further.
+    rules = BindingRules([1 1 2 3], [UnitSquare, UnitTriangle])
+    m = RE.EditorModel(collect(Roly.species(rules)); shape=1:nspecies(rules))
+    mat = interactionmatrix(rules)
+    for c1 in axes(mat, 1), c2 in axes(mat, 2)
+        mat[c1, c2] && (m.overrides[(c1, c2)] = true)
+    end
+    RE.refresh!(m)
+    @test nbonds(m.rules) == nbonds(rules)
+    @test interactionmatrix(m.rules) == mat
+    @test nspecies(m.rules) == nspecies(rules)
+    # And a bond that came in that way holds against the geometry, like any hand-set one.
+    m.focus = :construction
+    RE.update!(m, Tachikoma.KeyEvent('c'))
+    @test interactionmatrix(m.rules) == mat
+
+    # The enumeration title says how many structures were found, how many there are, and whether
+    # the run reached the end of them.
+    m = RE.EditorModel(UnitSquare)
+    RE.togglebond!(m, (1, 3))
+    @test occursin("e to run", RE.enumlabel(m))
+    m.maxsize = 5
+    _enumerate!(m)
+    @test !m.truncated
+    @test RE.enumlabel(m) == string("all ", length(m.polyforms), ", size ≤ 5")
+    @test m.expected == string(length(m.polyforms))   # the count agreed with the listing
+    m.maxstrs = 2
+    m.maxsize = 8
+    _enumerate!(m)
+    @test m.truncated
+    @test length(m.polyforms) == 2
+    @test occursin("cut off", RE.enumlabel(m))
+    @test occursin("2 of ", RE.enumlabel(m))
+    @test !isnothing(_render(m))
+    # No bonds is an answer rather than a count.
+    empty_rules = RE.EditorModel(UnitSquare)
+    _enumerate!(empty_rules)
+    @test RE.enumlabel(empty_rules) == "no bonds"
+
+    # `countlabel` reads an exact count as the number and an estimate with a leading `≈`.
+    @test RE.countlabel(Roly.PolyformCount(42, 3, false)) == "42"
+    est = Roly.PolyformCount([1.0e5, 1.2e5], 6, true)
+    @test startswith(RE.countlabel(est), "≈")
+    @test occursin("e", RE.countlabel(est))
+end
+
+@testset "editpolyform" begin
+    # The build interface returns the structure itself, replayed through Roly's own attachment so
+    # that it arrives with the graph, bonds and canonical ordering every polyform has.
+    function _build(sp, incoming; addressable=false)
+        m = RE.EditorModel(sp)
+        m.focus = :construction
+        m.buildonly = true
+        addressable && RE.setaddressable!(m, true)
+        for inc in incoming
+            m.incoming = inc
+            RE.update!(m, Tachikoma.KeyEvent(:enter))
+        end
+        return m
+    end
+
+    for (sp, incoming) in
+        ((UnitSquare, (3, 3, 4)), (UnitTriangle, (3, 3)), (UnitCube, (2, 2, 4)), (UnitTetrahedron, (2, 3)))
+        m = _build(sp, incoming)
+        poly = RE.assemble(m)
+        @test nparticles(poly) == length(RE.placements(m))
+        # The replay puts every particle exactly where the drawing had it.
+        want = sort([round.(p[2].x; digits=8) for p in RE.placements(m)])
+        got = sort([round.(p.pose.x; digits=8) for p in poly.particles])
+        @test want == got
+        # A tree of n particles has n-1 bonds, and they come from the polyform's own graph.
+        @test length(collect(bonds(poly))) == nparticles(poly) - 1
+        @test nbonds(bindingrules(poly)) == nbonds(m.rules)
+        @test interactionmatrix(bindingrules(poly)) == interactionmatrix(m.rules)
+    end
+
+    # One particle and no bonds is still a structure.
+    lone = RE.EditorModel(UnitSquare)
+    lone.buildonly = true
+    poly = RE.assemble(lone)
+    @test nparticles(poly) == 1
+    @test isempty(collect(bonds(poly)))
+
+    # In addressable mode the structure's own rules name a distinct color pair per bond, so they
+    # admit far less than the shared-species rules would.
+    shared = RE.assemble(_build(UnitSquare, (3, 3, 4)))
+    addressed = RE.assemble(_build(UnitSquare, (3, 3, 4); addressable=true))
+    @test nparticles(shared) == nparticles(addressed)
+    @test nspecies(bindingrules(addressed)) == nparticles(addressed) + 1
+    @test nbonds(bindingrules(addressed)) == nparticles(addressed) - 1
+    @test length(unique(bonded_colors(bindingrules(addressed)))) == nparticles(addressed) - 1
+
+    # Build-only shows the construction pane alone, and the keys that drive the other panes do
+    # not move the focus off it.
+    m = _build(UnitSquare, (3,))
+    @test m.buildonly
+    RE.update!(m, Tachikoma.KeyEvent(:tab))
+    @test m.focus === :construction
+    was = m.showconstruction
+    RE.update!(m, Tachikoma.KeyEvent('b'))
+    @test m.showconstruction == was   # there is no other pane to swap it for
+    tb = _render(m)
+    @test !isnothing(Tachikoma.find_text(tb, "Build"))
+    @test !isnothing(Tachikoma.find_text(tb, "Construction"))
+    @test isnothing(Tachikoma.find_text(tb, "Enumeration"))
+    @test isnothing(Tachikoma.find_text(tb, "Rules"))
 end

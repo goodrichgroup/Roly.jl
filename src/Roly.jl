@@ -77,14 +77,20 @@ include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 
-export editrules
+export editrules, editpolyform
 export render, polyformplot, polyformplot!
 
 """
     editrules(species::ParticleSpecies; output=:rules)
+    editrules(catalog::AbstractVector; output=:rules)
+    editrules(rules::BindingRules; output=:rules)
 
 Open a terminal editor that builds binding rules geometrically, and return them once you
-accept. Provided by the Tachikoma extension, so it needs `import Tachikoma`, which is preferable
+accept.
+
+Given a vector of species, the editor may set any of its species to any of those shapes, which
+is how a system of differently shaped particles is designed. Given a `BindingRules`, it opens on
+that system's species with its bonds already set, so an existing one can be worked on further. Provided by the Tachikoma extension, so it needs `import Tachikoma`, which is preferable
 to `using` because Tachikoma exports `render` and `Rect` as well.
 
 Rules can be built two ways, and the editor keeps both on screen at once. Placing particles reads
@@ -103,8 +109,18 @@ editor produces.
 
 The editor starts with one instance of `species`. In the rules pane `a` adds another, of the same
 shape but distinct colors, and `d` drops the last; in the construction pane, which shows them as
-a strip marking the active one, digits `1`-`9` pick which to place. Every instance gets a color range of its own in the rules whether or not it is
-ever placed, and one carrying a bond or a placement is not dropped.
+a strip marking the active one, digits `1`-`9` pick which to place. Every instance gets a color
+range of its own in the rules whether or not it is ever placed, and one carrying a bond or a
+placement is not dropped. There is no limit on how many there may be: a table that then outgrows
+the window says so rather than the editor refusing to go on.
+
+`f` turns on fully addressable mode, in which every placement takes a species of its own, the
+editor adding one as each particle goes down and dropping it again as each comes back up. No two
+particles then share a binding site color, so each bond in the rules names one particular pair of
+particles rather than a pair of species, which is what a fully addressable structure means.
+Turning the mode on over a structure already built renumbers that structure rather than asking
+for it to be rebuilt. Where the editor was given several shapes, `p` and `P` set the active
+species to another of them.
 
 With the rules focused, the arrow keys move a cursor over the interaction matrix, rows with up
 and down and columns with left and right, and enter turns that pair of colors on or off. The two
@@ -144,7 +160,13 @@ The enumeration pane draws the polyforms the rules allow. It runs on `e` rather 
 automatically, since a permissive rules set can take long enough to be felt between keystrokes;
 changing the rules marks the last run out of date rather than repeating it. `s`/`S` set the
 largest structure to look for and `x`/`X` the number to stop after, which is what bounds the
-work. Structures are numbered by their position in the run; with the pane focused the arrow keys
+work. Neither has a ceiling, what is worth waiting for being the user's to judge.
+
+Each run counts the structures before listing them, exactly while the count fits its own budget
+and by subsampling the search tree beyond it, and the pane is titled with both: `all 28, size ≤ 4`
+for a listing that reached the end of them, and `200 of ≈1.2e4, size ≤ 6, cut off` for one that
+stopped at the limit. Reporting only how many were found leaves no way to tell a finished design
+from a partial view of one. Structures are numbered by their position in the run; with the pane focused the arrow keys
 pick one, and the box beside the grid redraws it as large as the pane allows, titled with its
 number, naming every site in its own color and writing both colors where two meet, with its
 composition vector underneath.
@@ -190,6 +212,30 @@ that turning it turns the labels with it.
 If no bond was formed, returns `nothing` regardless of `output`.
 """
 function editrules end
+
+"""
+    editpolyform(species::ParticleSpecies; addressable=false)
+    editpolyform(catalog::AbstractVector; addressable=false)
+
+Open the construction pane of [`editrules`](@ref) on its own and return the structure built in
+the window in front, as a [`Polyform`](@ref) carrying the binding rules its own contacts imply.
+Provided by the Tachikoma extension, so it needs `import Tachikoma`.
+
+The keys are the construction keys of [`editrules`](@ref), the panes it has no use for being
+left off. `addressable=true` opens in fully addressable mode, which gives every particle a
+species of its own, so that the rules the structure implies name one particular pair of particles
+per bond rather than a pair of species.
+
+Returns `nothing` if nothing was built. The structure is replayed through Roly's own attachment
+to produce the polyform, so it arrives with the graph, bonds and canonical particle ordering that
+every other polyform has, which also means its particles are in canonical rather than placement
+order.
+
+The rules come from the structure, so they are exactly as permissive as its contacts require and
+generally admit other structures too. Use [`countpolyforms`](@ref) or [`polyenum`](@ref) on
+`bindingrules(poly)` to see what else they allow.
+"""
+function editpolyform end
 
 """
     render(p; hidedecorations=true, kwargs...)
