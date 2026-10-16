@@ -348,23 +348,23 @@
         end
         # an unbounded one does not finish, and its witness lays down copies that neither collide
         # nor circle: ten of them, judged by geometry alone
-        function escapes(w, rules; copies=10)
-            parts = copy(w.cell)
-            gm = w.generator
+        function escapes((g, C), rules; copies=10)
+            parts = copy(C)
+            gm = g
             for _ in 1:copies
-                for p in w.cell
+                for p in C
                     moved = gm * p
                     first(Roly._overlap_and_contacts(parts, moved, rules)) && return false
                     push!(parts, moved)
                 end
-                gm = gm * w.generator
+                gm = gm * g
             end
-            span = maximum(norm(p.pose.x - q.pose.x) for p in w.cell, q in w.cell)
+            span = maximum(norm(p.pose.x - q.pose.x) for p in C, q in C)
             return norm(parts[end].pose.x - parts[1].pose.x) > span
         end
         for r in unbounded
             @test polyenum(r; maxstrs=20, checkbounded=false).status == MaxVerticesReached
-            w = Roly._repeatingchain(r)
+            w = Roly._escapingrepeat(r)
             @test w !== nothing && escapes(w, r)
         end
 
@@ -379,19 +379,19 @@
         @test length(polygen(ring)) == 4
 
         # the motion behind the answer
-        @test Roly._repeatingchain(chainlike).period == 1
-        @test Roly._repeatingchain(ring) === nothing
+        @test length(last(Roly._escapingrepeat(chainlike))) == 1
+        @test Roly._escapingrepeat(ring) === nothing
         # two quarter turns compose to a translation over two particles; the motion accumulates a
         # full 2pi, which has to be wrapped before it is judged to be turning at all
-        wt = Roly._repeatingchain(turnrules)
-        @test wt.period == 2
-        @test isapprox(rem(rotation_angle(wt.generator.psi), 2pi, RoundNearest), 0; atol=1e-8)
-        @test norm(wt.generator.x) ≈ 2
+        gt, Ct = Roly._escapingrepeat(turnrules)
+        @test length(Ct) == 2
+        @test isapprox(rem(rotation_angle(gt.psi), 2pi, RoundNearest), 0; atol=1e-8)
+        @test norm(gt.x) ≈ 2
         # the helix repeats under a screw whose turn is irrational, so it never closes, and whose
         # climb is what escapes
-        wh = Roly._repeatingchain(helix)
-        @test isapprox(rotation_angle(wh.generator.psi), acos(-2 / 3); atol=1e-6)
-        @test abs(dot(wh.generator.x, rotation_axis(wh.generator.psi))) > 0.1
+        gh, _ = Roly._escapingrepeat(helix)
+        @test isapprox(rotation_angle(gh.psi), acos(-2 / 3); atol=1e-6)
+        @test abs(dot(gh.x, rotation_axis(gh.psi))) > 0.1
 
         # the chain length is derived from the states a chain can be in, counting only the sites
         # a bond can reach: three species of squares with four bondable sites between them

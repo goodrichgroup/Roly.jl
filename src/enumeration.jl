@@ -268,7 +268,7 @@ function polycount(
     return PolyformCount(samples, largest, isfinite(maxsize))
 end
 
-# What an enumeration without a cap runs first.
+# Throws if `rules` is unbounded. Runs before any enumeration without a cap.
 function _checkbounded(rules::BindingRules)
     isbounded(rules) && return nothing
     throw(
@@ -280,7 +280,7 @@ function _checkbounded(rules::BindingRules)
 end
 
 """
-    isbounded(rules::BindingRules; maxchainlength=_nchainstates(rules) + 2)
+    isbounded(rules::BindingRules [; maxchainlength])
 
 Return `true` if `rules` admits finitely many structures and `false` otherwise.
 
@@ -289,22 +289,22 @@ The answer is computed by enumerating one-dimensional chains and checking if any
 introduce false positive results.
 """
 function isbounded(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
-    return _repeatingchain(rules; maxchainlength) === nothing
+    return isnothing(_escapingrepeat(rules; maxchainlength))
 end
 
-# A rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
-# structure, as `(; generator, cell, period)`, or `nothing` if none exists within `maxchainlength`.
-function _repeatingchain(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
+# Returns a rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
+# structure, as `(g, C)`, or `nothing` if no chain of up to `maxchainlength` particles repeats a
+# state that way.
+function _escapingrepeat(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
     for i in 1:nspecies(rules)
-        w = _walkchains(Polyform(rules, i), maxchainlength)
+        w = _walkchains(_Chain(Polyform(rules, i)), maxchainlength)
         w === nothing || return w
     end
     return nothing
 end
 
-# How long a chain of `rules` can get before it must repeat a state. A state is the species at the
-# chain's end, which of its sites the incoming bond uses, and with which twist: one per site a bond
-# can arrive at, per distinct twist it can arrive with, over every species.
+# Returns the number of states a chain of `rules` can be in (state = species at its end + site + twist)
+# A chain longer than that must repeat a state.
 function _nchainstates(rules::BindingRules)
     total = 0
     for i in 1:nspecies(rules)
@@ -322,13 +322,13 @@ function _nchainstates(rules::BindingRules)
     return total
 end
 
-# A chain as the search holds it: the polyform, and per particle the state it was added in, the
-# species together with the site and twist its incoming bond uses. The first particle's is
-# `(species, 0, 0)`, having no incoming bond.
+# A chain: its polyform, and per particle the state `(species, incoming site, twist)` it was added
+# in.
 mutable struct _Chain{P<:Polyform}
     poly::P
     states::Vector{NTuple{3,Int}}
 end
+_Chain(poly::Polyform) = _Chain(poly, [(speciesindex(poly.particles[1]), 0, 0)]) # Starts a chain from one particle, which has no incoming bond.
 Base.copy(c::_Chain) = _Chain(copy(c.poly), copy(c.states))
 function Base.copy!(dst::_Chain, src::_Chain)
     copy!(dst.poly, src.poly)
@@ -341,9 +341,9 @@ mutable struct _ChainAux{BS}
 end
 Base.copy(a::_ChainAux) = _ChainAux(copy(a.attachments))
 
-# Every way to attach a particle at an open site of the newest particle of `poly`: the site, the
-# mating site, and the twist.
-function _endattachments!(out, poly::Polyform)
+# Collects into `out` every extension of `c` at its newest particle: open site, mating site, twist.
+function _chainextensions!(out, c::_Chain)
+    poly = c.poly
     rules = bindingrules(poly)
     part = poly.particles[end]
     empty!(out)
@@ -361,11 +361,11 @@ function _endattachments!(out, poly::Polyform)
     return out
 end
 
-# The `j`-th extension of the chain `v` at its newest particle, written into `u`. Attaching forms
-# every geometric contact, so a chain may cross-link back onto itself; that is a valid structure,
-# and the newest particle is extended regardless. No graph is ever compared, so none is canonized.
+# Writes the `j`-th extension of `v` into `u`, forming every contact the new particle makes, so a
+# chain may cross-link onto itself. Returns `missing` if it does not fit and `nothing` past the
+# last. Canonizes nothing, since no graph is compared.
 function _extendchain!(u::_Chain, v::_Chain, j::Integer, aux::_ChainAux)
-    j == 1 && _endattachments!(aux.attachments, v.poly)
+    j == 1 && _chainextensions!(aux.attachments, v)
     j > length(aux.attachments) && return nothing
     site, loc, r = aux.attachments[j]
     copy!(u.poly, v.poly)
@@ -375,18 +375,17 @@ function _extendchain!(u::_Chain, v::_Chain, j::Integer, aux::_ChainAux)
     return u
 end
 
-# Depth-first over directed chains of up to `maxchainlength` particles, returning the first repeat
-# whose motion escapes. The states a chain has passed through are exactly the chain read from its
-# start, so a repeated state is a stretch that repeats under one motion.
-function _walkchains(poly::Polyform, maxchainlength)
-    root = _Chain(poly, [(speciesindex(poly.particles[1]), 0, 0)])
-    aux = _ChainAux(Tuple{sitetype(bindingrules(poly)),SpeciesSiteLoc,Int}[])
-    witness = Ref{Any}(nothing)
+# Searches depth-first over the chains of up to `maxchainlength` particles grown from `root`, and
+# returns the first repeated state whose motion escapes, or `nothing`.
+function _walkchains(root::_Chain, maxchainlength)
+    rules = bindingrules(root.poly)
+    aux = _ChainAux(Tuple{sitetype(rules),SpeciesSiteLoc,Int}[])
+    witness = Ref{Union{Nothing,Tuple{posetype(rules),Vector{particletype(rules)}}}}(nothing)
     _backtrack(_extendchain!, root; aux, maxdepth=maxchainlength - 1) do c, _
         n = nparticles(c.poly)
         j = findlast(==(c.states[end]), view(c.states, 1:(n - 1)))
         isnothing(j) && return ACCEPT
-        w = _screwescape(c.poly, j, n)
+        w = _screwescape(c, j, n)
         isnothing(w) && return ACCEPT
         witness[] = w
         return BREAK
@@ -394,33 +393,34 @@ function _walkchains(poly::Polyform, maxchainlength)
     return witness[]
 end
 
-# The stretch between two occurrences of a state repeats under `g`. Whether that goes on forever
-# is decided by how far the screw climbs, and if it can, by finitely many placements.
-function _screwescape(poly::Polyform, i::Integer, j::Integer)
-    rules = bindingrules(poly)
-    cell = poly.particles[i:(j - 1)]
-    g = poly.particles[j].pose * inv(poly.particles[i].pose)
+# Returns the stretch `i:(j - 1)` of `c` with the motion carrying it onto its next copy, if applying
+# that motion forever collides with nothing, else `nothing`. Only copies within the stretch's own
+# extent along the axis can collide, so finitely many are checked.
+function _screwescape(c::_Chain, i::Integer, j::Integer)
+    rules = bindingrules(c.poly)
+    C = c.poly.particles[i:(j - 1)]
+    g = c.poly.particles[j].pose * inv(c.poly.particles[i].pose)
 
     axis, h = _screwclimb(g)
     isnothing(h) && return nothing               # a pure rotation cannot escape its own annulus
 
-    us = (dot(p.pose.x, axis) for p in cell)
-    rmax = maximum(bounding_radius(species(rules, speciesindex(p))) for p in cell)
+    us = (dot(p.pose.x, axis) for p in C)
+    rmax = maximum(bounding_radius(species(rules, speciesindex(p))) for p in C)
     extent = maximum(us) - minimum(us) + 2 * rmax
     gm = g
     for _ in 1:ceil(Int, extent / abs(h))
-        for p in cell
+        for p in C
             moved = gm * p
-            first(_overlap_and_contacts(cell, moved, rules)) === true && return nothing
+            first(_overlap_and_contacts(C, moved, rules)) === true && return nothing
         end
         gm = gm * g
     end
-    return (; generator=g, cell=cell, period=length(cell))
+    return (g, C)
 end
 
-# `(axis, climb)` of a rigid motion: the direction it carries things along, and how far per
-# application. `(nothing, nothing)` when it carries them nowhere: a pure rotation in 3D, any
-# rotation in 2D, or the identity.
+# Returns `(axis, climb)` of a rigid motion. Any rigid motion can be viewed as screw along `axis`,
+# where `climb` is the distance along the axis the body is translated by. (The normal distance from the axis
+# is not returned by this function.)
 function _screwclimb(g::Pose{D,F}) where {D,F}
     tol = sqrt(eps(F))
     turning = abs(rem(rotation_angle(g.psi), 2 * F(π), RoundNearest)) > tol
