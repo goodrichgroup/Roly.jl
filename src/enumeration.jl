@@ -294,9 +294,6 @@ end
 
 # A rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
 # structure, as `(; generator, cell, period)`, or `nothing` if none exists within `maxchainlength`.
-#
-# A chain of `n` particles carries `n - 1` states, the first particle having no incoming bond, so
-# the shortest chain certain to repeat one has two particles more than there are states.
 function _repeatingchain(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
     for i in 1:nspecies(rules)
         w = _walkchains(Polyform(rules, i), maxchainlength)
@@ -327,7 +324,7 @@ end
 
 # Depth-first over directed chains of up to `maxchainlength` particles, extending only at the particle
 # last added, so the states a chain has passed through are exactly the chain read from its start.
-# Returns the first repeat whose motion escapes. `raise!` forms every geometric contact, so a chain
+# Returns the first repeat whose motion escapes. Attaching forms every geometric contact, so a chain
 # may cross-link back onto itself; that is a valid structure, and the newest particle is extended
 # regardless.
 function _walkchains(poly::Polyform, maxchainlength)
@@ -356,7 +353,7 @@ function _walkchains(poly::Polyform, maxchainlength)
                 mate = bindingsite(rules, loc)
                 for r in 0:(_ndistincttwists(site, mate) - 1)
                     child = copy(poly)
-                    ismissing(raise!(child, site, loc, r)) && continue
+                    ismissing(add_particle!(child, site, loc, r; canonize=false)) && continue
                     push!(children, (child, push!(copy(states), (loc.species, loc.site, Int(r)))))
                 end
             end

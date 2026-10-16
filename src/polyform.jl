@@ -575,6 +575,13 @@ in twist `t` of the bond (see [`standard_twist`](@ref)).
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
 function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, t::Integer=0; kwargs...)
+    return add_particle!(poly, site, loc, t; canonize=true, kwargs...)
+end
+
+# Attach a particle and record its bonds, and canonize the graph afterwards unless told not to. A
+# caller that reads only the geometry and the bonds skips the canonization, and with it the `sigma`
+# it would have computed, which is then stale.
+function add_particle!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, t::Integer; canonize::Bool, kwargs...)
     rules = bindingrules(poly)
     particle_species = species(rules, loc.species)
     leadingvertex = nv(graphrep(poly)) + 1
@@ -602,9 +609,13 @@ function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, t::Integ
     end
 
     append!(poly.canon2orig, graphvertices(attached_particle, rules))
-    perm, autg = nauty(graphrep(poly); canonize=true)
-    _apply_perm!(poly, perm)
-    poly.sigma = round(Int, autg.n)
+    if canonize
+        perm, autg = nauty(graphrep(poly); canonize=true)
+        _apply_perm!(poly, perm)
+        poly.sigma = round(Int, autg.n)
+    else
+        append!(poly.orig2canon, graphvertices(attached_particle, rules))   # appended, so in place
+    end
     return poly
 end
 
