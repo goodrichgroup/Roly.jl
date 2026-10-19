@@ -143,7 +143,10 @@ colors are picked out in the species drawings above the matrix, so moving the cu
 sites are selected and enter bonds them. The matrix and the list of bonding pairs are both shown,
 the matrix saying what is possible and the list what is set; the cursor drives the matrix, being
 the editable one, and the list marks whichever pair it is on. A matrix too big to sit beside the
-list moves to a full-height pane of its own.
+list moves to a full-height pane of its own, so long as it leaves the other panes their minimum
+width. A matrix grows as the square of the colors, so a fully addressable structure asks for most
+of the screen; past that the list of bonding pairs takes over and the rules pane is titled with
+the color count.
 
 A site is drawn in a shade of its species' own hue, so its color says which particle it belongs
 to, and a matrix cell is split between the colors of the two sites it joins, the row's above and
@@ -153,9 +156,13 @@ stops adding species at 99 colors rather than naming two different sites the sam
 from its first binding site, showing which way it is turned, left off wherever the particle is
 drawn too small for it to read as a direction.
 
-With the construction focused, the arrow keys walk the cursor around the structure's perimeter
-one free site at a time, taking whichever of the current site's two neighbors better matches the
-direction pressed, so no site is skipped and no key is dead; `,` and `.` step in perimeter order.
+With the construction focused, each arrow key takes the free site lying next in that direction,
+out of every site ahead rather than out of the two nearest round the perimeter: the one taken
+minimizes its distance along the direction plus a weight times its offset to the side, so a
+nearly aligned site wins over a nearer one off to one side. The distance along the direction
+strictly increases at every step, so holding one arrow down marches across the structure and then
+stops, with nothing ahead left to take, rather than oscillating between a pair each of which was
+the better match from the other. `,` and `.` walk the perimeter in order, which always moves.
 `r`/`R` turn the pending particle by changing which of its sites meets the cursor, `t`/`T` pick
 the twist in 3D, enter attaches and backspace undoes.
 
@@ -179,11 +186,11 @@ work. Neither has a ceiling, what is worth waiting for being the user's to judge
 
 Each run first asks `isbounded` whether the rules admit finitely many structures at all and
 `polycount` how many there are, exactly while the count fits its own budget and by subsampling
-the search tree beyond it. The pane title then carries the found count and a tag for each thing
-that bounds it: `16, complete, bounded` for a listing that holds every structure the rules admit,
-`15, size ≤ 4, bounded` for one the size bound stops short of the 16 there are, and
-`200 of ≈1.2e4, cut off at 200, unbounded` for one stopped by the count bound under rules that
-admit arbitrarily large structures. The sidebar carries the same verdict on the rules themselves,
+the search tree beyond it. The pane title then carries the found count, how many there are to
+find when that is more, and a tag for each bound in force: `16, complete, bounded` for a listing
+that holds every structure the rules admit, `15 of 16, size ≤ 4, bounded` for one the size bound
+stops short, and `200 of ≈688k, size ≤ 12, unbounded` under rules that admit arbitrarily large
+structures. Counts above ten thousand are abbreviated with `k`, `M` or `B`. The sidebar carries the same verdict on the rules themselves,
 `bounded, 16 total` against `unbounded`. Reporting only how many were found leaves no way to tell
 a finished design from a partial view of one. Structures are numbered by their position in the run; with the pane focused the arrow keys
 pick one, and the box beside the grid redraws it as large as the pane allows, titled with its
@@ -235,20 +242,27 @@ function editrules end
 """
     editpolyform(species::ParticleSpecies; addressable=false)
     editpolyform(catalog::AbstractVector; addressable=false)
+    editpolyform(poly::Polyform; addressable=false)
 
 Open the construction pane of [`editrules`](@ref) on its own and return the structure built in
 the window in front, as a [`Polyform`](@ref) carrying the binding rules its own contacts imply.
 Provided by the Tachikoma extension, so it needs `import Tachikoma`.
+
+Given a `Polyform`, the editor opens on that structure and the system it was built under, so one
+can be carried on from or taken apart. A window holds one connected structure, so a particle the
+rest hangs off is not removed.
 
 The keys are the construction keys of [`editrules`](@ref), the panes it has no use for being
 left off. `addressable=true` opens in fully addressable mode, which gives every particle a
 species of its own, so that the rules the structure implies name one particular pair of particles
 per bond rather than a pair of species.
 
-Returns `nothing` if nothing was built. The structure is replayed through Roly's own attachment
-to produce the polyform, so it arrives with the graph, bonds and canonical particle ordering that
-every other polyform has, which also means its particles are in canonical rather than placement
-order.
+Returns `nothing` if nothing was built, or if the window does not hold one connected structure.
+The polyform is grown through Roly's own attachment, in an order read off the contacts, so it
+arrives with the graph, bonds and canonical particle ordering that every other polyform has. That
+canonical ordering is also why its particles are not in the order they were placed, and why a
+structure that goes round the editor comes back equal by its canonical graph rather than by
+`==`, which asks for the same rules object.
 
 The rules come from the structure, so they are exactly as permissive as its contacts require and
 generally admit other structures too. Use [`polycount`](@ref) or [`polyenum`](@ref) on

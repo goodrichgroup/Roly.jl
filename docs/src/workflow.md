@@ -93,7 +93,9 @@ With the rules pane focused, the arrow keys move a cursor over the interaction m
 The two colors the cursor names are picked out in the species drawings above the matrix, so a cell can be read as the sites it stands for: moving the cursor is how two sites are selected, and `Enter` bonds them.
 Both tables are on screen at once, the matrix beside the list of bonding pairs: the matrix says what is possible and the list says what is set, which is what you want once the relation is sparse and the grid is mostly dots.
 The cursor drives the matrix, since that is the editable one, and the list simply marks whichever pair it is on.
-A matrix too big to sit beside the list moves to a full-height pane of its own, which holds a far larger one than a corner of the rules pane does; if it will not fit even there the rules pane says so rather than leaving a gap.
+A matrix too big to sit beside the list moves to a full-height pane of its own, which holds a far larger one than a corner of the rules pane does.
+It only gets that pane while it leaves the other panes their minimum width: a matrix grows as the square of the colors, so a fully addressable structure of any size asks for most of the screen and would leave no room for the drawings its rules are read against.
+Past that the list of bonding pairs takes over, every bond being one line of it, and the rules pane is titled with the color count so that an absent matrix does not look like a fault.
 
 A site is drawn in a shade of its species' own hue, so its color says which particle it belongs to.
 A bond cell in the matrix is split between the colors of the two sites it joins, the row's in the upper half and the column's in the lower.
@@ -113,7 +115,12 @@ There is no limit on the number of species: once the tables no longer fit the wi
 
 `b` brings in the construction pane, which is the other way to arrive at a bond table: place blocks and the rules are read off the contacts.
 Each attachment puts a copy of a species on one of the structure's free binding sites, which takes two choices: where to attach, and how the incoming particle is turned.
-The arrow keys walk the cursor around the perimeter, one free site at a time, each press taking whichever of the current site's two neighbors better matches the direction pressed, so a site is never skipped over and no key is ever dead; `,` and `.` step in perimeter order regardless of direction.
+Each arrow key takes the free site lying next in that direction, chosen from every site ahead of the cursor rather than from the two nearest round the perimeter.
+The one taken minimizes its distance along the direction plus a weight times its offset to the side, so a nearly aligned site wins over a nearer one off to one side, which is the directional navigation an arrow key usually means.
+
+Because the distance along the direction strictly increases at every step, holding one arrow down marches across the structure and then stops, with nothing ahead left to take.
+Comparing only the two perimeter neighbors, as this did, sent the cursor back and forth on a large structure: each of a pair was the better match from the other.
+`,` and `.` walk the perimeter in order, which always moves.
 `r` and `R` turn the pending particle, which changes which of its sites meets the cursor.
 The species appear as a strip along the top of this pane, marking the one the next placement would use, since that is the only thing choosing one decides; `Enter` attaches, backspace undoes, and digits `1` to `9` pick the species to place.
 
@@ -156,11 +163,16 @@ The keys are the construction keys above, the panes it has no use for being left
 ```julia
 poly = editpolyform(UnitCube)
 poly = editpolyform(UnitCube; addressable=true)   # a species per particle
+poly = editpolyform(poly)                         # carry on from a structure
 rules = bindingrules(poly)
 ```
 
-The structure is replayed through Roly's own attachment rather than assembled from the poses on screen, so it arrives with the graph, the bonds and the canonical ordering that every other polyform has.
-That canonical ordering is also why its particles are not in the order they were placed.
+Passing a `Polyform` opens the editor on that structure and the system it was built under.
+A window holds one connected structure, which is what makes it a polyform, so a particle the rest hangs off is not removed.
+
+The polyform is grown through Roly's own attachment rather than assembled from the poses on screen, so it arrives with the graph, the bonds and the canonical ordering that every other polyform has.
+The order it is grown in is read off the contacts, which is why a structure the editor was opened on rebuilds as readily as one built in it.
+That canonical ordering is also why its particles are not in the order they were placed, and why a structure that goes round the editor comes back equal by its canonical graph rather than by `==`, which asks for the same rules object.
 The rules come from the structure, so they are exactly as permissive as its contacts require and generally admit other structures too: pass `bindingrules(poly)` to [`polycount`](@ref) to see how many.
 
 Seating a particle against the chosen site can put it against several at once, which is how a ring closes.
@@ -192,9 +204,11 @@ The pane title then carries the number found and a tag for each thing that bound
 | Title | Meaning |
 |:--|:--|
 | `16, complete, bounded` | the listing holds every polyform the rules admit |
-| `15, size ≤ 4, bounded` | complete up to the size bound, which stops it short of the 16 there are |
-| `91, size ≤ 5, unbounded` | complete up to the size bound, and the rules admit arbitrarily large polyforms |
-| `200 of ≈1.2e4, cut off at 200, unbounded` | the count bound stopped it, against an estimated 1.2e4 |
+| `15 of 16, size ≤ 4, bounded` | the size bound stops it short of the 16 there are |
+| `91, size ≤ 5, unbounded` | everything up to the size bound, and the rules admit arbitrarily large polyforms |
+| `200 of ≈688k, size ≤ 12, unbounded` | 200 of an estimated 688000 up to that size |
+
+Counts above ten thousand are abbreviated with `k`, `M` or `B` to three significant figures, which reads at a glance where an exponent does not.
 
 The sidebar carries the same verdict on the rules themselves, `bounded, 16 total` against `unbounded`, since that is a property of the design rather than of how far the last run got.
 Reporting only how many were found leaves no way to tell a finished design from a partial view of one.

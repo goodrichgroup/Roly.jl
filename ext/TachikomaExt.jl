@@ -286,6 +286,60 @@ function sortfree(free, placements, species, cam::Camera)
 end
 
 """
+    attachmentorder(placements, species)
+
+Return the order the placements can be attached in, one at a time, and the contact each arrives
+by as `(placement, parent, parent site, site)`.
+
+A polyform grows one particle at a time from a seed, so every prefix of the order has to be
+connected. The order a structure was built in is one, but a structure that arrived already
+assembled has its particles in canonical order instead, which need not be, so the order is read
+off the contacts rather than assumed. A disconnected remainder is left out, which is how the
+caller learns the placements are not one structure.
+"""
+function attachmentorder(ps, spcs)
+    isempty(ps) && return (Int[], NTuple{4,Int}[])
+    sites = absolutesites(ps, spcs)
+    placed = [1]
+    steps = NTuple{4,Int}[]
+    waiting = Set(2:length(ps))
+    while !isempty(waiting)
+        step = nothing
+        for j in placed, k in sort!(collect(waiting))
+            for (a, s1) in enumerate(sites[j]), (b, s2) in enumerate(sites[k])
+                if istouching(s1, s2)
+                    step = (k, j, a, b)
+                    break
+                end
+            end
+            step === nothing || break
+        end
+        step === nothing && break
+        push!(steps, step)
+        push!(placed, step[1])
+        delete!(waiting, step[1])
+    end
+    return placed, steps
+end
+
+"""
+    recovertwist(anchor, mate, target)
+
+Return the twist of the bond that seats `mate` against `anchor` at `target`, or `nothing` if no
+twist does.
+
+A pose records where a particle ended up, not which of the twists admitted by the bond put it
+there, and `Roly.raise!` is told the twist rather than the pose, so it is recovered by trying
+each in turn.
+"""
+function recovertwist(anchor::BindingSite, mate::BindingSite, target::Pose)
+    for t in 0:(max(twistfreedom(anchor, mate), 1) - 1)
+        isapprox(seatpose(anchor, mate, t), target; atol=1e-6) && return t
+    end
+    return nothing
+end
+
+"""
     contacts(placements, species)
 
 Return `(position, species1, site1, species2, site2)` for every pair of touching sites between
@@ -441,6 +495,8 @@ function todotsf(v::World, p)
 end
 
 todots(v::World, p) = round.(Int, todotsf(v, p))
+
+inrect(r::Rect, col::Int, row::Int) = r.x <= col <= right(r) && r.y <= row <= bottom(r)
 
 """
     worldbox(placements, species, cam)
@@ -845,6 +901,14 @@ const ZOOM_RANGE = 16.0
 # however permissive the rules are. Neither bound has a ceiling, since what is worth waiting for
 # is the user's to judge.
 const MINSIZE = 1
+
+# How hard the expected-count estimate works. It is a number in a pane title, read against a
+# listing the user is about to scroll, so a fast figure within a factor of a little is worth more
+# than a tight one that is felt between keystrokes: a smaller exact budget hands over to
+# subsampling sooner, and two trials rather than five cut the sampling itself.
+const COUNT_BUDGET = 1_000
+const COUNT_TRIALS = 2
+const COUNT_SAMPLES = 50_000
 const THUMB_W = 13
 const THUMB_H = 6
 const DETAIL_W = 24
@@ -864,10 +928,6 @@ const DETAIL_W = 24
     # read off all of them together, so a bond one window discovers survives while another is
     # being built, and clearing a window drops only the bonds nothing else produces.
     windows::Vector{Vector{Placement{P}}}
-    # How each particle after a window's first was attached: the placement and site it was seated
-    # against, which of its own sites met it, and the twist. Poses alone cannot be replayed into
-    # a `Roly.Polyform`, whose graph and bond bookkeeping only `Roly.raise!` fills in.
-    windowsteps::Vector{Vector{NTuple{4,Int}}}
     window::Int = 1
     free::Vector{Tuple{Int,Int}} = Tuple{Int,Int}[]
     rules::Union{Nothing,BindingRules} = nothing
@@ -957,13 +1017,6 @@ separate arrangement of the same species and each has its own contacts to contri
 """
 allplacements(m::EditorModel) = m.windows
 
-"""
-    steps(m)
-
-Return the attachment record of the window in front, one entry per particle after its first.
-"""
-steps(m::EditorModel) = m.windowsteps[m.window]
-
 camera(m::EditorModel) = VIEWPOINTS[m.viewpoint]
 
 """
@@ -1002,7 +1055,6 @@ function EditorModel(catalog::AbstractVector; shape::AbstractVector{<:Integer}=[
         species=S[copy(catalog[j]) for j in sh],
         shape=sh,
         windows=[Placement{P}[(1, one(P))]],
-        windowsteps=[NTuple{4,Int}[]],
         scale=opening,
         basescale=opening,
     )
@@ -1195,14 +1247,32 @@ function setaddressable!(m::EditorModel, on::Bool)
 end
 
 """
+    cursorspecies(m)
+
+Return the species the focused pane is pointing at: the one the next placement would use in the
+construction pane, and the one owning the color under the cursor in the rules pane.
+
+The rules pane has no active species of its own, its cursor naming a pair of colors, so the color
+it sits on is what says which species an edit there is about.
+"""
+function cursorspecies(m::EditorModel)
+    m.focus === :rules || return m.active_species
+    for ((sp, _), c) in sitecolors(m)
+        c == m.pair[1] && return sp
+    end
+    return m.active_species
+end
+
+"""
     setshape!(m, step)
 
-Step the active species to another shape in the catalog, wrapping round it. Does nothing when
-the editor was given only one shape.
+Step the species the cursor is on to another shape in the catalog, wrapping round it. Does
+nothing when the editor was given only one shape.
 """
 function setshape!(m::EditorModel, step::Int)
     length(m.catalog) > 1 || return notify!(m, "one shape only"; kind=:warning)
-    i = m.active_species
+    i = clamp(cursorspecies(m), 1, length(m.species))
+    m.active_species = i
     j = mod1(m.shape[i] + step, length(m.catalog))
     m.shape[i] = j
     m.species[i] = copy(m.catalog[j])
@@ -1307,6 +1377,17 @@ function refreshpalette!(m::EditorModel)
 end
 
 """
+    showlabels(m)
+
+Whether a site label is still worth writing onto a drawing.
+
+A label sits at the site it names, so it has to be narrow enough not to bury the drawing under
+it. Three characters apiece is past that: a structure of any size becomes a wall of digits, and
+the colors are still named by the matrix and the list of bonding pairs.
+"""
+showlabels(m::EditorModel) = m.labelw <= 2
+
+"""
     label(m, c)
 
 Return the text color index `c` is drawn as, in the width the current rules call for.
@@ -1365,8 +1446,8 @@ function enumerate!(m::EditorModel)
         # even where listing every structure is out of reach, which is what says whether the
         # listing below is the whole of it. With bounded rules it is also worth having over every
         # size, which is the number the design is really after.
-        m.expected = countlabel(polycount(rules; maxsize=m.maxsize))
-        m.bounded && (m.total = countlabel(polycount(rules)))
+        m.expected = countlabel(polycount(rules; maxsize=m.maxsize, countopts()...))
+        m.bounded && (m.total = countlabel(polycount(rules; countopts()...)))
         polys = polygen(rules; maxsize=m.maxsize, maxpolys=m.maxpolys)
         filter!(p -> nparticles(p) > 0, polys)
         append!(m.polyforms, polys)
@@ -1379,17 +1460,39 @@ function enumerate!(m::EditorModel)
 end
 
 """
+    compactcount(n)
+
+Return a reading of a count that stays short without resorting to exponents: the number itself
+below ten thousand, and three significant figures with a `k`, `M` or `B` above it.
+
+A pane title has room for a few characters, and `12k` is read at a glance where `1.2e4` is not.
+"""
+function compactcount(n::Real)
+    n < 10_000 && return string(round(Int, n))
+    for (scale, suffix) in ((1e9, "B"), (1e6, "M"), (1e3, "k"))
+        v = n / scale
+        # Whatever rounds to at least one at this scale belongs to it, so 999_999 reads as
+        # `1.0M` rather than `1000k`.
+        v >= 0.9995 || continue
+        return string(v < 10 ? round(v; digits=1) : round(Int, v), suffix)
+    end
+    return string(round(Int, n))
+end
+
+"""
+    countopts()
+
+Return the keyword arguments the editor counts with, which trade accuracy for speed.
+"""
+countopts() = (budget=COUNT_BUDGET, ntrials=COUNT_TRIALS, maxsamples=COUNT_SAMPLES)
+
+"""
     countlabel(c)
 
 Return a short reading of a `Roly.PolyformCount`: the number itself when it is exact, and `≈`
 before it when it is an estimate from subsampling the search tree.
 """
-function countlabel(c)
-    c.exact && return string(round(Int, c.n))
-    c.n < 1e4 && return string("≈", round(Int, c.n))
-    e = floor(Int, log10(c.n))
-    return string("≈", round(c.n / 10.0^e; digits=1), "e", e)
-end
+countlabel(c) = string(c.exact ? "" : "≈", compactcount(c.n))
 
 """
     enumlabel(m)
@@ -1405,16 +1508,14 @@ function enumlabel(m::EditorModel)
     isempty(m.enuminfo) || return m.enuminfo
     m.stale && return string("size ≤ ", m.maxsize, ", e to run")
     found = length(m.polyforms)
-    tags = String[m.truncated ? string(found, " of ", m.expected) : string(found)]
-    # Why the listing stops where it does: the count bound, the size bound, or nothing, in which
-    # case it holds every structure the rules admit.
-    if m.truncated
-        push!(tags, string("cut off at ", m.maxpolys))
-    elseif m.bounded === true && m.total == string(found)
-        push!(tags, "complete")
-    else
-        push!(tags, string("size ≤ ", m.maxsize))
-    end
+    # What there is to find: every structure the rules admit when they are bounded, and
+    # otherwise every one up to the size bound, there being no total to count against.
+    whole = m.bounded === true && !isempty(m.total) ? m.total : m.expected
+    short = whole != string(found)
+    tags = String[short ? string(found, " of ", whole) : string(found)]
+    # A listing that fell short says so by the counts; what remains to be said is the bound still
+    # in force, or that nothing is.
+    push!(tags, !short && m.bounded === true ? "complete" : string("size ≤ ", m.maxsize))
     # Unbounded rules admit arbitrarily large structures, so no run of them is ever the whole of
     # it however far it got.
     m.bounded === nothing || push!(tags, m.bounded ? "bounded" : "unbounded")
@@ -1675,8 +1776,6 @@ function attach!(m::EditorModel)
     blocked = blockedby(m, pose)
     blocked === nothing || return notify!(m, "overlaps particle $blocked"; kind=:warning)
     near = anchorposition(m)
-    i, k = m.free[m.anchor]
-    push!(steps(m), (i, k, m.incoming, m.twist))
     push!(placements(m), (m.active_species, pose))
     m.message = ""
     refresh!(m; near)
@@ -1686,8 +1785,14 @@ end
 function undo!(m::EditorModel)
     near = anchorposition(m)
     if length(placements(m)) > 1
-        pop!(placements(m))
-        isempty(steps(m)) || pop!(steps(m))
+        dropped = pop!(placements(m))
+        # A window is one connected structure, which is what makes it a polyform. Removing a
+        # particle the rest hangs off would leave two, so it is refused rather than silently
+        # producing something no polyform can represent.
+        if length(first(attachmentorder(placements(m), m.species))) < length(placements(m))
+            push!(placements(m), dropped)
+            return notify!(m, "that particle holds the rest on"; kind=:warning)
+        end
     end
     refresh!(m; near)
     return m
@@ -1707,14 +1812,12 @@ function reset!(m::EditorModel)
     P = poseof(m)
     if length(placements(m)) == 1 && length(m.windows) > 1
         deleteat!(m.windows, m.window)
-        deleteat!(m.windowsteps, m.window)
         m.window = min(m.window, length(m.windows))
         m.refit = true
         refresh!(m)
         return notify!(m, string("closed window, ", length(m.windows), " left"))
     end
     m.windows[m.window] = Placement{P}[(m.active_species, one(P))]
-    m.windowsteps[m.window] = NTuple{4,Int}[]
     m.refit = true
     refresh!(m)
     resetcamera!(m)
@@ -1732,7 +1835,6 @@ and both stay on the books: the rules are read off every window at once.
 function newwindow!(m::EditorModel)
     P = poseof(m)
     insert!(m.windows, m.window + 1, Placement{P}[(m.active_species, one(P))])
-    insert!(m.windowsteps, m.window + 1, NTuple{4,Int}[])
     m.window += 1
     m.refit = true
     refresh!(m)
@@ -1761,16 +1863,35 @@ end
 # arrow keys mean geometrically.
 const ARROWS = (up=SVector(0.0, 1.0), down=SVector(0.0, -1.0), left=SVector(-1.0, 0.0), right=SVector(1.0, 0.0))
 
+# How much a site's sideways offset counts against it when an arrow key picks the next one. Above
+# one, so that `right` lands on something to the right rather than mostly above, while still
+# allowing a step that is not exactly on the axis.
+const STEP_SIDEWAYS = 2.5
+
+# How far along the direction a site must lie to count as being ahead at all, as a fraction of a
+# particle's radius. Two sites can project to nearly the same point, and treating one of those as
+# ahead of the other is what lets a direction double back.
+const STEP_AHEAD = 0.02
+
 """
     stepanchor!(m, dir)
 
-Move the cursor one free site along the perimeter, in whichever of the two directions better
-matches the screen direction `dir`.
+Move the cursor to the free site lying next in the screen direction `dir`.
 
-The cursor only ever moves to a neighbor in the clockwise order, so it never steps over a site
-on the way, and there is always a neighbor to move to, so no arrow key is ever dead. Which
-neighbor it takes is decided by the direction alone, comparing the bearing of each against the
-key rather than the distance, so a near neighbor is not passed over for a distant one.
+Every site ahead of the cursor in that direction is a candidate, and the one taken minimizes its
+distance along the direction plus [`STEP_SIDEWAYS`](@ref) times its offset to the side, so a
+nearly aligned site wins over a nearer one off to one side. This is the directional navigation an
+arrow key usually means, rather than a walk along the perimeter.
+
+Comparing the two perimeter neighbors instead, as this did, sent the cursor back and forth on a
+large structure: each of a pair was the better match from the other, so a held-down arrow
+oscillated. Choosing from every site ahead cannot do that, the distance along the direction
+strictly increasing at each step, so one arrow marches across the structure and then stops, with
+nothing ahead left to take. Stopping rather than wrapping round is what keeps it from oscillating
+at the far side, where a wrap and the step back would be a two-cycle of their own.
+
+`,` and `.` walk the perimeter in order, which always moves, and is the other way round a
+structure.
 """
 function stepanchor!(m::EditorModel, dir::Symbol)
     length(m.free) > 1 || return m
@@ -1779,14 +1900,20 @@ function stepanchor!(m::EditorModel, dir::Symbol)
     sites = absolutesites(placements(m), m.species)
     at(n) = plane(cam, sites[m.free[n][1]][m.free[n][2]].pose.x)
     hu, hv = at(m.anchor)
-    function alignment(n)
+    function reach(n)
         u, v = at(n)
         du, dv = u - hu, v - hv
-        return (du * d[1] + dv * d[2]) / max(hypot(du, dv), eps())
+        # Along the direction, and to the side of it. `d` is a unit axis vector, so the sideways
+        # offset is the magnitude of the 2D cross product.
+        return (du * d[1] + dv * d[2], abs(du * d[2] - dv * d[1]))
     end
-    nxt = mod1(m.anchor + 1, length(m.free))
-    prv = mod1(m.anchor - 1, length(m.free))
-    m.anchor = alignment(nxt) >= alignment(prv) ? nxt : prv
+    tol = STEP_AHEAD * minimum(bounding_radius, m.catalog)
+    ahead = filter(n -> n != m.anchor && first(reach(n)) > tol, eachindex(m.free))
+    isempty(ahead) && return m
+    m.anchor = argmin(ahead) do n
+        along, sideways = reach(n)
+        return along + STEP_SIDEWAYS * sideways
+    end
     return m
 end
 
@@ -1913,6 +2040,11 @@ function update!(m::EditorModel, evt::KeyEvent)
         # species drawings and the enumerated polyforms together.
         turn!(m, c == ']' ? 1 : -1)
         return nothing
+    elseif k === :char && (c == 'p' || c == 'P')
+        # The species list belongs to the editor rather than to any one pane, so a shape can be
+        # set from the rules as well as while building.
+        setshape!(m, c == 'p' ? 1 : -1)
+        return nothing
     end
 
     if m.focus === :rules
@@ -1965,8 +2097,6 @@ function update!(m::EditorModel, evt::KeyEvent)
         stepwindow!(m, c == 'w' ? 1 : -1)
     elseif k === :char && c == 'f'
         setaddressable!(m, !m.addressable)
-    elseif k === :char && (c == 'p' || c == 'P')
-        setshape!(m, c == 'p' ? 1 : -1)
     elseif k === :char && c == 'c'
         reset!(m)
     elseif k === :char && c == '0'
@@ -2018,15 +2148,25 @@ function view(m::EditorModel, f::Frame)
     # the pair list: the whole window height holds a far larger one than a third of a pane does.
     inline = matrixinline(m, PANE_W - 2, f.area.height)
     wanted = m.rules === nothing ? 0 : matrixwidth(m) + 2
-    withmatrix = !inline && wanted <= room
+    # The matrix gets a pane of its own only while it leaves the other panes their minimum. It
+    # grows as the square of the colors, so a fully addressable system asks for most of the
+    # screen, and the list of bonding pairs says the same thing in a fraction of the width.
+    spare = room - (m.showconstruction ? PANE_W : 0) - PREVIEW_MIN_W
+    withmatrix = !inline && wanted <= spare
     room -= withmatrix ? wanted : 0
     withconstruction = m.showconstruction && room >= PANE_W
     room -= withconstruction ? PANE_W : 0
     withpreview = room >= PREVIEW_MIN_W
+    # A structure outgrows a fixed pane, so the construction pane takes a share of whatever room
+    # is going spare once the preview has its minimum, and the share rises with the number of
+    # particles: a drawing of one needs no room, a drawing of twenty needs all there is.
+    share = clamp(0.5 + (length(placements(m)) - 1) / 24, 0.5, 1.0)
+    spareroom = withpreview ? max(room - PREVIEW_MIN_W, 0) : 0
+    buildw = withconstruction ? PANE_W + round(Int, share * spareroom) : 0
 
     cs = Constraint[Fixed(SIDEBAR_W), withpreview ? Fixed(PANE_W) : Fill()]
     withmatrix && push!(cs, Fixed(wanted))
-    withconstruction && push!(cs, withpreview ? Fixed(PANE_W) : Fill())
+    withconstruction && push!(cs, withpreview ? Fixed(buildw) : Fill())
     withpreview && push!(cs, Fill())
 
     rects = split_layout(Layout(Horizontal, cs), f.area)
@@ -2136,6 +2276,10 @@ function draw_sidebar(m::EditorModel, rect::Rect, buf::Buffer)
     m.buildonly || push!(lines, key("tab", "next pane"))
     m.buildonly || push!(lines, key("b", m.showconstruction ? "hide build" : "build"))
     dimension(base(m)) == 3 && push!(lines, key("[ ]", string("view ", m.viewpoint, "/", length(VIEWPOINTS))))
+    if length(m.catalog) > 1
+        shown = m.shape[clamp(cursorspecies(m), 1, length(m.shape))]
+        push!(lines, key("p / P", string("shape ", shown, "/", length(m.catalog))))
+    end
     push!(lines, key("q", "accept"))
 
     c1, c2 = m.pair
@@ -2176,8 +2320,6 @@ function draw_sidebar(m::EditorModel, rect::Rect, buf::Buffer)
             ],
         )
         ntwists(m) > 1 && push!(build, key("t / T", "twist"))
-        length(m.catalog) > 1 &&
-            push!(build, key("p / P", string("shape ", m.shape[m.active_species], "/", length(m.catalog))))
         append!(
             build,
             [
@@ -2235,10 +2377,17 @@ function draw_construction(m::EditorModel, rect::Rect, buf::Buffer)
     # Labels sit at each site's own position, so the colors read straight off the drawing. A
     # bond gets both of its colors, written side by side, since which pair meets is the thing
     # being decided.
+    # Zooming in puts sites outside the pane, and a label is written straight into the buffer,
+    # which bounds-checks the whole screen rather than this rect, so each one is clipped here.
     cell(x) = (inner.x + x[1] ÷ 2, inner.y + x[2] ÷ 4)
-    label!(x, style, c) = set_string!(buf, cell(x)..., label(m, c), style; max_x=right(inner))
+    function label!(x, style, c)
+        col, row = cell(x)
+        showlabels(m) && inrect(inner, col, row) && set_string!(buf, col, row, label(m, c), style; max_x=right(inner))
+        return buf
+    end
     function pair!(x, c1, style1, c2, style2)
         col, row = cell(x)
+        (showlabels(m) && inrect(inner, col, row)) || return buf
         set_string!(buf, col, row, label(m, c1), style1; max_x=right(inner))
         set_string!(buf, col + m.labelw, row, label(m, c2), style2; max_x=right(inner))
         return buf
@@ -2441,7 +2590,9 @@ The same labelling the construction pane uses, so a bond in an enumerated struct
 off against the matrix without counting sites round a particle.
 """
 function drawsitelabels!(m::EditorModel, poly, spcs, placements, v::World, rect::Rect, buf::Buffer)
+    showlabels(m) || return buf
     cell(x) = (rect.x + x[1] ÷ 2, rect.y + x[2] ÷ 4)
+    fits(col, row) = inrect(rect, col, row)
     sites = [[pose * s for s in bindingsites(spcs[i])] for (i, pose) in placements]
 
     touching = Set{Tuple{Int,Int}}()
@@ -2454,6 +2605,7 @@ function drawsitelabels!(m::EditorModel, poly, spcs, placements, v::World, rect:
             interiorbonds(spcs[placements[i][1]]) || continue
             c1, c2 = color(s1), color(s2)
             col, row = cell(todots(v, s1.pose.x))
+            fits(col, row) || continue
             set_string!(buf, col, row, label(m, c1), colorstyle(m, c1); max_x=right(rect))
             set_string!(buf, col + m.labelw, row, label(m, c2), colorstyle(m, c2); max_x=right(rect))
         end
@@ -2463,6 +2615,7 @@ function drawsitelabels!(m::EditorModel, poly, spcs, placements, v::World, rect:
         facing(v.cam, s) || continue
         c = color(s)
         col, row = cell(todots(v, s.pose.x))
+        fits(col, row) || continue
         set_string!(buf, col, row, label(m, c), colorstyle(m, c); max_x=right(rect))
     end
     return buf
@@ -2541,7 +2694,7 @@ function draw_rules(m::EditorModel, rect::Rect, buf::Buffer; withmatrix::Bool=tr
 
     # The matrix is either here, in a pane of its own, or nowhere: say which, since an absent
     # matrix with no explanation looks like a fault.
-    label = withmatrix || elsewhere ? "" : "matrix needs a wider window"
+    label = withmatrix || elsewhere ? "" : string(ncolors(rules), " colors, bonds listed")
     inner = render(focusblock(m, :rules; title="Rules", title_right=label), rect, buf)
     (inner.width < 2 || inner.height < 2) && return buf
     used = shownspecies(m)
@@ -2780,17 +2933,42 @@ end
 
 function editrules(rules::BindingRules; output::Symbol=:rules)
     output in (:rules, :bonds, :matrix) || throw(ArgumentError("output must be :rules, :bonds, or :matrix"))
+    return _editrules(modelfor(rules), output)
+end
+
+"""
+    modelfor(rules)
+    modelfor(poly)
+
+Return an editor opened on an existing system, or on an existing structure together with the
+system it was built under.
+
+`BindingRules` numbers colors by running through its species in order, which is how
+[`sitecolors`](@ref) numbers them too, so the interaction matrix carries over cell for cell. It
+goes in as hand-set bonds, each of which then holds against whatever is built afterwards, rather
+than as geometry the editor would have to reproduce before the rules looked the same.
+"""
+function modelfor(rules::BindingRules)
     spcs = species(rules)
     m = EditorModel(collect(spcs); shape=1:length(spcs))
-    # `BindingRules` numbers colors by running through the species in order, which is how
-    # `sitecolors` numbers them too, so the matrix carries over cell for cell. It goes in as
-    # hand-set bonds, every one of which holds against whatever is built afterwards.
     mat = interactionmatrix(rules)
     for c1 in axes(mat, 1), c2 in axes(mat, 2)
         mat[c1, c2] && (m.overrides[(c1, c2)] = true)
     end
     refresh!(m)
-    return _editrules(m, output)
+    return m
+end
+
+function modelfor(poly::Roly.Polyform)
+    m = modelfor(bindingrules(poly))
+    nparticles(poly) == 0 && return m
+    P = poseof(m)
+    m.windows[1] = Placement{P}[(p.speciesindex, p.pose) for p in poly.particles]
+    m.active_species = poly.particles[end].speciesindex
+    m.refit = true
+    refresh!(m)
+    resetcamera!(m)
+    return m
 end
 
 function _editrules(m::EditorModel, output::Symbol)
@@ -2814,9 +2992,10 @@ the poses on screen, so the returned polyform has the graph, the bonds and the c
 that every other polyform in Roly has.
 """
 editpolyform(spcs::ParticleSpecies; kwargs...) = editpolyform([spcs]; kwargs...)
+editpolyform(catalog::AbstractVector; kwargs...) = _editpolyform(EditorModel(catalog); kwargs...)
+editpolyform(poly::Roly.Polyform; kwargs...) = _editpolyform(modelfor(poly); kwargs...)
 
-function editpolyform(catalog::AbstractVector; addressable::Bool=false)
-    m = EditorModel(catalog)
+function _editpolyform(m::EditorModel; addressable::Bool=false)
     m.showconstruction = true
     m.focus = :construction
     m.buildonly = true
@@ -2829,23 +3008,33 @@ end
     assemble(m)
 
 Return the window in front as a `Roly.Polyform` under the rules the editor produced, or `nothing`
-if there are no rules to build it under.
+if there are no rules, nothing is placed, or the placements are not one connected structure.
 
-Replaying the attachments is what makes it a polyform rather than a list of poses: `Roly.raise!`
-adds each particle's graph, pairs the vertices of every contact it makes and recanonizes, none of
-which can be recovered from the poses afterwards. The rules bond every contact the construction
-produced, so no attachment that succeeded on screen is refused here.
+Growing it through `Roly.raise!` is what makes it a polyform rather than a list of poses: each
+step adds a particle's graph, pairs the vertices of every contact it makes and recanonizes, none
+of which can be recovered from the poses afterwards. The attachment order comes from the contacts
+([`attachmentorder`](@ref)), so a structure the editor was opened on rebuilds as readily as one
+built in it. The structure is moved so that its first particle sits at the origin, which is where
+a one-particle polyform starts.
 """
 function assemble(m::EditorModel)
     rules = m.rules
     rules === nothing && return nothing
     ps = placements(m)
     isempty(ps) && return nothing
-    poly = Roly.Polyform(rules, ps[1][1])
-    sites = absolutesites(ps, m.species)
-    for (n, (i, k, incoming, t)) in enumerate(steps(m))
-        grown = Roly.raise!(poly, sites[i][k], SpeciesSiteLoc(ps[n + 1][1], incoming), t)
-        grown === missing && error("replaying attachment $n was refused, which the editor should not have allowed")
+    shift = inv(ps[1][2])
+    moved = [(i, shift * pose) for (i, pose) in ps]
+    order, steps = attachmentorder(moved, m.species)
+    length(order) == length(moved) || return nothing
+    sites = absolutesites(moved, m.species)
+    poly = Roly.Polyform(rules, moved[1][1])
+    for (k, j, a, b) in steps
+        sp = moved[k][1]
+        anchor = sites[j][a]
+        t = recovertwist(anchor, bindingsite(m.species[sp], b), moved[k][2])
+        t === nothing && return nothing
+        grown = Roly.raise!(poly, anchor, SpeciesSiteLoc(sp, b), t)
+        grown === missing && return nothing
         poly = grown
     end
     return poly

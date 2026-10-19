@@ -188,23 +188,56 @@ end
     RE.update!(m, Tachikoma.KeyEvent('b'))
     @test !m.showconstruction
 
-    # Arrow keys step one site along the perimeter, so nothing is skipped, and always to one of
-    # the two neighbors, so no key is ever dead. Which neighbor is decided by bearing alone.
+    # An arrow key takes the free site lying next in that direction, out of every site ahead
+    # rather than out of the two perimeter neighbors: comparing only those two sent the cursor
+    # back and forth, each of a pair being the better match from the other.
     m = RE.EditorModel(UnitSquare)
     _attach!(m, 1, 1, 3)
     _attach!(m, 1, 2, 4)
     _attach!(m, 2, 2, 1)
-    _sitepos(n) = RE.absolutesites(RE.placements(m), m.species)[m.free[n][1]][m.free[n][2]].pose.x
-    _cos(from, to, d) = (v=_sitepos(to) - _sitepos(from); (v[1] * d[1] + v[2] * d[2]) / hypot(v...))
-    n = length(m.free)
-    for start in 1:n, dir in (:up, :down, :left, :right)
+    _proj(n, d) = begin
+        u, v = RE.plane(RE.camera(m), RE.absolutesites(RE.placements(m), m.species)[m.free[n][1]][m.free[n][2]].pose.x)
+        u * d[1] + v * d[2]
+    end
+    for start in eachindex(m.free), dir in (:up, :down, :left, :right)
+        d = getfield(RE.ARROWS, dir)
         m.anchor = start
         RE.update!(m, Tachikoma.KeyEvent(dir))
-        nxt, prv = mod1(start + 1, n), mod1(start - 1, n)
-        @test m.anchor in (nxt, prv)          # a neighbor, never a jump
-        @test m.anchor != start               # never dead
+        # It either moved strictly in the pressed direction, or stayed because nothing lay that
+        # way. `,` and `.` are what always move.
+        m.anchor == start || @test _proj(m.anchor, d) > _proj(start, d)
+    end
+
+    # Held down, one arrow marches across a structure and never doubles back: the distance along
+    # the direction strictly increases until nothing is left ahead, and then it wraps once.
+    big = RE.EditorModel(UnitSquare)
+    big.focus = :construction
+    for _ in 1:12
+        big.incoming = 3
+        RE.update!(big, Tachikoma.KeyEvent(:enter))
+    end
+    @test length(big.free) > 8
+    _bigproj(n, d) = begin
+        site = RE.absolutesites(RE.placements(big), big.species)[big.free[n][1]][big.free[n][2]]
+        u, v = RE.plane(RE.camera(big), site.pose.x)
+        u * d[1] + v * d[2]
+    end
+    for dir in (:up, :down, :left, :right)
         d = getfield(RE.ARROWS, dir)
-        @test _cos(start, m.anchor, d) >= _cos(start, m.anchor == nxt ? prv : nxt, d) - 1e-12
+        big.anchor = 1
+        visited = [big.anchor]
+        for _ in 1:20
+            RE.update!(big, Tachikoma.KeyEvent(dir))
+            push!(visited, big.anchor)
+        end
+        # A site is never visited twice, so there is no oscillation of any period, which is what
+        # comparing the two perimeter neighbors could not promise.
+        moved = unique(visited)
+        @test length(moved) == length(unique(visited))
+        @test visited == vcat(moved, fill(last(moved), length(visited) - length(moved)))
+        # The run marches strictly along the direction and then stops.
+        along = [_bigproj(n, d) for n in moved]
+        @test issorted(along; lt=(a, b) -> a < b - 1e-9)
     end
 
     # `r` turns the pending particle by moving which of its sites meets the anchor.
@@ -686,6 +719,58 @@ end
     # The strip is inside the construction pane, not the sidebar.
     @test Tachikoma.find_text(tb, "▶").x > RE.SIDEBAR_W
 
+    # Zooming in puts sites outside the pane, and a label goes straight into the buffer, which
+    # bounds-checks the screen rather than the pane, so labels are clipped to it.
+    zoomed = RE.EditorModel(UnitSquare)
+    zoomed.focus = :construction
+    zoomed.showconstruction = true
+    for _ in 1:5
+        zoomed.incoming = 3
+        RE.update!(zoomed, Tachikoma.KeyEvent(:enter))
+    end
+    _rulescols(mm) = begin
+        tb = _render(mm, 170, 32)
+        [tb.buf.content[Tachikoma.buf_index(tb.buf, x, y)].char for x in 23:66, y in 1:32]
+    end
+    before = _rulescols(zoomed)
+    for _ in 1:40
+        RE.update!(zoomed, Tachikoma.KeyEvent('='))
+        @test _rulescols(zoomed) == before      # nothing leaks into the neighboring pane
+    end
+
+    # The construction pane takes a share of the spare room that grows with the structure, the
+    # preview keeping its minimum throughout.
+    _panewidths(mm, w) = begin
+        tb = _render(mm, w, 32)
+        cols = [x for x in 1:w if tb.buf.content[Tachikoma.buf_index(tb.buf, x, 1)].char == '╭']
+        push!(cols, w + 1)
+        diff(cols)
+    end
+    grow = RE.EditorModel(UnitSquare)
+    grow.focus = :construction
+    grow.showconstruction = true
+    small = _panewidths(grow, 200)
+    for _ in 1:12
+        grow.incoming = 3
+        RE.update!(grow, Tachikoma.KeyEvent(:enter))
+    end
+    large = _panewidths(grow, 200)
+    @test length(small) == length(large) == 4           # sidebar, rules, construction, preview
+    @test large[3] > small[3]                            # the construction pane grew
+    @test last(large) >= RE.PREVIEW_MIN_W                # and the preview kept its minimum
+
+    # Labels stop being drawn once they would take three characters apiece, a structure of any
+    # size otherwise disappearing under them. The tables still name the colors.
+    @test RE.showlabels(RE.EditorModel(UnitSquare))
+    crowded = RE.EditorModel(UnitIcosahedron)
+    for _ in 1:6
+        RE.update!(crowded, Tachikoma.KeyEvent('a'))
+    end
+    @test crowded.labelw == 3
+    @test !RE.showlabels(crowded)
+    crowded.showconstruction = true
+    @test !isnothing(_render(crowded))
+
     # Zoom belongs to the construction pane, whose drawing it scales, and does nothing elsewhere.
     m = RE.EditorModel(UnitSquare)
     m.showconstruction = true
@@ -866,12 +951,16 @@ end
     # being dropped for the pair list.
     m = _manyspecies(6)
     @test ncolors(m.rules) == 36
-    tb = _render(m, 150, 26)
+    tb = _render(m, 240, 26)
     @test !isnothing(Tachikoma.find_text(tb, "╭─ Matrix"))
-    @test isnothing(Tachikoma.find_text(tb, "wider window"))
+    @test isnothing(Tachikoma.find_text(tb, "bonds listed"))
 
-    # Too big even for that, and the rules pane says so rather than leaving a gap.
-    @test !isnothing(Tachikoma.find_text(_render(m, 104, 26), "wider window"))
+    # It only gets that pane while it leaves the other panes their minimum. Beyond that the list
+    # of bonding pairs takes over, and the rules pane says why rather than leaving a gap.
+    narrow = _render(m, 150, 26)
+    @test isnothing(Tachikoma.find_text(narrow, "╭─ Matrix"))
+    @test !isnothing(Tachikoma.find_text(narrow, "36 colors, bonds listed"))
+    @test !isnothing(Tachikoma.find_text(_render(m, 104, 26), "bonds listed"))
     @test isnothing(Tachikoma.find_text(_render(m, 104, 26), "╭─ Matrix"))
 
     # Small enough and it stays inline, beside the pair list.
@@ -1466,7 +1555,7 @@ end
     _enumerate!(m)
     @test m.truncated
     @test length(m.polyforms) == 2
-    @test occursin(string("cut off at ", m.maxpolys), RE.enumlabel(m))
+    @test occursin(string(length(m.polyforms), " of ", m.expected), RE.enumlabel(m))
     @test occursin("2 of ", RE.enumlabel(m))
     @test !isnothing(_render(m))
     # No bonds is an answer rather than a count.
@@ -1498,7 +1587,7 @@ end
     m.maxsize = 4
     _enumerate!(m)
     @test length(m.polyforms) < parse(Int, m.total)
-    @test RE.enumlabel(m) == string(length(m.polyforms), ", size ≤ 4, bounded")
+    @test RE.enumlabel(m) == string(length(m.polyforms), " of ", m.total, ", size ≤ 4, bounded")
     @test !occursin("complete", RE.enumlabel(m))
     @test occursin(m.total, RE.boundslabel(m)[1])
 
@@ -1525,7 +1614,10 @@ end
     @test RE.countlabel(Roly.PolyformCount(42, 3, Complete)) == "42"
     est = Roly.PolyformCount([1.0e5, 1.2e5], 6, MaxSizeReached)
     @test startswith(RE.countlabel(est), "≈")
-    @test occursin("e", RE.countlabel(est))
+    # Compact rather than an exponent: `110k` is read at a glance where `1.1e5` is not.
+    @test RE.countlabel(est) == "≈110k"
+    @test RE.compactcount.((9999, 10_000, 12_345, 999_400, 999_999, 1.2e6, 12e6, 1.5e9)) ==
+        ("9999", "10k", "12k", "999k", "1.0M", "1.2M", "12M", "1.5B")
 end
 
 @testset "editpolyform" begin
@@ -1573,6 +1665,69 @@ end
     @test nspecies(bindingrules(addressed)) == nparticles(addressed) + 1
     @test nbonds(bindingrules(addressed)) == nparticles(addressed) - 1
     @test length(unique(Roly.bonded_colors(bindingrules(addressed)))) == nparticles(addressed) - 1
+
+    # The attachment order is read off the contacts rather than recorded, so a structure the
+    # editor was opened on rebuilds as readily as one built in it.
+    for (sp, incoming) in
+        ((UnitSquare, (3, 3, 4)), (UnitTriangle, (3, 3)), (UnitCube, (2, 2, 4)), (UnitTetrahedron, (2, 3)))
+        first = RE.assemble(_build(sp, incoming))
+        again = RE.assemble(RE.modelfor(first))
+        @test nparticles(again) == nparticles(first)
+        # `==` on polyforms wants the same rules object, which a reopened editor rebuilds, so the
+        # structures are compared by the canonical graph the rules gave them.
+        @test Roly.graphrep(again) == Roly.graphrep(first)
+        @test composition(again) == composition(first)
+        @test interactionmatrix(bindingrules(again)) == interactionmatrix(bindingrules(first))
+        # Reopening is a fixed point, so a structure can go round as often as it is worked on.
+        @test Roly.graphrep(RE.assemble(RE.modelfor(again))) == Roly.graphrep(first)
+    end
+
+    # Opening on a structure seeds the window with its particles and the system it was built
+    # under, so it can be carried on from.
+    poly = RE.assemble(_build(UnitSquare, (3, 3, 4)))
+    m = RE.modelfor(poly)
+    @test length(RE.placements(m)) == nparticles(poly)
+    @test interactionmatrix(m.rules) == interactionmatrix(bindingrules(poly))
+    @test length(m.catalog) == nspecies(bindingrules(poly))
+    m.focus = :construction
+    m.incoming = 3
+    RE.update!(m, Tachikoma.KeyEvent(:enter))
+    grown = RE.assemble(m)
+    @test nparticles(grown) == nparticles(poly) + 1
+
+    # A window is one connected structure, so a particle the rest hangs off is not removed.
+    chain = _build(UnitSquare, (3, 3, 4))
+    n = length(RE.placements(chain))
+    held = RE.placements(chain)[2]
+    RE.update!(chain, Tachikoma.KeyEvent(:backspace))
+    @test length(RE.placements(chain)) == n - 1      # the last one comes off freely
+    # Put a particle back and reorder so that a load-bearing one is last.
+    spread = RE.EditorModel(UnitSquare)
+    spread.focus = :construction
+    _attach!(spread, 1, 1, 3)
+    _attach!(spread, 2, 2, 4)
+    reordered = RE.placements(spread)[[1, 3, 2]]
+    spread.windows[1] = reordered
+    RE.refresh!(spread)
+    @test length(first(RE.attachmentorder(RE.placements(spread), spread.species))) == 3
+    RE.update!(spread, Tachikoma.KeyEvent(:backspace))
+    @test length(RE.placements(spread)) == 3         # refused: it holds the rest on
+    @test occursin("holds the rest", spread.message)
+
+    # Placements that are not one structure are not a polyform.
+    apart = RE.EditorModel(UnitSquare)
+    P = Roly.posetype(UnitSquare)
+    apart.windows[1] = [(1, one(P)), (1, P(SVector(9.0, 0.0), one(Roly.Angle2d)))]
+    RE.refresh!(apart)
+    @test length(first(RE.attachmentorder(RE.placements(apart), apart.species))) == 1
+    @test isnothing(RE.assemble(apart))
+
+    # `recovertwist` finds the twist a pose came from, there being nothing in the pose that says.
+    anchor = one(Roly.posetype(UnitCube)) * Roly.bindingsite(UnitCube, 1)
+    mate = Roly.bindingsite(UnitCube, 2)
+    for t in 0:(max(Roly.twistfreedom(anchor, mate), 1) - 1)
+        @test RE.recovertwist(anchor, mate, RE.seatpose(anchor, mate, t)) == t
+    end
 
     # Build-only shows the construction pane alone, and the keys that drive the other panes do
     # not move the focus off it.
