@@ -961,13 +961,13 @@ function opensites(poly::AbstractPolyform)
 end
 
 """
-    cangrow(poly::Polyform)
+    cangrow(poly::Polyform; kwargs...)
 
-Return whether another particle can be attached to `poly`.
+Return `true` if a particle can be attached to `poly`.
 
-See also [`opensites`](@ref), [`isbounded`](@ref).
+See also [`opensites`](@ref).
 """
-function cangrow(poly::Polyform)
+function cangrow(poly::Polyform; kwargs...)
     rules = bindingrules(poly)
     leading = nv(graphrep(poly)) + 1
     for site in opensites(poly)
@@ -986,7 +986,7 @@ function cangrow(poly::Polyform)
                 for t in 0:(ntwists - 1)
                     pose = standard_twist(site, t, ntwists) * inv(mate.pose)
                     part = Particle(pose, leading, loc.species)
-                    first(overlap_and_contacts(poly, part)) || return true
+                    first(overlap_and_contacts(poly, part; kwargs...)) || return true
                 end
             end
         end

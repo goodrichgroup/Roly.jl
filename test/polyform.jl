@@ -196,6 +196,23 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
         @test isempty(opensites(lone))
         @test !cangrow(lone)
 
+        # A candidate is judged against the whole polyform, so the contact policy reaches every
+        # particle it lands against. Relaxing the policy can only ever let more attachments
+        # through, never fewer.
+        for rules in (
+            BindingRules([1 1 1 2], UnitSquare),
+            BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle),
+            BindingRules([1 1 1 2], UnitCube),
+        )
+            for poly in filter!(p -> nparticles(p) > 0, polygen(rules; maxsize=4))
+                strict = cangrow(poly)
+                lax = cangrow(poly; allow_noninteracting=true, allow_misaligned=true)
+                @test !strict || lax
+                # The defaults are the strict policy, which is what the enumeration grows under.
+                @test cangrow(poly; allow_noninteracting=false, allow_misaligned=false) == strict
+            end
+        end
+
         # The maximal structures of a bounded system are exactly the ones that cannot grow, and
         # there is at least one, or the system would not be bounded.
         rules = BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle)
