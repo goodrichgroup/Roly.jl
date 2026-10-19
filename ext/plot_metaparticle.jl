@@ -1,14 +1,3 @@
-# A meta-particle has no shape of its own: it is the polyform it wraps. So it is drawn by drawing
-# that polyform's particles, with the colors of the meta-species painted back onto the sites it
-# exposes. Everything else -- sites a bond inside the cluster already consumes, and open sites the
-# species chose not to expose -- is drawn in `INERT_COLOR`, the same neutral the rest of the
-# package uses for a site nothing can bond to.
-#
-# Neutral rather than a tint of the species color: a species palette ramps from pale to dark, and
-# a tinted species color lands squarely on its pale end. On a block of squares the first exposed
-# site came out within 0.1 of the interior and the two were indistinguishable. Grey has no hue to
-# collide with.
-
 """
     _metasites(spcs::MetaParticleSpecies, speciesindex, rules, sitecolor)
 
