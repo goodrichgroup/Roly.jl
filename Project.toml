@@ -1,6 +1,6 @@
 name = "Roly"
 uuid = "1621a601-f9d4-49dc-b032-1328811fec3a"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Maximilian HUEBL <maximilian.huebl@ist.ac.at>"]
 
 [deps]
