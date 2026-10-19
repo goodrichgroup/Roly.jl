@@ -23,12 +23,14 @@ Base.isless(a::SpeciesSiteLoc, b::SpeciesSiteLoc) = (a.species, a.site) < (b.spe
 
 """
     BindingRules(bonds, particlespecies)
+    BindingRules(intmat::AbstractMatrix{Bool}, particlespecies)
 
 `BindingRules` consists of a list of particle species and their allowed bonds. 
 
 The binding rules are specified by the matrix `bonds`, where every row of the matrix defines a valid bond between particle species.
 A bonds is specified in the format `[species1 site1 species2 site2]`. For example, if binding site 3 of particle species 1 binds to site 4 of
 particle species 2, the corresponding bond would read `[1 3 2 4;]`. The ordering of binding sites depends on the specific particle species.
+`bonds` may also be a vector of such rows.
 """
 struct BindingRules{D,PS<:ParticleSpecies}
     intmat::Symmetric{Bool,Matrix{Bool}}
@@ -285,6 +287,31 @@ Return every binding site of `rules` carrying `color`, as [`SpeciesSiteLoc`](@re
 Return the particle species carrying the binding site with color `color`.
 """
 @inline speciesofcolor(rules::BindingRules, color::Integer) = first(sitesofcolor(rules, color)).species
+
+"""
+    todict(rules::BindingRules)
+
+Serialize `rules` into a `Dict{String,Any}` that can be deserialized again with `fromdict`.
+"""
+function todict(rules::BindingRules)
+    bonds = Vector{Int}[]
+    for (c1, c2) in bonded_colors(rules), a in sitesofcolor(rules, c1), b in sitesofcolor(rules, c2)
+        c1 == c2 && b < a && continue  # each pair of sites of one color once
+        push!(bonds, [a.species, a.site, b.species, b.site])
+    end
+    sort!(bonds)
+    return Dict{String,Any}("bonds" => bonds, "species" => [todict(ps) for ps in species(rules)])
+end
+
+"""
+    fromdict(::Type{BindingRules}, d)
+
+Return the binding rules that `d`, written by [`todict`](@ref), describes.
+"""
+function fromdict(::Type{BindingRules}, d)
+    spcs = identity.([fromdict(ParticleSpecies, s) for s in d["species"]])
+    return BindingRules([Int.(b) for b in d["bonds"]], spcs)
+end
 
 """
     _first_per_orbit(particlespecies, sites)

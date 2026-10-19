@@ -4,6 +4,7 @@ using LinearAlgebra, StaticArrays, SparseArrays, Rotations, Statistics, Random
 using Base.Iterators, DataStructures
 using Graphs, NautyGraphs
 using ReverseSearch
+using TOML
 
 # Geometry primitives
 export Pose, dimension, translate, translate!
@@ -39,6 +40,10 @@ public bondindex, interior_edges, exterior_edges, subpolyform
 public canonbindingsite, canonbindingsites, rotationcenter
 
 export bondtypes
+
+# Files
+export tofile, fromfile
+public todict, fromdict
 
 # Enumeration
 export ACCEPT, REJECT, BREAK
@@ -92,6 +97,8 @@ include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")
 include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
+
+include("io.jl")
 
 include("ruleeditor.jl")
 using .RuleEditor: ruleeditor

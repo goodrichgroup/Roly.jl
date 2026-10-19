@@ -120,3 +120,14 @@ function _backtrack(f, adj!, v₀; aux=nothing, kwargs...)
     rsys = RSSystem((k, _) -> k, adj!, v₀; compare=Returns(true), aux)
     return reversesearch(f, rsys; cache=CacheAll(), kwargs...)
 end
+
+"""
+    _twistangle(R0, R)
+
+Return the angle about the local x axis that turns frame `R0` into frame `R`, for two frames that
+share that axis.
+"""
+function _twistangle(R0, R)
+    M = R0' * R
+    return atan(M[3, 2], M[2, 2])
+end

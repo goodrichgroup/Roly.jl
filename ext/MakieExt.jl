@@ -2,7 +2,7 @@ module MakieExt
 
 using Roly
 using Makie
-using LinearAlgebra: dot, norm, normalize
+using LinearAlgebra: cross, dot, norm, normalize
 import Roly: species, bindingrules, polyformplot, polyformplot!, render
 import Roly: Pose
 import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, polyhedron, bounding_radius

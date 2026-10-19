@@ -7,6 +7,7 @@ struct PatchyParticleSpecies{D,F,B<:BindingSite} <: ParticleSpecies{D,B}
     g::NautyDiGraph
     sites::Vector{B}
     r::F
+    twists::Vector{F}
     skin::F
 end
 
@@ -76,7 +77,7 @@ function PatchyParticleSpecies(
     setlabels!(g, vertexlabels)
 
     sites = [BindingSite(poses[i], colors[i], vertices[i], tol, tol / r, syms[i], stabs[i], locks[i]) for i in 1:n]
-    return check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, tol))
+    return check_encoding(PatchyParticleSpecies{D,F,eltype(sites)}(g, sites, r, F.(collect(patch_twists)), tol))
 end
 
 """
@@ -100,7 +101,7 @@ function PatchyDisk(angles, r=1; colors=1:length(angles))
 
     g, ranges = cycleencoding(n; labels)
     sites = [BindingSite(poses[i], colors[i], ranges[i], tol, tol / r, 1, stabs[i]) for i in 1:n]
-    return check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, tol))
+    return check_encoding(PatchyParticleSpecies{2,F,eltype(sites)}(g, sites, r, zeros(F, n), tol))
 end
 
 """
@@ -148,19 +149,70 @@ function _patchysphere(p::Polyhedron{F}, r::Real, colors, locking, twists, usecy
         tol,
         tol / r,
     )
-    return check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, tol))
+    # stored as the general constructor takes them: turns of `normal_pose` about each patch normal
+    turns = [_twistangle(normal_pose(b.pose.x).psi, b.pose.psi) for b in sites]
+    return check_encoding(PatchyParticleSpecies{3,F,eltype(sites)}(g, sites, r, turns, tol))
 end
 
 function Base.show(io::Core.IO, ps::PatchyParticleSpecies{D}) where {D}
     return print(io, "$(D)d PatchyParticleSpecies with $(nsites(ps)) sites")
 end
 
-Base.copy(ps::PatchyParticleSpecies) = typeof(ps)(copy(ps.g), copy(ps.sites), ps.r, ps.skin)
+Base.copy(ps::PatchyParticleSpecies) = typeof(ps)(copy(ps.g), copy(ps.sites), ps.r, copy(ps.twists), ps.skin)
 
 graphrep(ps::PatchyParticleSpecies) = ps.g
 nsites(ps::PatchyParticleSpecies) = length(ps.sites)
 bindingsite(ps::PatchyParticleSpecies, i::Integer) = ps.sites[i]
 isconvex(::PatchyParticleSpecies) = true
+
+"""
+    todict(ps::PatchyParticleSpecies)
+
+Serialize `ps` into a `Dict{String,Any}` of the arguments of its general constructor
+[`PatchyParticleSpecies(g, r, patch_positions, patch_twists; ...)`](@ref PatchyParticleSpecies),
+whichever constructor built it: its radius, the position, twist, color, site symmetry, locking and
+graph vertices of each patch, and the vertex count and edges of its graph.
+"""
+function todict(ps::PatchyParticleSpecies)
+    g = graphrep(ps)
+    return Dict{String,Any}(
+        "type" => _typetag(ps),
+        "r" => ps.r,
+        "positions" => [collect(b.pose.x) for b in ps.sites],
+        "twists" => copy(ps.twists),
+        "colors" => [color(b) for b in ps.sites],
+        "sitesyms" => [b.sitesym for b in ps.sites],
+        "locking" => [b.locking for b in ps.sites],
+        "vertices" => [[first(b.vertices), last(b.vertices)] for b in ps.sites],
+        "graph" => Dict{String,Any}("nvertices" => nv(g), "edges" => [[src(e), dst(e)] for e in edges(g)]),
+    )
+end
+
+"""
+    fromdict(::Type{<:PatchyParticleSpecies}, d)
+
+Return the patchy species that `d`, written by [`todict`](@ref), describes, built with the general
+constructor.
+"""
+function fromdict(::Type{<:PatchyParticleSpecies}, d)
+    graph = d["graph"]
+    g = NautyDiGraph(graph["nvertices"])
+    for (u, v) in graph["edges"]
+        add_edge!(g, u, v)
+    end
+    positions = d["positions"]
+    D = length(first(positions))
+    return PatchyParticleSpecies(
+        g,
+        Float64(d["r"]),
+        [SVector{D,Float64}(x) for x in positions],
+        Float64.(d["twists"]);
+        colors=Int.(d["colors"]),
+        vertices=[a:b for (a, b) in d["vertices"]],
+        sitesyms=Int.(d["sitesyms"]),
+        locking=Bool.(d["locking"]),
+    )
+end
 
 function could_contact(::SpeciesAndPose{<:PatchyParticleSpecies}, ::SpeciesAndPose{<:PatchyParticleSpecies}; kwargs...)
     return true # this check would be identical with overlap, so no need to do it twice
