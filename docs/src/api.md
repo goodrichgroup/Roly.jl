@@ -181,6 +181,7 @@ canonbindingsite
 canonbindingsites
 exposedsites
 opensites
+cangrow
 exposedsitelocs
 opensitelocs
 rotationgroup(::Polyform)
@@ -232,6 +233,9 @@ polyformplot!
 
 ## Interactive rule editor
 
+Provided by the Tachikoma extension, so `import Tachikoma` is required.
+
 ```@docs
-ruleeditor
+editrules
+editpolyform
 ```

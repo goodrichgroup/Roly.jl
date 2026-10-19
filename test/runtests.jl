@@ -4,6 +4,7 @@ using Rotations, StaticArrays, LinearAlgebra, Random
 using NautyGraphs
 using JLD2
 using CairoMakie
+using Tachikoma: Tachikoma
 
 include("testutils.jl")
 
@@ -21,7 +22,7 @@ include("testutils.jl")
     include("custom_species.jl")
     include("symmetry.jl")
     include("io.jl")
-    include("ruleeditor.jl")
+    include("editrules.jl")
 
     @testset verbose=true "species" begin
         include("species/polygonparticlespecies.jl")
@@ -30,5 +31,3 @@ include("testutils.jl")
         include("species/metaparticlespecies.jl")
     end
 end;
-
-
