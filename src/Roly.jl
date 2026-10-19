@@ -32,6 +32,7 @@ public bonded_colors, bonded_sites, bonded_species, sitesofcolor, speciesofcolor
 # Polyforms
 export AbstractPolyform, Polyform, ParticleSiteLoc, nparticles, bindingrules, composition, bonds
 export exposedsites, opensites, exposedsitelocs, opensitelocs
+export cangrow
 
 # The graph a polyform carries, and the vertices it is written in, are an implementation detail:
 # every one of these takes or yields bare graph vertices, whose numbering (canonical or original)
@@ -151,7 +152,9 @@ sites are selected and enter bonds them. The matrix and the list of bonding pair
 the matrix saying what is possible and the list what is set; the cursor drives the matrix, being
 the editable one, and the list marks whichever pair it is on. A matrix too big to sit beside the
 list moves to a full-height pane of its own, so long as it leaves the other panes their minimum
-width. A matrix grows as the square of the colors, so a fully addressable structure asks for most
+width. Fully addressable rules give every site a color of its own, so while one is being built the
+matrix is left off altogether and the list takes the pane. With no matrix on screen the pair the
+cursor names is written out above the list, the arrows otherwise moving something invisible. A matrix grows as the square of the colors, so a fully addressable structure asks for most
 of the screen; past that the list of bonding pairs takes over and the rules pane is titled with
 the color count.
 
@@ -184,6 +187,11 @@ ring closes. Every contact the pending particle would make is labelled before it
 and the sidebar counts the ones beyond the site aimed at, so a closure shows in advance. A
 placement that would overlap an existing particle is refused, and is drawn crossed out in gray
 beforehand rather than looking legal until enter does nothing.
+
+`g` and `G` go to the first and last structure of a run, and a number typed goes to that one,
+applied as it is typed. `v` narrows the listing to the structures that cannot grow, which
+[`cangrow`](@ref) decides: these are where assembly finishes, and a run of any size buries them
+among the partial structures on the way.
 
 The enumeration pane draws the polyforms the rules allow. It runs on `e` rather than
 automatically, since a permissive rules set can take long enough to be felt between keystrokes;

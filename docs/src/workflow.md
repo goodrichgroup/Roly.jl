@@ -96,6 +96,10 @@ The cursor drives the matrix, since that is the editable one, and the list simpl
 A matrix too big to sit beside the list moves to a full-height pane of its own, which holds a far larger one than a corner of the rules pane does.
 It only gets that pane while it leaves the other panes their minimum width: a matrix grows as the square of the colors, so a fully addressable structure of any size asks for most of the screen and would leave no room for the drawings its rules are read against.
 Past that the list of bonding pairs takes over, every bond being one line of it, and the rules pane is titled with the color count so that an absent matrix does not look like a fault.
+Fully addressable rules give every site a color of its own, so the matrix is the size of the structure squared and almost entirely empty; while one is being built that way it is left off altogether.
+
+With no matrix on screen the pair the cursor names is written out above the list, with what the keys do, since the arrows would otherwise be moving something invisible and `Enter` toggling a cell nobody can see.
+The species drawings pick both colors out where they sit, and the list below marks the pair once it bonds.
 
 A site is drawn in a shade of its species' own hue, so its color says which particle it belongs to.
 A bond cell in the matrix is split between the colors of the two sites it joins, the row's in the upper half and the column's in the lower.
@@ -214,7 +218,11 @@ The sidebar carries the same verdict on the rules themselves, `bounded, 16 total
 Reporting only how many were found leaves no way to tell a finished design from a partial view of one.
 
 Each structure is numbered by its position in the run.
-With the pane focused the arrow keys pick one, and the box beside the grid redraws the selection as large as the pane allows, titled with its number.
+With the pane focused the arrow keys pick one, `g` and `G` go to the first and last, and a number typed goes to that structure, applied as it is typed so each digit moves the selection.
+The box beside the grid redraws the selection as large as the pane allows, titled with its number.
+
+`v` narrows the listing to the structures that cannot grow, which [`cangrow`](@ref) decides by testing every attachment the rules allow against the same geometry an attachment would.
+Those are where assembly finishes, and a run of any size buries them among the partial structures on the way, so the title then reads `6 of 28 cannot grow`.
 Every site is named there in its own color, with both colors written side by side wherever two meet, so a bond in an enumerated structure can be read straight off against the matrix.
 Underneath it is the composition vector: how many particles of each species the structure has, then how many bonds of each bonding color pair.
 That box is worth reaching for: a thumbnail is only a few braille dots across, so a small structure can lose edges shorter than a dot, and the same structure enlarged is drawn properly.

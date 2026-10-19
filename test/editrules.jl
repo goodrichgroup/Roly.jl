@@ -1485,6 +1485,76 @@ end
     @test length(m2.species) == 4
     @test nbonds(m2.rules) == 2
 
+    # Fully addressable rules give every site a color of its own, so the matrix is the size of
+    # the structure squared and almost empty. While one is being built that way it is left off
+    # and the list of bonding pairs takes the rules pane.
+    m = RE.EditorModel(UnitSquare)
+    m.focus = :construction
+    m.showconstruction = true
+    @test RE.showmatrix(m)
+    before = _render(m, 200, 30)
+    @test isnothing(Tachikoma.find_text(before, "bonds listed"))
+    RE.update!(m, Tachikoma.KeyEvent('f'))
+    for _ in 1:5
+        m.incoming = 3
+        RE.update!(m, Tachikoma.KeyEvent(:enter))
+    end
+    @test !RE.showmatrix(m)
+    tb = _render(m, 200, 30)
+    @test !isnothing(Tachikoma.find_text(tb, "addressable, bonds listed"))
+    @test isnothing(Tachikoma.find_text(tb, "╭─ Matrix"))
+    # The bonds are listed instead, one entry per bonding pair.
+    pairs = Roly.bonded_colors(m.rules)
+    @test length(pairs) >= length(RE.placements(m)) - 1
+    c1, c2 = first(pairs)
+    @test !isnothing(Tachikoma.find_text(tb, string(RE.label(m, c1), " ─ ", RE.label(m, c2))))
+    # Closing the build view brings the matrix back, the mode being about building rather than
+    # about the rules themselves.
+    RE.update!(m, Tachikoma.KeyEvent('b'))
+    @test m.addressable
+    @test RE.showmatrix(m)
+    @test !isnothing(Tachikoma.find_text(_render(m, 200, 30), "╭─ Matrix"))
+
+    # With no matrix on screen the arrow keys would be moving an invisible cursor, so the pair
+    # it names is written out above the bond list instead, with what the keys do.
+    m = RE.EditorModel(UnitSquare)
+    m.focus = :construction
+    m.showconstruction = true
+    RE.update!(m, Tachikoma.KeyEvent('f'))
+    for _ in 1:4
+        m.incoming = 3
+        RE.update!(m, Tachikoma.KeyEvent(:enter))
+    end
+    m.focus = :rules
+    @test !RE.showmatrix(m)
+    tb = _render(m, 200, 28)
+    @test !isnothing(Tachikoma.find_text(tb, "not bonded"))
+    @test !isnothing(Tachikoma.find_text(tb, "pick"))
+    # It names the pair the cursor is on, and follows it.
+    RE.update!(m, Tachikoma.KeyEvent(:down))
+    RE.update!(m, Tachikoma.KeyEvent(:right))
+    c1, c2 = m.pair
+    picked = string(RE.label(m, c1), " ╌ ", RE.label(m, c2))
+    @test !isnothing(Tachikoma.find_text(_render(m, 200, 28), picked))
+    # Enter bonds the pair it names, and the picker says so.
+    was = nbonds(m.rules)
+    RE.update!(m, Tachikoma.KeyEvent(:enter))
+    @test nbonds(m.rules) == was + 1
+    tb = _render(m, 200, 28)
+    @test !isnothing(Tachikoma.find_text(tb, string(RE.label(m, c1), " ─ ", RE.label(m, c2))))
+    @test isnothing(Tachikoma.find_text(tb, "not bonded"))
+    # And takes it away again.
+    RE.update!(m, Tachikoma.KeyEvent(:enter))
+    @test nbonds(m.rules) == was
+    # The key hint is only there while the pane has the focus to use it.
+    m.focus = :enumeration
+    @test isnothing(Tachikoma.find_text(_render(m, 200, 28), "pick"))
+    # With the matrix on screen the picker is not drawn, the matrix being the cursor's own view.
+    plain = RE.EditorModel(UnitSquare)
+    plain.focus = :rules
+    @test RE.showmatrix(plain)
+    @test isnothing(Tachikoma.find_text(_render(plain, 200, 28), "not bonded"))
+
     # A catalog of shapes: any species can be set to any of them, and `p` steps through.
     m = RE.EditorModel([UnitSquare, UnitTriangle, UnitHexagon])
     m.focus = :construction
@@ -1609,6 +1679,66 @@ end
     RE.togglebond!(strip, (2, 4))
     @test isnothing(strip.bounded)
     @test isempty(strip.total)
+
+    # Getting about a listing: `g` and `G` go to its ends, and a number typed goes to that
+    # structure, a run of any size being quicker to reach into by number than to arrow through.
+    rules = BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle)
+    m = RE.modelfor(rules)
+    m.focus = :enumeration
+    m.maxsize = 9
+    _enumerate!(m)
+    @test length(m.polyforms) == 16
+    RE.update!(m, Tachikoma.KeyEvent('G'))
+    @test m.selected == length(m.polyforms)
+    RE.update!(m, Tachikoma.KeyEvent('g'))
+    @test m.selected == 1
+    # Applied as it is typed, so each digit moves the selection.
+    RE.update!(m, Tachikoma.KeyEvent('1'))
+    @test m.selected == 1
+    @test m.goto == "1"
+    RE.update!(m, Tachikoma.KeyEvent('2'))
+    @test m.selected == 12
+    @test m.goto == "12"
+    RE.update!(m, Tachikoma.KeyEvent(:backspace))
+    @test m.selected == 1
+    @test m.goto == "1"
+    # Past the end it stops at the last one rather than selecting nothing.
+    RE.update!(m, Tachikoma.KeyEvent('9'))
+    @test m.goto == "19"
+    @test m.selected == length(m.polyforms)
+    # An arrow, a new run, or leaving the pane all end the number being typed.
+    RE.update!(m, Tachikoma.KeyEvent(:left))
+    @test isempty(m.goto)
+    RE.update!(m, Tachikoma.KeyEvent('3'))
+    _enumerate!(m)
+    @test isempty(m.goto)
+    RE.update!(m, Tachikoma.KeyEvent('3'))
+    RE.update!(m, Tachikoma.KeyEvent(:tab))
+    @test isempty(m.goto)
+
+    # `v` shows only the structures that cannot grow, which is where assembly finishes and what
+    # a design is usually for, and a run of any size buries them among the partial ones.
+    m.focus = :enumeration
+    _enumerate!(m)
+    @test !m.completeonly
+    whole = length(m.polyforms)
+    RE.update!(m, Tachikoma.KeyEvent('v'))
+    @test m.completeonly
+    @test !isempty(m.polyforms)
+    @test length(m.polyforms) == count(!cangrow, m.allpolyforms)
+    @test all(!cangrow, m.polyforms)
+    @test length(m.polyforms) < whole
+    @test RE.enumlabel(m) == string(length(m.polyforms), " of ", whole, " cannot grow")
+    @test occursin("cannot grow", m.message)
+    @test !isnothing(_render(m))
+    # The ends and the typed number work on the filtered listing too.
+    RE.update!(m, Tachikoma.KeyEvent('G'))
+    @test m.selected == length(m.polyforms)
+    # And toggling it off brings the whole run back, the filter being a view of it.
+    RE.update!(m, Tachikoma.KeyEvent('v'))
+    @test !m.completeonly
+    @test length(m.polyforms) == whole
+    @test length(m.allpolyforms) == whole
 
     # `countlabel` reads an exact count as the number and an estimate with a leading `≈`.
     @test RE.countlabel(Roly.PolyformCount(42, 3, Complete)) == "42"

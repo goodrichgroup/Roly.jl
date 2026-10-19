@@ -181,6 +181,7 @@ canonbindingsite
 canonbindingsites
 exposedsites
 opensites
+cangrow
 exposedsitelocs
 opensitelocs
 rotationgroup(::Polyform)

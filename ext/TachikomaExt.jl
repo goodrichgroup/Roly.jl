@@ -17,6 +17,7 @@ using Roly:
     corners,
     polycount,
     isbounded,
+    cangrow,
     SpeciesSiteLoc,
     dimension,
     facenormal,
@@ -950,7 +951,12 @@ const DETAIL_W = 24
     labelw::Int = 1
     # The structures the last enumeration found, which one is selected, and what the run was
     # bounded by. `stale` marks the rules as having changed since that run.
+    # Every structure the last run found, and the ones on screen, which are the same unless the
+    # listing is filtered.
+    allpolyforms::Vector{Any} = Any[]
     polyforms::Vector{Any} = Any[]
+    # Show only the structures that cannot grow.
+    completeonly::Bool = false
     # Why the last run produced nothing, when that is the answer; otherwise empty and the title
     # is built from the counts.
     enuminfo::String = ""
@@ -968,6 +974,8 @@ const DETAIL_W = 24
     stale::Bool = true
     # How many thumbnails the last frame fitted across, so that up and down move a whole row.
     gridcols::Int = 1
+    # The structure number being typed, while it is being typed.
+    goto::String = ""
     # The construction pane starts hidden: the rules are the deliverable, and placing blocks is
     # one way of arriving at them rather than the only one.
     showconstruction::Bool = false
@@ -1423,8 +1431,10 @@ however many the rules admit. A rules set that fails to enumerate leaves the pan
 message rather than taking the editor down.
 """
 function enumerate!(m::EditorModel)
+    empty!(m.allpolyforms)
     empty!(m.polyforms)
     m.selected = 1
+    m.goto = ""
     m.stale = false
     m.expected = ""
     m.truncated = false
@@ -1450,8 +1460,9 @@ function enumerate!(m::EditorModel)
         m.bounded && (m.total = countlabel(polycount(rules; countopts()...)))
         polys = polygen(rules; maxsize=m.maxsize, maxpolys=m.maxpolys)
         filter!(p -> nparticles(p) > 0, polys)
-        append!(m.polyforms, polys)
+        append!(m.allpolyforms, polys)
         m.truncated = length(polys) >= m.maxpolys
+        showcomplete!(m)
     catch err
         err isa InterruptException && rethrow()
         m.enuminfo = "cannot enumerate"
@@ -1495,6 +1506,24 @@ before it when it is an estimate from subsampling the search tree.
 countlabel(c) = string(c.exact ? "" : "≈", compactcount(c.n))
 
 """
+    showcomplete!(m, on=m.completeonly)
+
+Put the structures the listing shows in `m.polyforms`: all of the last run, or only the ones that
+cannot grow.
+
+A structure no further particle can attach to is where assembly finishes, so those are usually
+the ones a design is for, and a run of any size can bury them among the partial structures on the
+way. `Roly.cangrow` decides it, testing the same geometry an attachment would.
+"""
+function showcomplete!(m::EditorModel, on::Bool=m.completeonly)
+    m.completeonly = on
+    m.polyforms = on ? filter(!cangrow, m.allpolyforms) : copy(m.allpolyforms)
+    m.selected = isempty(m.polyforms) ? 1 : clamp(m.selected, 1, length(m.polyforms))
+    m.goto = ""
+    return m
+end
+
+"""
     enumlabel(m)
 
 Return the line the enumeration pane is titled with: how many structures the last run found, how
@@ -1508,6 +1537,9 @@ function enumlabel(m::EditorModel)
     isempty(m.enuminfo) || return m.enuminfo
     m.stale && return string("size ≤ ", m.maxsize, ", e to run")
     found = length(m.polyforms)
+    # A filtered listing counts against the run it was filtered from, the rest of which was
+    # found rather than missed.
+    m.completeonly && return string(found, " of ", length(m.allpolyforms), " cannot grow")
     # What there is to find: every structure the rules admit when they are bounded, and
     # otherwise every one up to the size bound, there being no total to count against.
     whole = m.bounded === true && !isempty(m.total) ? m.total : m.expected
@@ -1534,7 +1566,7 @@ so it is worth stating separately from how far the listing got.
 function boundslabel(m::EditorModel)
     m.bounded === nothing && return ("  bounds unknown", tstyle(:text_dim))
     m.bounded || return ("  unbounded", tstyle(:warning))
-    return (string("  bounded", isempty(m.total) ? "" : string(", ", m.total, " total")), tstyle(:success))
+    return (string("  bounded", isempty(m.total) ? "" : string(", ", m.total)), tstyle(:success))
 end
 
 """
@@ -1946,6 +1978,7 @@ while it is hidden.
 """
 function cyclefocus!(m::EditorModel, step::Int)
     m.buildonly && return m
+    m.goto = ""
     panes = m.showconstruction ? (:rules, :construction, :enumeration) : (:rules, :enumeration)
     i = something(findfirst(==(m.focus), panes), 1)
     m.focus = panes[mod1(i + step, length(panes))]
@@ -1987,6 +2020,44 @@ function setmaxpolys!(m::EditorModel, step::Int)
     new == m.maxpolys && return m
     m.maxpolys = new
     m.stale = true
+    return m
+end
+
+"""
+    selectstructure!(m, i)
+
+Select structure `i` of the last run, clamped to the ones there are.
+"""
+function selectstructure!(m::EditorModel, i::Integer)
+    isempty(m.polyforms) && return m
+    m.selected = clamp(i, 1, length(m.polyforms))
+    return m
+end
+
+"""
+    typeselection!(m, c)
+
+Extend the structure number being typed by the digit `c` and go to it.
+
+Structures are numbered by their position in the run, and a run of any size is quicker to reach
+into by number than to arrow through. The number is applied as it is typed, so each digit moves
+the selection, and backspace takes one back off.
+"""
+function typeselection!(m::EditorModel, c::Char)
+    length(m.goto) < 9 || return m
+    m.goto = string(m.goto, c)
+    return selectstructure!(m, parse(Int, m.goto))
+end
+
+"""
+    untypeselection!(m)
+
+Take the last digit off the structure number being typed, and go to what is left of it.
+"""
+function untypeselection!(m::EditorModel)
+    isempty(m.goto) && return m
+    m.goto = chop(m.goto)
+    isempty(m.goto) || selectstructure!(m, parse(Int, m.goto))
     return m
 end
 
@@ -2062,7 +2133,21 @@ function update!(m::EditorModel, evt::KeyEvent)
 
     if m.focus === :enumeration
         if k === :up || k === :down || k === :left || k === :right
+            m.goto = ""
             stepselection!(m, k, m.gridcols)
+        elseif k === :char && isdigit(c)
+            typeselection!(m, c)
+        elseif k === :backspace
+            untypeselection!(m)
+        elseif k === :char && c == 'v'
+            showcomplete!(m, !m.completeonly)
+            notify!(m, m.completeonly ? "showing only structures that cannot grow" : "showing every structure")
+        elseif k === :char && c == 'g'
+            m.goto = ""
+            selectstructure!(m, 1)
+        elseif k === :char && c == 'G'
+            m.goto = ""
+            selectstructure!(m, length(m.polyforms))
         elseif k === :char && c == 's'
             setmaxsize!(m, -1)
         elseif k === :char && c == 'S'
@@ -2146,13 +2231,13 @@ function view(m::EditorModel, f::Frame)
     room = f.area.width - SIDEBAR_W - PANE_W
     # A matrix too big for the rules pane gets a pane of its own rather than being dropped for
     # the pair list: the whole window height holds a far larger one than a third of a pane does.
-    inline = matrixinline(m, PANE_W - 2, f.area.height)
+    inline = showmatrix(m) && matrixinline(m, PANE_W - 2, f.area.height)
     wanted = m.rules === nothing ? 0 : matrixwidth(m) + 2
     # The matrix gets a pane of its own only while it leaves the other panes their minimum. It
     # grows as the square of the colors, so a fully addressable system asks for most of the
     # screen, and the list of bonding pairs says the same thing in a fraction of the width.
     spare = room - (m.showconstruction ? PANE_W : 0) - PREVIEW_MIN_W
-    withmatrix = !inline && wanted <= spare
+    withmatrix = showmatrix(m) && !inline && wanted <= spare
     room -= withmatrix ? wanted : 0
     withconstruction = m.showconstruction && room >= PANE_W
     room -= withconstruction ? PANE_W : 0
@@ -2233,7 +2318,10 @@ end
 function drawlines!(buf::Buffer, r::Rect, lines)
     for (i, (text, style)) in enumerate(lines)
         i > r.height && break
-        set_string!(buf, r.x, r.y + i - 1, text, style; max_x=right(r))
+        # Truncated with an ellipsis rather than cut where it happens to run out: a line cut
+        # through a number shows a different number, which reads as fact rather than as a line
+        # too long for the pane.
+        set_string!(buf, r.x, r.y + i - 1, Tachikoma.truncate_to_width(text, r.width), style; max_x=right(r))
     end
     return buf
 end
@@ -2336,12 +2424,15 @@ function draw_sidebar(m::EditorModel, rect::Rect, buf::Buffer)
 
     enum = [
         header("Enumeration", :enumeration),
-        (string("  size ", m.maxsize, "  max ", m.maxpolys), tstyle(m.stale ? :warning : :text)),
+        (string("  size ", m.maxsize, "  max ", compactcount(m.maxpolys)), tstyle(m.stale ? :warning : :text)),
         boundslabel(m),
         key("e", m.stale ? "run (stale)" : "run"),
         key("s / S", "size"),
         key("x / X", "max"),
         key("↑↓←→", "pick"),
+        key("g / G", "first/last"),
+        key("v", m.completeonly ? "cannot grow ✓" : "cannot grow"),
+        isempty(m.goto) ? key("0-9", "go to #") : (string("  go to #", m.goto), tstyle(:title; bold=true)),
     ]
 
     for section in (m.buildonly ? (build,) : (rules, build, enum))
@@ -2622,6 +2713,18 @@ function drawsitelabels!(m::EditorModel, poly, spcs, placements, v::World, rect:
 end
 
 """
+    showmatrix(m)
+
+Whether the interaction matrix is worth drawing at all.
+
+Fully addressable rules give every site a color of its own, so the matrix is the size of the
+structure squared and almost entirely empty, every bond being a single cell of it. While one is
+being built that way the list of bonding pairs says the same thing in a fraction of the room, so
+the matrix is left off and the list takes the rules pane.
+"""
+showmatrix(m::EditorModel) = !(m.addressable && m.showconstruction)
+
+"""
     matrixwidth(m)
     matrixfits(m, w)
     matrixinline(m, w, h)
@@ -2694,7 +2797,13 @@ function draw_rules(m::EditorModel, rect::Rect, buf::Buffer; withmatrix::Bool=tr
 
     # The matrix is either here, in a pane of its own, or nowhere: say which, since an absent
     # matrix with no explanation looks like a fault.
-    label = withmatrix || elsewhere ? "" : string(ncolors(rules), " colors, bonds listed")
+    label = if withmatrix || elsewhere
+        ""
+    elseif !showmatrix(m)
+        "addressable, bonds listed"
+    else
+        string(ncolors(rules), " colors, bonds listed")
+    end
     inner = render(focusblock(m, :rules; title="Rules", title_right=label), rect, buf)
     (inner.width < 2 || inner.height < 2) && return buf
     used = shownspecies(m)
@@ -2721,14 +2830,50 @@ function draw_rules(m::EditorModel, rect::Rect, buf::Buffer; withmatrix::Bool=tr
     set_string!(buf, parts[2].x, parts[2].y, "─"^parts[2].width, tstyle(:border); max_x=right(parts[2]))
 
     # The matrix says what is possible and the list says what is set. When the matrix has been
-    # moved to a pane of its own the list takes the whole width here.
+    # moved to a pane of its own the list takes the whole width here, and when there is no matrix
+    # anywhere the pair the cursor names is written out above the list, the arrows otherwise
+    # moving something that is not on screen.
     if withmatrix
         tables = split_layout(Layout(Horizontal, Constraint[Fill(), Fixed(pairsw)]), parts[3])
         draw_matrix(m, tables[1], buf)
         draw_pairs(m, tables[2], buf)
+    elseif !elsewhere && parts[3].height >= 2
+        draw_pairpicker(m, Rect(parts[3].x, parts[3].y, parts[3].width, 1), buf)
+        draw_pairs(m, Rect(parts[3].x, parts[3].y + 1, parts[3].width, parts[3].height - 1), buf)
     else
         draw_pairs(m, parts[3], buf)
     end
+    return buf
+end
+
+"""
+    draw_pairpicker(m, rect, buf)
+
+Write out the pair of colors the rules cursor names and whether they bond.
+
+The matrix shows that cursor as one of its cells. With no matrix on screen the arrow keys would
+be moving something invisible and enter toggling a cell nobody can see, so the pair is written
+where the matrix would have been. The species drawings above pick both colors out where they sit,
+and the list below marks the pair once it bonds.
+"""
+function draw_pairpicker(m::EditorModel, rect::Rect, buf::Buffer)
+    (rect.height < 1 || rect.width < 8) && return buf
+    rules = m.rules
+    c1, c2 = m.pair
+    on = rules !== nothing && c1 <= ncolors(rules) && c2 <= ncolors(rules) && interactionmatrix(rules)[c1, c2]
+    active = m.focus === :rules
+    col = set_string!(buf, rect.x, rect.y, "  ", RESET; max_x=right(rect))
+    col = set_string!(buf, col, rect.y, label(m, c1), colorstyle(m, c1; bold=true, underline=active); max_x=right(rect))
+    col = set_string!(buf, col, rect.y, on ? " ─ " : " ╌ ", bondstyle(m, c1, c2); max_x=right(rect))
+    col = set_string!(buf, col, rect.y, label(m, c2), colorstyle(m, c2; bold=true, underline=active); max_x=right(rect))
+    col = set_string!(
+        buf, col, rect.y, on ? "  bonded" : "  not bonded", on ? tstyle(:success) : tstyle(:text_dim);
+        max_x=right(rect),
+    )
+    # What the keys do, while the focus is here to use them.
+    hint = on ? "↑↓←→ pick, ⏎ clear" : "↑↓←→ pick, ⏎ bond"
+    x = right(rect) - textwidth(hint) + 1
+    active && x > col && set_string!(buf, x, rect.y, hint, tstyle(:text_dim); max_x=right(rect))
     return buf
 end
 
