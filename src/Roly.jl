@@ -204,8 +204,10 @@ Each run first asks `isbounded` whether the rules admit finitely many structures
 the search tree beyond it. The pane title then carries the found count, how many there are to
 find when that is more, and a tag for each bound in force: `16, complete, bounded` for a listing
 that holds every structure the rules admit, `15 of 16, size ≤ 4, bounded` for one the size bound
-stops short, and `200 of ≈688k, size ≤ 12, unbounded` under rules that admit arbitrarily large
-structures. Counts above ten thousand are abbreviated with `k`, `M` or `B`. The sidebar carries the same verdict on the rules themselves,
+stops short, and `200 of ≈748k, size ≤ 12, unbounded` under rules that admit arbitrarily large
+structures. A limit is named only while it leaves something out, and a listing that was not cut
+short counted itself, so `≈` appears only where the number really is an estimate. Counts above ten
+thousand are abbreviated with `k`, `M` or `B`. The sidebar carries the same verdict on the rules themselves,
 `bounded, 16 total` against `unbounded`. Reporting only how many were found leaves no way to tell
 a finished design from a partial view of one. Structures are numbered by their position in the run; with the pane focused the arrow keys
 pick one, and the box beside the grid redraws it as large as the pane allows, titled with its

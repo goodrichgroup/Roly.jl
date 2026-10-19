@@ -1651,14 +1651,31 @@ end
     @test m.total == string(length(m.polyforms))
     @test occursin("bounded", RE.boundslabel(m)[1])
     @test occursin(m.total, RE.boundslabel(m)[1])
-    # With the size bound beyond every structure there is, the run is tagged complete.
+    # With the size bound beyond every structure there is, the run is tagged complete. A
+    # complete run counted itself, so neither the size limit nor an estimate is reported.
     @test RE.enumlabel(m) == string(length(m.polyforms), ", complete, bounded")
+    @test !m.sizebound
+    @test !occursin("≈", RE.enumlabel(m))
+    @test !occursin("size ≤", RE.enumlabel(m))
+
+    # Cut short by the count limit while the size limit left nothing out: the counts say it fell
+    # short, and the size limit is not what did it, so it goes unmentioned.
+    m.maxpolys = 5
+    _enumerate!(m)
+    @test m.truncated
+    @test !m.sizebound
+    @test RE.enumlabel(m) == string(length(m.polyforms), " of ", m.total, ", bounded")
+    @test !occursin("size ≤", RE.enumlabel(m))
+    @test !occursin("≈", RE.enumlabel(m))     # the total is known exactly, estimate or not
+    m.maxpolys = 200
+    _enumerate!(m)
     # With it biting, the title says how far the run got and the sidebar how many there are.
     m.maxsize = 4
     _enumerate!(m)
     @test length(m.polyforms) < parse(Int, m.total)
     @test RE.enumlabel(m) == string(length(m.polyforms), " of ", m.total, ", size ≤ 4, bounded")
     @test !occursin("complete", RE.enumlabel(m))
+    @test m.sizebound
     @test occursin(m.total, RE.boundslabel(m)[1])
 
     # Unbounded rules are never completely enumerated however far a run gets, which the title
@@ -1674,6 +1691,12 @@ end
     @test isempty(strip.total)                       # no total to count when there is no end
     @test occursin("unbounded", RE.enumlabel(strip))
     @test occursin("unbounded", RE.boundslabel(strip)[1])
+    # Unbounded rules reach every size, so the limit always leaves something out, and a listing
+    # complete up to it still counted itself exactly.
+    @test strip.sizebound
+    @test occursin("size ≤", RE.enumlabel(strip))
+    @test !strip.truncated
+    @test !occursin("≈", RE.enumlabel(strip))
     @test !isnothing(_render(strip))
     # Changing the rules unlearns it, rather than leaving a claim the rules no longer support.
     RE.togglebond!(strip, (2, 4))
@@ -1739,6 +1762,70 @@ end
     @test !m.completeonly
     @test length(m.polyforms) == whole
     @test length(m.allpolyforms) == whole
+
+    # Estimating a count can fail outright: `polycount` throws rather than return a figure it
+    # does not trust when every trial hits its sample cap. The listing is what the pane is for,
+    # so a count that cannot be had leaves the title without it.
+    wild = BindingRules([1 1 1 3; 1 2 1 4], UnitSquare)
+    # Whether `polycount` runs out of samples depends on the draw, so what is asserted is
+    # `trycount`'s contract: a count or nothing, never a throw.
+    for _ in 1:8
+        @test RE.trycount(wild; maxsize=14, budget=10, ntrials=1, maxsamples=20) isa
+              Union{Nothing,Roly.PolyformCount}
+    end
+    @test !isnothing(RE.trycount(wild; maxsize=4))
+    @test isnothing(RE.trybounded(wild)) || RE.trybounded(wild) isa Bool
+    # A title with no count to report falls back to what the listing holds.
+    m = RE.modelfor(wild)
+    m.focus = :enumeration
+    m.maxsize = 4
+    _enumerate!(m)
+    @test m.enuminfo != "cannot enumerate"
+    m.expected = ""                      # as it is left when the count could not be had
+    m.total = ""
+    @test RE.enumlabel(m) == string(length(m.polyforms), ", size ≤ 4, unbounded")
+    @test !occursin(" of ", RE.enumlabel(m))
+
+    # Nothing about the counts may cost the listing: `forgetcounts!` is what a failure leaves
+    # behind, and the title then reports the listing alone.
+    m = RE.modelfor(wild)
+    m.focus = :enumeration
+    m.maxsize = 5
+    m.maxpolys = 40
+    _enumerate!(m)
+    listed = length(m.polyforms)
+    @test listed == 40
+    RE.forgetcounts!(m)
+    @test isnothing(m.bounded)
+    @test isempty(m.expected)
+    @test isempty(m.total)
+    @test length(m.polyforms) == listed              # the listing is untouched
+    @test RE.enumlabel(m) == string(listed, ", size ≤ 5")
+    @test !occursin("bounded", RE.enumlabel(m))      # nothing claimed that is not known
+    @test occursin("unknown", RE.boundslabel(m)[1])
+    @test !isnothing(_render(m))
+
+    # And the size limit is still judged from the listing when there is no count to judge it by.
+    @test RE.sizebitten(m)                           # cut short, so more may lie above it
+    full = RE.modelfor(BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle))
+    full.maxsize = 9
+    _enumerate!(full)
+    @test !RE.sizebitten(full)                       # finished below the limit
+
+    # Every built-in species through a spread of rules and size limits: a run either lists or
+    # says why, and none of them may fail.
+    for sp in (UnitSquare, UnitTriangle, UnitCube, UnitTetrahedron)
+        n = nsites(sp)
+        for pr in ((1, 1), (1, 2), (1, n))
+            mm = RE.EditorModel(sp)
+            RE.togglebond!(mm, pr)
+            for ms in (3, 6)
+                mm.maxsize = ms
+                _enumerate!(mm)
+                @test mm.enuminfo != "cannot enumerate"
+            end
+        end
+    end
 
     # `countlabel` reads an exact count as the number and an estimate with a leading `≈`.
     @test RE.countlabel(Roly.PolyformCount(42, 3, Complete)) == "42"

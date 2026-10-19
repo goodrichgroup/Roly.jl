@@ -906,10 +906,13 @@ const MINSIZE = 1
 # How hard the expected-count estimate works. It is a number in a pane title, read against a
 # listing the user is about to scroll, so a fast figure within a factor of a little is worth more
 # than a tight one that is felt between keystrokes: a smaller exact budget hands over to
-# subsampling sooner, and two trials rather than five cut the sampling itself.
+# subsampling sooner, and fewer trials cut the sampling itself.
+#
+# `maxsamples` is left at its default. It is not an accuracy knob but a cap, and `polycount`
+# throws rather than answer when every trial hits it, so lowering it buys speed by turning some
+# counts into no count at all.
 const COUNT_BUDGET = 1_000
-const COUNT_TRIALS = 2
-const COUNT_SAMPLES = 50_000
+const COUNT_TRIALS = 3
 const THUMB_W = 13
 const THUMB_H = 6
 const DETAIL_W = 24
@@ -968,6 +971,9 @@ const DETAIL_W = 24
     # do. `nothing` until a run has been asked for, both being searches of their own.
     bounded::Union{Nothing,Bool} = nothing
     total::String = ""
+    # Whether the size limit left anything out. When it did not, the listing covers every size
+    # the rules reach and the limit is not worth reporting.
+    sizebound::Bool = false
     selected::Int = 1
     maxsize::Int = 6
     maxpolys::Int = 200
@@ -1441,33 +1447,141 @@ function enumerate!(m::EditorModel)
     m.enuminfo = ""
     m.bounded = nothing
     m.total = ""
+    m.sizebound = false
     rules = m.rules
     if rules === nothing || nbonds(rules) == 0
         m.enuminfo = "no bonds"
         return m
     end
+
+    # The listing first, and on its own, since it is what the pane is for. Everything after it
+    # only describes it, and none of that may keep it off the screen.
     try
-        # Whether the rules admit finitely many structures at all. A design that does not is
-        # usually not what was intended, and nothing in the listing itself says so: a run cut
-        # off at `maxsize` looks the same either way.
-        m.bounded = isbounded(rules)
-        # How many there are, before finding out which. The count is exact while the enumeration
-        # fits its own budget and an estimate beyond that, so it reports the size of the problem
-        # even where listing every structure is out of reach, which is what says whether the
-        # listing below is the whole of it. With bounded rules it is also worth having over every
-        # size, which is the number the design is really after.
-        m.expected = countlabel(polycount(rules; maxsize=m.maxsize, countopts()...))
-        m.bounded && (m.total = countlabel(polycount(rules; countopts()...)))
         polys = polygen(rules; maxsize=m.maxsize, maxpolys=m.maxpolys)
         filter!(p -> nparticles(p) > 0, polys)
         append!(m.allpolyforms, polys)
         m.truncated = length(polys) >= m.maxpolys
-        showcomplete!(m)
     catch err
         err isa InterruptException && rethrow()
         m.enuminfo = "cannot enumerate"
+        # The title has room for the verdict only, so the reason goes to the status line, which
+        # has the width for it. A bare refusal leaves nothing to act on.
+        notify!(m, string("cannot enumerate: ", first(split(sprint(showerror, err), '\n'))); kind=:warning)
+        return m
     end
+
+    # Then how many there are, and whether there is an end to them. Whatever goes wrong there
+    # costs the title its numbers and nothing else, the listing being already in hand.
+    try
+        describecounts!(m, rules)
+    catch err
+        err isa InterruptException && rethrow()
+        forgetcounts!(m)
+        notify!(m, string("counted nothing: ", first(split(sprint(showerror, err), '\n'))); kind=:warning)
+    end
+    showcomplete!(m)
     return m
+end
+
+"""
+    describecounts!(m, rules)
+
+Work out how many structures the rules admit, and whether there is an end to them, for the title
+to report alongside the listing.
+
+Each figure is a search of its own and any of them may decline to answer, in which case the title
+goes without it. None of them is allowed to decide whether the listing is shown.
+"""
+function describecounts!(m::EditorModel, rules::BindingRules)
+    m.bounded = trybounded(rules)
+    upto = trycount(rules; maxsize=m.maxsize)
+    every = m.bounded === true ? trycount(rules) : nothing
+    found = length(m.allpolyforms)
+
+    # A listing that was not cut short counted itself, exactly, so it stands in for the estimate
+    # rather than being reported against it.
+    m.expected = m.truncated ? (upto === nothing ? "" : countlabel(upto)) : string(found)
+    # Unbounded rules reach every size, so the limit always leaves something out; bounded ones
+    # only where there is more beyond it than up to it. Without the counts, a run that finished
+    # below the limit is the one case where it plainly left nothing out.
+    m.sizebound = if m.bounded === false
+        true
+    elseif every !== nothing && upto !== nothing
+        every.n > upto.n
+    else
+        sizebitten(m)
+    end
+    m.total = every === nothing ? "" : m.sizebound ? countlabel(every) : m.expected
+    return m
+end
+
+"""
+    sizebitten(m)
+
+Whether the size limit may have left a structure out, judged from the listing alone: a run that
+was cut short, or that reached the limit, may have more above it.
+"""
+function sizebitten(m::EditorModel)
+    m.truncated && return true
+    isempty(m.allpolyforms) && return true
+    return maximum(nparticles, m.allpolyforms) >= m.maxsize
+end
+
+"""
+    forgetcounts!(m)
+
+Drop what the last run worked out about how many structures there are, leaving the listing as it
+is. The title then reports the listing alone.
+"""
+function forgetcounts!(m::EditorModel)
+    m.bounded = nothing
+    m.expected = ""
+    m.total = ""
+    m.sizebound = sizebitten(m)
+    return m
+end
+
+"""
+    countopts()
+
+Return the keyword arguments the editor counts with, which trade accuracy for speed.
+"""
+countopts() = (budget=COUNT_BUDGET, ntrials=COUNT_TRIALS)
+
+"""
+    trycount(rules; kwargs...)
+
+Return `Roly.polycount(rules; kwargs...)`, or `nothing` where it will not give an answer.
+
+Estimating a count can fail outright: with every trial over its sample cap `polycount` throws
+rather than return a figure it does not trust. The listing is what the pane is for, so a count
+that cannot be had leaves the title without it rather than taking the run down with it.
+"""
+function trycount(rules::BindingRules; kwargs...)
+    try
+        return polycount(rules; countopts()..., kwargs...)
+    catch err
+        err isa InterruptException && rethrow()
+        return nothing
+    end
+end
+
+"""
+    trybounded(rules)
+
+Return whether `rules` admits finitely many structures, or `nothing` where the question cannot be
+settled.
+
+A search of its own, like the counts, and reported the same way: the sidebar says the bounds are
+unknown rather than the run failing over a question the listing does not depend on.
+"""
+function trybounded(rules::BindingRules)
+    try
+        return isbounded(rules)
+    catch err
+        err isa InterruptException && rethrow()
+        return nothing
+    end
 end
 
 """
@@ -1489,13 +1603,6 @@ function compactcount(n::Real)
     end
     return string(round(Int, n))
 end
-
-"""
-    countopts()
-
-Return the keyword arguments the editor counts with, which trade accuracy for speed.
-"""
-countopts() = (budget=COUNT_BUDGET, ntrials=COUNT_TRIALS, maxsamples=COUNT_SAMPLES)
 
 """
     countlabel(c)
@@ -1540,14 +1647,19 @@ function enumlabel(m::EditorModel)
     # A filtered listing counts against the run it was filtered from, the rest of which was
     # found rather than missed.
     m.completeonly && return string(found, " of ", length(m.allpolyforms), " cannot grow")
-    # What there is to find: every structure the rules admit when they are bounded, and
-    # otherwise every one up to the size bound, there being no total to count against.
-    whole = m.bounded === true && !isempty(m.total) ? m.total : m.expected
-    short = whole != string(found)
+    # What there is to find: every structure the rules admit where the size limit leaves some of
+    # them out, and otherwise every one up to that limit, which `expected` holds either way. A
+    # listing that was not cut short put its own count there, so no estimate is reported against
+    # a number the run already knows.
+    whole = m.sizebound && !isempty(m.total) ? m.total : m.expected
+    short = !isempty(whole) && whole != string(found)
     tags = String[short ? string(found, " of ", whole) : string(found)]
-    # A listing that fell short says so by the counts; what remains to be said is the bound still
-    # in force, or that nothing is.
-    push!(tags, !short && m.bounded === true ? "complete" : string("size ≤ ", m.maxsize))
+    # What is left to say is the limit still in force, or that none is.
+    if m.sizebound
+        push!(tags, string("size ≤ ", m.maxsize))
+    elseif !short
+        push!(tags, "complete")
+    end
     # Unbounded rules admit arbitrarily large structures, so no run of them is ever the whole of
     # it however far it got.
     m.bounded === nothing || push!(tags, m.bounded ? "bounded" : "unbounded")

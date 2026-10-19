@@ -209,9 +209,12 @@ The pane title then carries the number found and a tag for each thing that bound
 |:--|:--|
 | `16, complete, bounded` | the listing holds every polyform the rules admit |
 | `15 of 16, size ≤ 4, bounded` | the size bound stops it short of the 16 there are |
+| `5 of 16, bounded` | the count bound stopped it; the size bound left nothing out |
 | `91, size ≤ 5, unbounded` | everything up to the size bound, and the rules admit arbitrarily large polyforms |
-| `200 of ≈688k, size ≤ 12, unbounded` | 200 of an estimated 688000 up to that size |
+| `200 of ≈748k, size ≤ 12, unbounded` | 200 of an estimated 748000 up to that size |
 
+A limit is only named while it leaves something out, so a run that reached the end of the polyforms carries neither.
+A listing that was not cut short counted itself, and that exact number is reported in place of the estimate, so `≈` appears only where the number really is one.
 Counts above ten thousand are abbreviated with `k`, `M` or `B` to three significant figures, which reads at a glance where an exponent does not.
 
 The sidebar carries the same verdict on the rules themselves, `bounded, 16 total` against `unbounded`, since that is a property of the design rather than of how far the last run got.
