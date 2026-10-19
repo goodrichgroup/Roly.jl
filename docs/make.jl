@@ -10,6 +10,7 @@ makedocs(
         "Custom particle species" => "custom_species.md",
         "Orientation and twists" => "orientation.md",
         "Bounded and unbounded rules" => "growth.md",
+        "Saving and loading" => "io.md",
         "API reference" => "api.md",
     ],
     format = Documenter.HTML(

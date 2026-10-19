@@ -140,3 +140,54 @@ function symmetrynumber(p::ParticleSpecies)
     _, autg = nauty(graphrep(p))
     return convert(Int, autg.n)
 end
+
+# The type of `ps` by its full name, e.g. `"Roly.PolygonParticleSpecies"`, which `fromdict` resolves
+# back to the type through the loaded modules.
+_typetag(ps::ParticleSpecies) = join((fullname(parentmodule(typeof(ps)))..., nameof(typeof(ps))), ".")
+
+function _typefromtag(tag::AbstractString)
+    names = Symbol.(split(tag, "."))
+    loaded = Base.loaded_modules_array()
+    i = findfirst(m -> nameof(m) === first(names), loaded)
+    T = first(names) === :Main ? Main : isnothing(i) ? nothing : loaded[i]
+    isnothing(T) && throw(ArgumentError("The species type $tag cannot be read: its package is not loaded."))
+    for name in names[2:end]
+        (T isa Module && isdefined(T, name)) || throw(ArgumentError("$tag is not a particle species type."))
+        T = getfield(T, name)
+    end
+    (T isa Type && T <: ParticleSpecies) || throw(ArgumentError("$tag is not a particle species type."))
+    return T
+end
+
+"""
+    todict(ps::ParticleSpecies)
+
+Serialize `ps` into a `Dict{String,Any}` of strings, numbers and arrays.
+
+This default records the type of `ps`, its number of sites and their colors, which is not enough
+to rebuild it. A species type that can be rebuilt from its description defines its own method.
+"""
+function todict(ps::ParticleSpecies)
+    return Dict{String,Any}(
+        "type" => _typetag(ps), "nsites" => nsites(ps), "colors" => [color(bindingsite(ps, i)) for i in 1:nsites(ps)]
+    )
+end
+
+"""
+    fromdict(::Type{ParticleSpecies}, d)
+
+Return the particle species that `d`, written by [`todict`](@ref), describes.
+
+`d` names its species type in its entry `type`, and reading it calls `fromdict(T, d)` with that type
+`T`. A species type opts in to being read by defining that method.
+"""
+fromdict(::Type{ParticleSpecies}, d) = fromdict(_typefromtag(d["type"]), d)
+
+"""
+    fromdict(::Type{T}, d) where {T<:ParticleSpecies}
+
+Throw, since the species type `T` defines no method to be read back with.
+"""
+function fromdict(::Type{T}, d) where {T<:ParticleSpecies}
+    throw(ArgumentError("$T cannot be read back, since it defines no `Roly.fromdict(::Type{<:$(nameof(T))}, d)`."))
+end

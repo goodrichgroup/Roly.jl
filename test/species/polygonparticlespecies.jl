@@ -97,4 +97,32 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
         @test symmetrynumber(plain) == 1
         @test symmetrynumber(sym) == n
     end
+
+    # polygons from their corners
+    rect = PolygonParticleSpecies([[1, 0.5], [-1, 0.5], [-1, -0.5], [1, -0.5]])
+    @test nsites(rect) == 4
+    @test bindingsite(rect, 1).pose.x ≈ [0, 0.5]       # site i is on the edge from corner i to i+1
+    @test bindingsite(rect, 2).pose.x ≈ [-1, 0]
+    @test rect.rmin ≈ 0.5
+    @test rect.rmax ≈ norm([1, 0.5])
+    @test symmetrynumber(PolygonParticleSpecies(rect.corners; colors=fill(1, 4))) == 2
+
+    # the corners may run either way, and the sites face outward regardless
+    flipped = PolygonParticleSpecies(reverse(rect.corners))
+    for ps in (rect, flipped), i in 1:4
+        b = bindingsite(ps, i)
+        @test dot(b.pose.psi * [1, 0], b.pose.x) > 0
+    end
+
+    # a regular polygon built from its corners is the same species
+    sq = PolygonParticleSpecies(UnitSquare.corners)
+    @test all(1:4) do i
+        a, b = bindingsite(sq, i).pose, bindingsite(UnitSquare, i).pose
+        a.x ≈ b.x && rotation_angle(a.psi) ≈ rotation_angle(b.psi)
+    end
+
+    @test_throws ArgumentError PolygonParticleSpecies([[1, 0], [0, 1]])
+    @test_throws ArgumentError PolygonParticleSpecies([[1, 0], [0, 0.1], [-1, 0], [0, 1]])   # not convex
+    @test_throws ArgumentError PolygonParticleSpecies([[2, 1], [3, 1], [3, 2], [2, 2]])     # origin outside
+    @test_throws ArgumentError PolygonParticleSpecies(rect.corners; colors=[1, 2])
 end

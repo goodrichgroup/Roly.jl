@@ -211,6 +211,15 @@ A callback returns `ACCEPT`, `REJECT` or `BREAK`; see [Applying constraints](wor
 bondtypes
 ```
 
+## Saving and loading
+
+```@docs
+tofile
+fromfile
+todict
+fromdict
+```
+
 ## Visualization
 
 Provided by the Makie extension, so a backend has to be loaded.
