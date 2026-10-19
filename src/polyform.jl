@@ -961,6 +961,40 @@ function opensites(poly::AbstractPolyform)
 end
 
 """
+    cangrow(poly::Polyform)
+
+Return whether another particle can be attached to `poly`.
+
+See also [`opensites`](@ref), [`isbounded`](@ref).
+"""
+function cangrow(poly::Polyform)
+    rules = bindingrules(poly)
+    leading = nv(graphrep(poly)) + 1
+    for site in opensites(poly)
+        c = color(site)
+        for (c1, c2) in bonded_colors(rules)
+            if c == c1
+                partner = c2
+            elseif c == c2
+                partner = c1
+            else
+                continue
+            end
+            for loc in sitesofcolor(rules, partner)
+                mate = bindingsite(species(rules, loc.species), loc.site)
+                ntwists = twistfreedom(site, mate)
+                for t in 0:(ntwists - 1)
+                    pose = standard_twist(site, t, ntwists) * inv(mate.pose)
+                    part = Particle(pose, leading, loc.species)
+                    first(overlap_and_contacts(poly, part)) || return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+"""
     exposedsites(poly::AbstractPolyform)
 
 The [`BindingSite`](@ref) of every *unbound* site of `poly`, in canonical order: 

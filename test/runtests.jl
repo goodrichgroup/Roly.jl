@@ -21,7 +21,6 @@ include("testutils.jl")
     include("custom_species.jl")
     include("symmetry.jl")
     include("io.jl")
-    include("ruleeditor.jl")
 
     @testset verbose=true "species" begin
         include("species/polygonparticlespecies.jl")

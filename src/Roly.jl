@@ -32,6 +32,7 @@ public bonded_colors, bonded_sites, bonded_species, sitesofcolor, speciesofcolor
 # Polyforms
 export AbstractPolyform, Polyform, ParticleSiteLoc, nparticles, bindingrules, composition, bonds
 export exposedsites, opensites, exposedsitelocs, opensitelocs
+export cangrow
 
 # The graph a polyform carries, and the vertices it is written in, are an implementation detail:
 # every one of these takes or yields bare graph vertices, whose numbering (canonical or original)
@@ -99,10 +100,6 @@ include("species/patchyparticlespecies.jl")
 include("species/metaparticlespecies.jl")
 
 include("io.jl")
-
-include("ruleeditor.jl")
-using .RuleEditor: ruleeditor
-export ruleeditor
 
 export render, polyformplot, polyformplot!
 
