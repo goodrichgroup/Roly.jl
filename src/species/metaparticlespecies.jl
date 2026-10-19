@@ -9,6 +9,7 @@ Selected exposed sites of the polyform become the species' sites (by default are
 struct MetaParticleSpecies{D,F,B<:BindingSite,G<:AbstractNautyGraph,PF} <: ParticleSpecies{D,B}
     g::G
     sites::Vector{B}
+    exposed::Vector{ParticleSiteLoc}
     poly::PF
     rmax::F
     skin::F
@@ -91,7 +92,8 @@ function MetaParticleSpecies(poly::Polyform{D}, sites; colors=nothing) where {D}
 
     return check_encoding(
         MetaParticleSpecies{D,F,eltype(metasites),typeof(g),typeof(poly)}(
-            g, metasites, copy(poly), convert(F, rmax), sqrt(eps(F)) * convert(F, rmax)
+            g, metasites, [ParticleSiteLoc(p, k) for (p, k) in picks], copy(poly), convert(F, rmax),
+            sqrt(eps(F)) * convert(F, rmax)
         ),
     )
 end
@@ -121,12 +123,40 @@ function Base.show(io::Core.IO, ps::MetaParticleSpecies)
     print(io, "$(dimension(ps))d MetaParticleSpecies[", nparticles(ps.poly), " particles, ", nsites(ps), " sites]")
 end
 
-Base.copy(ps::MetaParticleSpecies) = typeof(ps)(copy(ps.g), copy(ps.sites), copy(ps.poly), ps.rmax, ps.skin)
+Base.copy(ps::MetaParticleSpecies) =
+    typeof(ps)(copy(ps.g), copy(ps.sites), copy(ps.exposed), copy(ps.poly), ps.rmax, ps.skin)
 
 graphrep(ps::MetaParticleSpecies) = ps.g
 nsites(ps::MetaParticleSpecies) = length(ps.sites)
 bindingsite(ps::MetaParticleSpecies, i::Integer) = ps.sites[i]
 bounding_radius(ps::MetaParticleSpecies) = ps.rmax
+
+"""
+    todict(ps::MetaParticleSpecies)
+
+Serialize `ps` into a `Dict{String,Any}` of the arguments of
+[`MetaParticleSpecies(poly, sites; colors)`](@ref MetaParticleSpecies): the polyform it wraps,
+together with that polyform's binding rules, its exposed sites as `[particle, site]` pairs, and
+their colors.
+"""
+function todict(ps::MetaParticleSpecies)
+    return Dict{String,Any}(
+        "type" => _typetag(ps),
+        "polyform" => todict(ps.poly; rules=true),
+        "exposed" => [[l.particle, l.site] for l in ps.exposed],
+        "colors" => [color(b) for b in ps.sites],
+    )
+end
+
+"""
+    fromdict(::Type{<:MetaParticleSpecies}, d)
+
+Return the meta-particle species that `d`, written by [`todict`](@ref), describes.
+"""
+function fromdict(::Type{<:MetaParticleSpecies}, d)
+    poly = fromdict(Polyform, d["polyform"])
+    return MetaParticleSpecies(poly, [(p, k) for (p, k) in d["exposed"]]; colors=Int.(d["colors"]))
+end
 
 """
     polyform(ps::MetaParticleSpecies)

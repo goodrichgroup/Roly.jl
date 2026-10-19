@@ -7,6 +7,7 @@ struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
     g::NautyDiGraph
     sites::Vector{B}
     polyhedron::Polyhedron{F}
+    twists::Vector{F}
     normals::Vector{SVector{3,F}}
     edgedirections::Vector{SVector{3,F}}
     rmin::F
@@ -40,20 +41,21 @@ function _polyhedronspecies(p::Polyhedron{F}, colors, locking, twists, usecycle:
     rmin = inradius(p)
     rmax = bounding_radius(p)
     tol = sqrt(eps(F)) * rmax
+    turns = F.(_expandperface(twists, n, "twists"))
 
     g, sites = _facesites(
         p,
         fs -> _faceposes(p, fs),
         colors,
         _expandperface(locking, n, "locking flags"),
-        _expandperface(twists, n, "twists"),
+        turns,
         usecycle,
         tol,
         tol / rmin,
     )
 
     return check_encoding(
-        PolyhedronParticleSpecies{F,eltype(sites)}(g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol)
+        PolyhedronParticleSpecies{F,eltype(sites)}(g, sites, p, turns, facenormals(p), _edgedirections(p), rmin, rmax, tol)
     )
 end
 
@@ -94,6 +96,7 @@ function Base.copy(ps::PolyhedronParticleSpecies)
         copy(ps.g),
         copy(ps.sites),
         copy(ps.polyhedron),
+        copy(ps.twists),
         copy(ps.normals),
         copy(ps.edgedirections),
         ps.rmin,
@@ -106,6 +109,36 @@ graphrep(p::PolyhedronParticleSpecies) = p.g
 nsites(p::PolyhedronParticleSpecies) = length(p.sites)
 bindingsite(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolyhedronParticleSpecies) = true
+
+"""
+    todict(ps::PolyhedronParticleSpecies)
+
+Serialize `ps` into a `Dict{String,Any}` of the corners and faces of its polyhedron and the colors,
+locking and twists of its sites, the arguments of [`PolyhedronParticleSpecies`](@ref).
+"""
+function todict(ps::PolyhedronParticleSpecies)
+    p = polyhedron(ps)
+    return Dict{String,Any}(
+        "type" => _typetag(ps),
+        "corners" => [collect(c) for c in corners(p)],
+        "faces" => [collect(f) for f in faces(p)],
+        "colors" => [color(b) for b in ps.sites],
+        "locking" => [b.locking for b in ps.sites],
+        "twists" => copy(ps.twists),
+    )
+end
+
+"""
+    fromdict(::Type{<:PolyhedronParticleSpecies}, d)
+
+Return the polyhedron species that `d`, written by [`todict`](@ref), describes.
+"""
+function fromdict(::Type{<:PolyhedronParticleSpecies}, d)
+    p = Polyhedron([Float64.(c) for c in d["corners"]], [Int.(f) for f in d["faces"]])
+    return PolyhedronParticleSpecies(
+        p; colors=Int.(d["colors"]), locking=Bool.(d["locking"]), twists=Float64.(d["twists"])
+    )
+end
 bounding_radius(ps::PolyhedronParticleSpecies) = ps.rmax
 
 """

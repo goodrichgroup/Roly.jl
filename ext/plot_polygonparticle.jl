@@ -2,48 +2,65 @@ function plot_particlespecies!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=P
                                sitecolor=nothing, speciesindex=nothing, rules=nothing,
                                cornerradius=nothing, thickness=nothing, strokewidth=3, alpha=1,
                                strokecolor=(:black, alpha), kwargs...) where {F}
-    n = nsites(spcs)
-    a = 2spcs.rmin * tan(π / n)
     isnothing(cornerradius) && (cornerradius = 0.3spcs.rmin)
-    isnothing(thickness) && (thickness = 0.12_ngon_extent(n, spcs.rmin))
+    isnothing(thickness) && (thickness = 0.12_extent(spcs.corners))
     thickness = min(thickness, spcs.rmin - cornerradius)     # the inner rounding has to fit
 
     _, _, colors, _ = _resolve_colors(spcs, speciesindex, rules, sitecolor)
-    return _draw_ngon!(ax, pose.x[1], pose.x[2], rotation_angle(pose.psi);
-                       n, a, cornerradius, thickness, color=colors, strokewidth, strokecolor, alpha, kwargs...)
+    return _draw_polygon!(ax, pose.x[1], pose.x[2], rotation_angle(pose.psi); corners=spcs.corners,
+                          cornerradius, thickness, color=colors, strokewidth, strokecolor, alpha, kwargs...)
 end
 
-function _ngon_extent(n::Integer, rmin::Real)
-    R = rmin / cos(π / n)
-    θs = [π - 2π * i / n + s * π / n for i in 0:(n - 1) for s in (-1, 1)]
-    xs, ys = R .* cos.(θs), R .* sin.(θs)
-    return max(maximum(xs) - minimum(xs), maximum(ys) - minimum(ys))
+# The larger side of the bounding box of `corners`.
+_extent(corners) = maximum(d -> maximum(c[d] for c in corners) - minimum(c[d] for c in corners), 1:2)
+
+# Half the angle the boundary turns through at each corner, which is π/n at every corner of a
+# regular n-gon.
+function _halfturns(corners)
+    n = length(corners)
+    return map(1:n) do i
+        e1, e2 = corners[i] - corners[mod1(i - 1, n)], corners[mod1(i + 1, n)] - corners[i]
+        return atan(abs(cross(e1, e2)), dot(e1, e2)) / 2
+    end
 end
 
-function _ngon_segment(n::Integer, a::Real, cornerradius::Real, thickness::Real)
-    ψ = π / n
-    R = a / 2 * cot(ψ)
+# The band along the edge from corner `A` to corner `B`, with the inside of the polygon to the right
+# of that direction, in the frame of the polygon. The band is drawn in the frame of the edge, with
+# `A` at the origin and the inside below, and runs to the bisectors of its two corners, where the
+# rounding of each corner turns by `ψA` and `ψB`.
+function _edgesegment(A, B, ψA, ψB, cornerradius::Real, thickness::Real)
     r, t = cornerradius, thickness
-    com = Point(a / 2, -R)
-    u(θ) = Point(cos(θ), sin(θ))
-    o1, o2 = Point(r * tan(ψ), -r), Point(a - r * tan(ψ), -r)
-    i1, i2 = Point((t + r) * tan(ψ), -t - r), Point(a - (t + r) * tan(ψ), -t - r)
+    L = norm(B - A)
+    θ = atan(B[2] - A[2], B[1] - A[1])
+    s, c = sincos(θ)
+    T(p) = Point(A[1] + c * p[1] - s * p[2], A[2] + s * p[1] + c * p[2])
+    u(φ) = Point(cos(φ), sin(φ))
+    o1, o2 = Point(r * tan(ψA), -r), Point(L - r * tan(ψB), -r)
+    i1, i2 = Point((t + r) * tan(ψA), -t - r), Point(L - (t + r) * tan(ψB), -t - r)
     return BezierPath([
-        MoveTo(o1 + r * u(π / 2 + ψ) - com),
-        EllipticalArc(o1 - com, r, r, 0, π / 2 + ψ, π / 2),
-        LineTo(o2 + r * u(π / 2) - com),
-        EllipticalArc(o2 - com, r, r, 0, π / 2, π / 2 - ψ),
-        LineTo(i2 + r * u(π / 2 - ψ) - com),
-        EllipticalArc(i2 - com, r, r, 0, π / 2 - ψ, π / 2),
-        LineTo(i1 + r * u(π / 2) - com),
-        EllipticalArc(i1 - com, r, r, 0, π / 2, π / 2 + ψ),
+        MoveTo(T(o1 + r * u(π / 2 + ψA))),
+        EllipticalArc(T(o1), r, r, 0, θ + π / 2 + ψA, θ + π / 2),
+        LineTo(T(o2 + r * u(π / 2))),
+        EllipticalArc(T(o2), r, r, 0, θ + π / 2, θ + π / 2 - ψB),
+        LineTo(T(i2 + r * u(π / 2 - ψB))),
+        EllipticalArc(T(i2), r, r, 0, θ + π / 2 - ψB, θ + π / 2),
+        LineTo(T(i1 + r * u(π / 2))),
+        EllipticalArc(T(i1), r, r, 0, θ + π / 2, θ + π / 2 + ψA),
         ClosePath(),
     ])
 end
 
-function _draw_ngon!(ax, x, y, ψ; n, a, cornerradius, thickness, kwargs...)
-    rotation = [ψ + π - 2π / n * i for i in 0:(n - 1)]
-    marker = _ngon_segment(n, a, cornerradius, thickness)
+# One band per edge, in site order, each drawn so that the inside lies to its right.
+function _draw_polygon!(ax, x, y, ψ; corners, cornerradius, thickness, kwargs...)
+    n = length(corners)
+    halfturns = _halfturns(corners)
+    counterclockwise = sum(cross(corners[i], corners[mod1(i + 1, n)]) for i in 1:n) > 0
+    markers = map(1:n) do i
+        j = mod1(i + 1, n)
+        return counterclockwise ?
+               _edgesegment(corners[j], corners[i], halfturns[j], halfturns[i], cornerradius, thickness) :
+               _edgesegment(corners[i], corners[j], halfturns[i], halfturns[j], cornerradius, thickness)
+    end
     return scatter!(ax, fill(x, n), fill(y, n);
-                    marker, rotation, markersize=1, markerspace=:data, kwargs...)
+                    marker=markers, rotation=ψ, markersize=1, markerspace=:data, kwargs...)
 end

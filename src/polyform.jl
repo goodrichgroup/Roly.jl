@@ -1064,3 +1064,56 @@ function collect_attachments(poly::Polyform)
     BS = sitetype(rules)
     return collect_attachments!(Tuple{BS,SpeciesSiteLoc,Int}[], poly)
 end
+
+"""
+    todict(p::Polyform; rules=true)
+
+Serialize `p` into a `Dict{String,Any}` that can be deserialized again with `fromdict`.
+
+With `rules=true`, the binding rules of `p` are included as well.
+"""
+function todict(p::Polyform; rules::Bool=true)
+    rows = sort!([[a.particle, a.site, b.particle, b.site, twist(bindingsite(p, a), bindingsite(p, b))]
+                  for (a, b) in bonds(p)])
+    d = Dict{String,Any}("species" => [part.speciesindex for part in p.particles], "bonds" => rows)
+    rules && (d["rules"] = todict(bindingrules(p)))
+    return d
+end
+
+"""
+    fromdict(::Type{Polyform}, d; rules=nothing)
+
+Deserialize the polyform that `d`, written by [`todict`](@ref), describes.
+
+`rules` can be specified to define `BindingRules` that the polyform should be interpreted under. If `d` specified the
+binding rules, this is optional.
+"""
+function fromdict(::Type{Polyform}, d; rules=nothing)
+    isnothing(rules) && (rules = fromdict(BindingRules, d["rules"]))
+    spcs = Int.(d["species"])
+    rows = [Int.(r) for r in d["bonds"]]
+    n = length(spcs)
+    n == 0 && return Polyform(rules)
+
+    # `position[k]` is where particle `k` of `d` lands in `p`, which attaches them as the bonds allow
+    p = Polyform(rules, spcs[1])
+    position = zeros(Int, n)
+    position[1] = 1
+    while nparticles(p) < n
+        k = findfirst(r -> xor(position[r[1]] == 0, position[r[3]] == 0), rows)
+        isnothing(k) && throw(ArgumentError("The bonds do not connect every particle to the first one."))
+        i, s, j, r, t = rows[k]
+        (placed, site), (new, mate) = position[i] == 0 ? ((j, r), (i, s)) : ((i, s), (j, r))
+        attached = raise!(p, bindingsite(p, ParticleSiteLoc(position[placed], site)), SpeciesSiteLoc(spcs[new], mate), t)
+        ismissing(attached) && throw(
+            ArgumentError("Particle $new cannot be attached to particle $placed as their bond says, it overlaps another particle."),
+        )
+        position[new] = nparticles(p)
+    end
+    p = subpolyform(p, position)
+
+    found = sort!([[a.particle, a.site, b.particle, b.site] for (a, b) in bonds(p)])
+    found == sort!([r[1:4] for r in rows]) ||
+        throw(ArgumentError("The rebuilt polyform has the bonds $found, not the ones listed."))
+    return p
+end

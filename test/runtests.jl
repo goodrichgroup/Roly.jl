@@ -2,6 +2,7 @@ using Test
 using Roly
 using Rotations, StaticArrays, LinearAlgebra, Random
 using NautyGraphs
+using JLD2
 using CairoMakie
 
 include("testutils.jl")
@@ -19,6 +20,7 @@ include("testutils.jl")
     include("plotting.jl")
     include("custom_species.jl")
     include("symmetry.jl")
+    include("io.jl")
     include("ruleeditor.jl")
 
     @testset verbose=true "species" begin

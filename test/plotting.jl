@@ -15,6 +15,11 @@
         @test render(spcs) isa Figure
     end
 
+    # irregular polygons draw from their own corners, in either winding
+    rect = PolygonParticleSpecies([[1, 0.5], [-1, 0.5], [-1, -0.5], [1, -0.5]])
+    @test render(rect) isa Figure
+    @test render(PolygonParticleSpecies(reverse(rect.corners))) isa Figure
+
     # A 3D polyform, drawn particle by particle at its bonded pose.
     opposite(p, i) = findfirst(
         j -> isapprox(dot(facenormal(p, i), facenormal(p, j)), -1; atol=1e-8), 1:nfaces(p)
