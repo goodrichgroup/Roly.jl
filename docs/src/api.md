@@ -181,6 +181,7 @@ canonbindingsite
 canonbindingsites
 exposedsites
 opensites
+cangrow
 exposedsitelocs
 opensitelocs
 rotationgroup(::Polyform)
@@ -228,10 +229,4 @@ Provided by the Makie extension, so a backend has to be loaded.
 render
 polyformplot
 polyformplot!
-```
-
-## Interactive rule editor
-
-```@docs
-ruleeditor
 ```

@@ -159,4 +159,69 @@ using Roly: Polyform, nparticles, nsites, bindingrules, symmetrynumber, dimensio
         @test count(!isnothing, owned) == nsites(disk)
     end
 
+
+    @testset "cangrow" begin
+        # A structure can grow unless every attachment the rules allow is geometrically refused,
+        # which is exactly what `raise!` decides, so the two have to agree everywhere.
+        function children(poly)
+            rules = bindingrules(poly)
+            n = 0
+            for s in opensites(poly), (c1, c2) in Roly.bonded_colors(rules)
+                c = color(s)
+                partner = c == c1 ? c2 : c == c2 ? c1 : continue
+                for loc in Roly.sitesofcolor(rules, partner)
+                    mate = bindingsite(Roly.species(rules, loc.species), loc.site)
+                    for t in 0:(Roly.twistfreedom(s, mate) - 1)
+                        ismissing(Roly.raise!(copy(poly), s, loc, t)) || (n += 1)
+                    end
+                end
+            end
+            return n
+        end
+
+        for rules in (
+            BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle),
+            BindingRules([1 1 1 3], UnitSquare),
+            BindingRules([1 1 1 2], UnitTetrahedron),
+        )
+            polys = filter!(p -> nparticles(p) > 0, polygen(rules; maxsize=5))
+            @test !isempty(polys)
+            for poly in polys
+                @test cangrow(poly) == (children(poly) > 0)
+            end
+        end
+
+        # Rules with no bond leave a monomer nothing to grow by, every site being inert.
+        lone = first(polygen(BindingRules(falses(nsites(UnitSquare), nsites(UnitSquare)), UnitSquare); maxsize=1))
+        @test isempty(opensites(lone))
+        @test !cangrow(lone)
+
+        # A candidate is judged against the whole polyform, so the contact policy reaches every
+        # particle it lands against. Relaxing the policy can only ever let more attachments
+        # through, never fewer.
+        for rules in (
+            BindingRules([1 1 1 2], UnitSquare),
+            BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle),
+            BindingRules([1 1 1 2], UnitCube),
+        )
+            for poly in filter!(p -> nparticles(p) > 0, polygen(rules; maxsize=4))
+                strict = cangrow(poly)
+                lax = cangrow(poly; allow_noninteracting=true, allow_misaligned=true)
+                @test !strict || lax
+                # The defaults are the strict policy, which is what the enumeration grows under.
+                @test cangrow(poly; allow_noninteracting=false, allow_misaligned=false) == strict
+            end
+        end
+
+        # The maximal structures of a bounded system are exactly the ones that cannot grow, and
+        # there is at least one, or the system would not be bounded.
+        rules = BindingRules([1 3 2 3; 2 2 3 2; 2 1 4 1; 3 1 4 1], UnitTriangle)
+        @test isbounded(rules)
+        polys = filter!(p -> nparticles(p) > 0, polygen(rules))
+        terminal = filter(!cangrow, polys)
+        @test !isempty(terminal)
+        # Nothing the enumeration found is larger than a terminal one it contains.
+        @test maximum(nparticles, terminal) == maximum(nparticles, polys)
+    end
+
 end

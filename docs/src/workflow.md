@@ -70,40 +70,6 @@ julia> grouporder(Dihedral(5))
 
 The named groups are [`Cyclic`](@ref), [`Dihedral`](@ref), [`Tetrahedral`](@ref), [`Octahedral`](@ref) and [`Icosahedral`](@ref), the rotation-only point groups a rigid body can have.
 
-## Sketching rules interactively
-
-[`ruleeditor`](@ref) builds a bond table geometrically: place blocks on a lattice and it reads the rules off every pair of touching sites.
-
-```julia
-rules = ruleeditor(UnitSquare)  # also works for UnitTriangle and UnitHexagon
-```
-
-Arrow keys move the cursor, `Enter` places, `Space` erases, `r` and `R` rotate, digits `1` to `9` switch species, `q` accepts.
-
-```
-┌ Editor ──────────┐┌ Particles ──────────────────────────┐
-│── Species ──     ││ ┌─────┐ ┌─────┐                     │
-│▶ ■  species 1    ││ │     │ │     │                     │
-│  ■  species 2    ││ │  →  │ │  ←  │                     │
-│                  ││ │     │ │     │                     │
-│── Keys ──────    ││ └─────┘ └─────┘                     │
-│arrows  move      ││ ┌─────┐ ┌─────┐                     │
-│enter   place     ││ │     │ │     │                     │
-│space   erase     ││ │  ↑  │ │  ↑  │                     │
-│r / R   rotate    ││ │     │ │     │                     │
-│1-9     species   ││ └─────┘ └─────┘                     │
-│c       clear     ││                                     │
-│q       accept    ││                                     │
-└──────────────────┘└─────────────────────────────────────┘
-```
-
-Pass `output=:bonds` or `output=:matrix` for a copy-pasteable result instead of a `BindingRules`:
-
-```julia
-bonds = ruleeditor(UnitSquare; output=:bonds)  # n×4 integer matrix
-rules   = BindingRules(bonds, UnitSquare)         # reproduces the same rules
-```
-
 ## Enumerating polyforms
 
 Once you have defined a set of binding rules, use `polyenum` to enumerate all allowed polyforms.
