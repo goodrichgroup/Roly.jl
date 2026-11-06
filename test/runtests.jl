@@ -2,6 +2,7 @@ using Test
 using Roly
 using Rotations, StaticArrays, LinearAlgebra, Random
 using NautyGraphs
+using JLD2
 using CairoMakie
 
 include("testutils.jl")
@@ -17,15 +18,17 @@ include("testutils.jl")
     include("environments.jl")
     include("tiling.jl")
     include("utils.jl")
+    include("conventions.jl")
     include("plotting.jl")
     include("custom_species.jl")
     include("symmetry.jl")
-    include("ruleeditor.jl")
+    include("io.jl")
 
     @testset verbose=true "species" begin
         include("species/polygonparticlespecies.jl")
         include("species/polyhedronparticlespecies.jl")
         include("species/patchyparticlespecies.jl")
+        include("species/metaparticlespecies.jl")
     end
 end;
 

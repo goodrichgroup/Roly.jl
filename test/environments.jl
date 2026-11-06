@@ -12,24 +12,24 @@
 
     chainstrs = polygen(chainrules; maxsize=3)
     trimer = chainstrs[findfirst(s -> nparticles(s) == 3, chainstrs)]
-    speciesof(poly, p) = poly.particles[p].species_index
+    speciesof(poly, p) = poly.particles[p].speciesindex
     mid = findfirst(p -> speciesof(trimer, p) == 2, 1:3)
     end1 = findfirst(p -> speciesof(trimer, p) == 1, 1:3)
 
     # subpolyform: composition, canonical identity of the full subset, recomputed symmetry
-    sub = subpolyform(trimer, [p for p in 1:3 if p != end1])
+    sub = Roly.subpolyform(trimer, [p for p in 1:3 if p != end1])
     @test nparticles(sub) == 2
     @test composition(sub) ==
           composition(trimer) .- composition(Polyform(chainrules, 1)) .- [zeros(Int, 3); 1; 0]
 
-    whole = subpolyform(trimer, 1:3)
+    whole = Roly.subpolyform(trimer, 1:3)
     @test graphrep(whole) == graphrep(trimer)
     @test symmetrynumber(whole) == symmetrynumber(trimer)
 
     # the fully capped triangle is threefold symmetric, and subpolyform must recompute sigma
     tristrs = polygen(trianglerules; maxsize=4)
     full = tristrs[findfirst(s -> nparticles(s) == 4, tristrs)]
-    @test symmetrynumber(subpolyform(full, 1:4)) == symmetrynumber(full) == 3
+    @test symmetrynumber(Roly.subpolyform(full, 1:4)) == symmetrynumber(full) == 3
 
     # extraction: the middle particle sees the whole trimer, an end only the dimer
     envmid = ParticleEnvironment(trimer, mid; depth=1)
@@ -73,7 +73,7 @@
     end
     @test allunique(seen)
     @test length(seen) == 6
-    @test result.status == Finished
+    @test result.status == Roly.Finished
 
     # batch extraction agrees with single-root extraction
     batch = particleenvironments(trimer; depth=1)

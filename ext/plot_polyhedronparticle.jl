@@ -56,20 +56,20 @@ end
 function particlemesh(
     spcs::PolyhedronParticleSpecies{F},
     pose::Pose=Pose{3,F}();
-    site_color=nothing,
-    species_index=nothing,
-    sys=nothing,
+    sitecolor=nothing,
+    speciesindex=nothing,
+    rules=nothing,
     alpha=0.8,
     border=0.035,
 ) where {F}
     _, _, colors, _ = _resolve_colors(
-        spcs, species_index, sys, site_color; bond_tint=FACE_TINT, inert_color=nothing
+        spcs, speciesindex, rules, sitecolor; bond_tint=FACE_TINT, inert_color=nothing
     )
     facecolors = [RGBAf(c, alpha) for c in colors]
     bordercolors = [RGBAf(_shade(c, 0.35), alpha) for c in colors]
 
     pts, tris, ptcolors = Point3f[], NTuple{3,Int}[], RGBAf[]
-    _facemesh!(pts, tris, ptcolors, shape(spcs), pose, facecolors, border, bordercolors)
+    _facemesh!(pts, tris, ptcolors, polyhedron(spcs), pose, facecolors, border, bordercolors)
     return pts, tris, ptcolors
 end
 

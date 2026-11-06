@@ -6,7 +6,8 @@ A 3D convex polyhedron with one binding site per face.
 struct PolyhedronParticleSpecies{F,B<:BindingSite} <: ParticleSpecies{3,B}
     g::NautyDiGraph
     sites::Vector{B}
-    shape::Polyhedron{F}
+    polyhedron::Polyhedron{F}
+    twists::Vector{F}
     normals::Vector{SVector{3,F}}
     edgedirections::Vector{SVector{3,F}}
     rmin::F
@@ -25,31 +26,37 @@ uses to decide which sites bond.
 `locking` says whether a bond locks orientation, or is free to bond in all geometrically permitted
 relative orientations.
 
-`twists` turns a face's binding site about its own normal, by an angle in radians, and likewise
-takes one value or one per face.
+`twists` turns a face's binding site about its own normal, by an angle in radians.
 """
-PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0) =
+function PolyhedronParticleSpecies(p::Polyhedron; colors=1:nfaces(p), locking=true, twists=0)
     _polyhedronspecies(p, colors, locking, twists, nothing)
+end
 
 # `usecycle` forces an encoding; see `_facesites`. Internal, and the reason the public
 # constructor above is a one-liner.
-function _polyhedronspecies(p::Polyhedron{F}, colors, locking, twists,
-                            usecycle::Union{Nothing,Bool}) where {F}
+function _polyhedronspecies(p::Polyhedron{F}, colors, locking, twists, usecycle::Union{Nothing,Bool}) where {F}
     n = nfaces(p)
-    length(colors) == n ||
-        throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
+    length(colors) == n || throw(ArgumentError("expected $n colors, one per face, got $(length(colors))"))
 
     rmin = inradius(p)
     rmax = bounding_radius(p)
     tol = sqrt(eps(F)) * rmax
+    turns = F.(_expandperface(twists, n, "twists"))
 
-    g, sites = _facesites(p, fs -> _faceposes(p, fs), colors,
-                          _perface(locking, n, "locking flags"),
-                          _perface(twists, n, "twists"), usecycle, tol, tol / rmin)
+    g, sites = _facesites(
+        p,
+        fs -> _faceposes(p, fs),
+        colors,
+        _expandperface(locking, n, "locking flags"),
+        turns,
+        usecycle,
+        tol,
+        tol / rmin,
+    )
 
-    return check_encoding(PolyhedronParticleSpecies{F,eltype(sites)}(
-        g, sites, p, facenormals(p), _edgedirections(p), rmin, rmax, tol
-    ))
+    return check_encoding(
+        PolyhedronParticleSpecies{F,eltype(sites)}(g, sites, p, turns, facenormals(p), _edgedirections(p), rmin, rmax, tol)
+    )
 end
 
 """
@@ -69,7 +76,7 @@ function _faceposes(p::Polyhedron{F}, fs::Vector{Vector{Int}}) where {F}
 end
 
 # Separating axis candidates contributed by the edges. Only the direction matters, and only
-# up to sign, so parallel edges are collapsed: a cube contributes 3 rather than 12.
+# up to sign, so parallel edges are collapsed: a cube contributes only 3 instead of 12.
 function _edgedirections(p::Polyhedron{F}) where {F}
     dirs = SVector{3,F}[]
     for f in faces(p), k in eachindex(f)
@@ -86,29 +93,64 @@ end
 
 function Base.copy(ps::PolyhedronParticleSpecies)
     return typeof(ps)(
-        copy(ps.g), copy(ps.sites), copy(ps.shape), copy(ps.normals), copy(ps.edgedirections),
-        ps.rmin, ps.rmax, ps.skin
+        copy(ps.g),
+        copy(ps.sites),
+        copy(ps.polyhedron),
+        copy(ps.twists),
+        copy(ps.normals),
+        copy(ps.edgedirections),
+        ps.rmin,
+        ps.rmax,
+        ps.skin,
     )
 end
 
 graphrep(p::PolyhedronParticleSpecies) = p.g
 nsites(p::PolyhedronParticleSpecies) = length(p.sites)
-bindingsites(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
+bindingsite(p::PolyhedronParticleSpecies, i::Integer) = p.sites[i]
 isconvex(::PolyhedronParticleSpecies) = true
+
+"""
+    todict(ps::PolyhedronParticleSpecies)
+
+Serialize `ps` into a `Dict{String,Any}` of the corners and faces of its polyhedron and the colors,
+locking and twists of its sites, the arguments of [`PolyhedronParticleSpecies`](@ref).
+"""
+function todict(ps::PolyhedronParticleSpecies)
+    p = polyhedron(ps)
+    return Dict{String,Any}(
+        "type" => _typetag(ps),
+        "corners" => [collect(c) for c in corners(p)],
+        "faces" => [collect(f) for f in faces(p)],
+        "colors" => [color(b) for b in ps.sites],
+        "locking" => [b.locking for b in ps.sites],
+        "twists" => copy(ps.twists),
+    )
+end
+
+"""
+    fromdict(::Type{<:PolyhedronParticleSpecies}, d)
+
+Return the polyhedron species that `d`, written by [`todict`](@ref), describes.
+"""
+function fromdict(::Type{<:PolyhedronParticleSpecies}, d)
+    p = Polyhedron([Float64.(c) for c in d["corners"]], [Int.(f) for f in d["faces"]])
+    return PolyhedronParticleSpecies(
+        p; colors=Int.(d["colors"]), locking=Bool.(d["locking"]), twists=Float64.(d["twists"])
+    )
+end
 bounding_radius(ps::PolyhedronParticleSpecies) = ps.rmax
 
 """
-    shape(ps::PolyhedronParticleSpecies)
+    polyhedron(ps::PolyhedronParticleSpecies)
 
 Return the [`Polyhedron`](@ref) the species was built from.
 """
-shape(ps::PolyhedronParticleSpecies) = ps.shape
-corners(ps::PolyhedronParticleSpecies) = corners(ps.shape)
+polyhedron(ps::PolyhedronParticleSpecies) = ps.polyhedron
+corners(ps::PolyhedronParticleSpecies) = corners(ps.polyhedron)
 
 function overlap(
-    p1::SpeciesAndPose{<:PolyhedronParticleSpecies},
-    p2::SpeciesAndPose{<:PolyhedronParticleSpecies};
-    kwargs...,
+    p1::SpeciesAndPose{<:PolyhedronParticleSpecies}, p2::SpeciesAndPose{<:PolyhedronParticleSpecies}; kwargs...
 )
     spcs1, pose1 = p1
     spcs2, pose2 = p2
@@ -124,8 +166,7 @@ function overlap(
     axes = Iterators.flatten((
         (pose1.psi * nrm for nrm in spcs1.normals),
         (pose2.psi * nrm for nrm in spcs2.normals),
-        (cross(pose1.psi * e1, pose2.psi * e2)
-         for e1 in spcs1.edgedirections, e2 in spcs2.edgedirections),
+        (cross(pose1.psi * e1, pose2.psi * e2) for e1 in spcs1.edgedirections, e2 in spcs2.edgedirections),
     ))
     return sat_overlap(axes, corners(spcs1), pose1, corners(spcs2), pose2, skin)
 end
@@ -171,8 +212,7 @@ const UnitIcosahedron = PolyhedronParticleSpecies(Icosahedron())
 A pyramid over a regular `n`-gon with edge length `a`, with one binding site per face.
 Rotation group `C_n`.
 """
-UnitPyramid(n::Integer, a::Real=1.0; h::Real=a, kwargs...) =
-    PolyhedronParticleSpecies(Pyramid(n, a; h); kwargs...)
+UnitPyramid(n::Integer, a::Real=1.0; h::Real=a, kwargs...) = PolyhedronParticleSpecies(Pyramid(n, a; h); kwargs...)
 
 """
     UnitPrism(n, a=1.0; h=a, kwargs...)
@@ -189,3 +229,59 @@ A uniform antiprism over a regular `n`-gon with edge length `a`, with one bindin
 face. Rotation group `D_n`, except for `UnitAntiprism(3)` which is a regular octahedron.
 """
 UnitAntiprism(n::Integer, a::Real=1.0; kwargs...) = PolyhedronParticleSpecies(Antiprism(n, a); kwargs...)
+
+
+"""
+    SymmetricUnitTetrahedron
+
+A regular tetrahedron with unit-length edges, every face the same color.
+
+Where [`UnitTetrahedron`](@ref) gives each face a color of its own, this one leaves the body its full
+rotation group, so `symmetrynumber` reports that group's order rather than 1 and faces bond
+interchangeably.
+"""
+const SymmetricUnitTetrahedron = PolyhedronParticleSpecies(Tetrahedron(); colors=fill(1, nfaces(Tetrahedron())))
+
+"""
+    SymmetricUnitCube
+
+A cube with unit-length edges, every face the same color.
+
+Where [`UnitCube`](@ref) gives each face a color of its own, this one leaves the body its full
+rotation group, so `symmetrynumber` reports that group's order rather than 1 and faces bond
+interchangeably.
+"""
+const SymmetricUnitCube = PolyhedronParticleSpecies(Cube(); colors=fill(1, nfaces(Cube())))
+
+"""
+    SymmetricUnitOctahedron
+
+A regular octahedron with unit-length edges, every face the same color.
+
+Where [`UnitOctahedron`](@ref) gives each face a color of its own, this one leaves the body its full
+rotation group, so `symmetrynumber` reports that group's order rather than 1 and faces bond
+interchangeably.
+"""
+const SymmetricUnitOctahedron = PolyhedronParticleSpecies(Octahedron(); colors=fill(1, nfaces(Octahedron())))
+
+"""
+    SymmetricUnitDodecahedron
+
+A regular dodecahedron with unit-length edges, every face the same color.
+
+Where [`UnitDodecahedron`](@ref) gives each face a color of its own, this one leaves the body its full
+rotation group, so `symmetrynumber` reports that group's order rather than 1 and faces bond
+interchangeably.
+"""
+const SymmetricUnitDodecahedron = PolyhedronParticleSpecies(Dodecahedron(); colors=fill(1, nfaces(Dodecahedron())))
+
+"""
+    SymmetricUnitIcosahedron
+
+A regular icosahedron with unit-length edges, every face the same color.
+
+Where [`UnitIcosahedron`](@ref) gives each face a color of its own, this one leaves the body its full
+rotation group, so `symmetrynumber` reports that group's order rather than 1 and faces bond
+interchangeably.
+"""
+const SymmetricUnitIcosahedron = PolyhedronParticleSpecies(Icosahedron(); colors=fill(1, nfaces(Icosahedron())))

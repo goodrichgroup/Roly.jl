@@ -18,14 +18,14 @@ Candidate vectors connect interacting, aligned pairs of open sites.
 """
 function tilings(poly::Polyform; nreps::Integer=2)
     sys = bindingrules(poly)
-    opensites = collect_open_bindingsites(poly)
+    sites = opensites(poly)
     V = fieldtype(posetype(sys), :x)
     out = NamedTuple{(:vectors, :bondtypes, :complete),Tuple{Vector{V},Vector{Int},Bool}}[]
-    isempty(opensites) && return out
-    vecs = _candidatelatticevectors(opensites, sys)
+    isempty(sites) && return out
+    vecs = _candidatelatticevectors(sites, sys)
     isempty(vecs) && return out
 
-    siteof = Dict(s.vertices => s for s in opensites)
+    siteof = Dict(s.vertices => s for s in sites)
     state = (consumed=Set{UnitRange{Int}}(), contacts=NTuple{2,UnitRange{Int}}[],
              placed=Vector{eltype(poly.particles)}[], chosen=Int[])
     record!() = push!(out, (vectors=vecs[state.chosen],
@@ -123,14 +123,15 @@ function _placeshell!(state, poly, sys, vecs, siteof, nreps)
     for m in Iterators.product(ntuple(_ -> 0:nreps, k - 1)..., 1:nreps)
         t = sum(m[i] * vecs[state.chosen[i]] for i in 1:k)
         for part in poly.particles
-            sp = part + t
+            sp = translate(part, t)
             for prior in state.placed
                 first(_overlap_and_contacts(prior, sp, sys)) === true && return fail()
             end
             first(_overlap_and_contacts(shell, sp, sys)) === true && return fail()
             ov, cts = _overlap_and_contacts(poly.particles, sp, sys)
             ov && return fail()
-            for (r1, r2) in cts
+            for c in cts
+                r1, r2 = c.vs1, c.vs2
                 # both endpoints must be open sites of the cell, each closed at most once
                 (haskey(siteof, r1) && haskey(siteof, r2)) || return fail()
                 r1 in state.consumed && return fail()

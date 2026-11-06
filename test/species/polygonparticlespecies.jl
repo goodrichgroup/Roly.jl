@@ -26,16 +26,16 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
     @test nsites(ps_labels) == 4
 
     ps_colors = PolygonParticleSpecies(4; colors=[1, 2, 1, 2])
-    @test color(bindingsites(ps_colors, 1)) == 1
-    @test color(bindingsites(ps_colors, 2)) == 2
-    @test color(bindingsites(ps_colors, 3)) == 1
+    @test color(bindingsite(ps_colors, 1)) == 1
+    @test color(bindingsite(ps_colors, 2)) == 2
+    @test color(bindingsite(ps_colors, 3)) == 1
 
     ps = PolygonParticleSpecies(4)
     ps2 = copy(ps)
     @test nsites(ps2) == nsites(ps)
     setcolors!(ps2, [10, 20, 30, 40])
-    @test color(bindingsites(ps2, 1)) == 10
-    @test color(bindingsites(ps, 1)) != 10
+    @test color(bindingsite(ps2, 1)) == 10
+    @test color(bindingsite(ps, 1)) != 10
 
     io = IOBuffer()
     show(io, ps)
@@ -85,4 +85,44 @@ using Roly: PolygonParticleSpecies, UnitTriangle, UnitSquare, UnitHexagon,
 
     @test symmetrynumber(UnitHexagon) == 1
     @test symmetrynumber(PolygonParticleSpecies(6; colors=[1,1,1,1,1,1])) == 6
+
+    # the symmetric counterparts differ from the defaults in coloring alone: one color throughout,
+    # so the body keeps its rotation group where a color per edge leaves it none
+    for (plain, sym, n) in ((UnitTriangle, SymmetricUnitTriangle, 3),
+                            (UnitSquare, SymmetricUnitSquare, 4),
+                            (UnitHexagon, SymmetricUnitHexagon, 6))
+        @test [color(bindingsite(plain, i)) for i in 1:n] == 1:n
+        @test [color(bindingsite(sym, i)) for i in 1:n] == fill(1, n)
+        @test [bindingsite(plain, i).pose for i in 1:n] == [bindingsite(sym, i).pose for i in 1:n]
+        @test symmetrynumber(plain) == 1
+        @test symmetrynumber(sym) == n
+    end
+
+    # polygons from their corners
+    rect = PolygonParticleSpecies([[1, 0.5], [-1, 0.5], [-1, -0.5], [1, -0.5]])
+    @test nsites(rect) == 4
+    @test bindingsite(rect, 1).pose.x ≈ [0, 0.5]       # site i is on the edge from corner i to i+1
+    @test bindingsite(rect, 2).pose.x ≈ [-1, 0]
+    @test rect.rmin ≈ 0.5
+    @test rect.rmax ≈ norm([1, 0.5])
+    @test symmetrynumber(PolygonParticleSpecies(rect.corners; colors=fill(1, 4))) == 2
+
+    # the corners may run either way, and the sites face outward regardless
+    flipped = PolygonParticleSpecies(reverse(rect.corners))
+    for ps in (rect, flipped), i in 1:4
+        b = bindingsite(ps, i)
+        @test dot(b.pose.psi * [1, 0], b.pose.x) > 0
+    end
+
+    # a regular polygon built from its corners is the same species
+    sq = PolygonParticleSpecies(UnitSquare.corners)
+    @test all(1:4) do i
+        a, b = bindingsite(sq, i).pose, bindingsite(UnitSquare, i).pose
+        a.x ≈ b.x && rotation_angle(a.psi) ≈ rotation_angle(b.psi)
+    end
+
+    @test_throws ArgumentError PolygonParticleSpecies([[1, 0], [0, 1]])
+    @test_throws ArgumentError PolygonParticleSpecies([[1, 0], [0, 0.1], [-1, 0], [0, 1]])   # not convex
+    @test_throws ArgumentError PolygonParticleSpecies([[2, 1], [3, 1], [3, 2], [2, 2]])     # origin outside
+    @test_throws ArgumentError PolygonParticleSpecies(rect.corners; colors=[1, 2])
 end

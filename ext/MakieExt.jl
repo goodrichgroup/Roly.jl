@@ -2,8 +2,10 @@ module MakieExt
 
 using Roly
 using Makie
-using LinearAlgebra: dot, normalize
+using LinearAlgebra: cross, dot, norm, normalize
 import Roly: species, bindingrules, polyformplot, polyformplot!, render
+import Roly: Pose
+import Roly: corners, faces, facevertices, nfaces, facecentroid, facenormal, polyhedron, bounding_radius
 
 @recipe PolyformPlot (poly, ) begin
     bindingrules = nothing
@@ -20,7 +22,7 @@ function Makie.plot!(p::PolyformPlot{<:Tuple{<:ParticleSpecies}})
     # rules are optional too, and decide which sites are drawn as bonding.
     pose = p.pose[]
     args = isnothing(pose) ? (p.poly[],) : (p.poly[], pose)
-    plot_particlespecies!(p, args...; sys=p.bindingrules[])
+    plot_particlespecies!(p, args...; rules=p.bindingrules[])
     return p
 end
 
@@ -35,11 +37,11 @@ end
 
 
 """
-    plot_particlespecies!(ax, spcs::ParticleSpecies, pose::Pose; site_color, kwargs...)
+    plot_particlespecies!(ax, spcs::ParticleSpecies, pose::Pose; sitecolor, kwargs...)
 
 Draw the particle species `spcs` at `pose` onto `ax`.
 
-`site_color` is an optional callback `(species_index, site_index) -> color` that controls
+`sitecolor` is an optional callback `(speciesindex, siteindex) -> color` that controls
 per-site coloring. When omitted, the species' palette is used, with sites that no bond can
 use greyed out.
 """
@@ -71,23 +73,27 @@ Draw all particles of `poly` onto `ax`, coloring inert sites with `INERT_COLOR`.
 
 Species that provide a [`particlemesh`](@ref) are merged into one mesh so they depth-sort
 against each other; the rest are drawn one plot per particle.
+
+`alpha` scales the transparency of everything drawn, for showing one polyform behind another.
 """
-function plot_polyform!(ax, poly::Polyform, pose=nothing; kwargs...)
-    sys = bindingrules(poly)
+function plot_polyform!(ax, poly::Polyform, pose=nothing; alpha=1, kwargs...)
+    rules = bindingrules(poly)
     pts, tris, cols = Point3f[], NTuple{3,Int}[], RGBAf[]
 
     for part in poly.particles
-        ps = species(sys, part.species_index)
+        ps = species(rules, part.speciesindex)
         part_pose = isnothing(pose) ? part.pose : pose * part.pose
-        geom = particlemesh(ps, part_pose; sys, kwargs...)
+        geom = particlemesh(ps, part_pose; rules, kwargs...)
         if isnothing(geom)
-            plot_particlespecies!(ax, ps, part_pose; sys, kwargs...)
+            # a species with no mesh form draws itself, so the transparency has to go with it
+            faded = alpha == 1 ? kwargs : (; kwargs..., alpha)
+            plot_particlespecies!(ax, ps, part_pose; rules, faded...)
             continue
         end
         p, t, c = geom
         offset = length(pts)
         append!(pts, p)
-        append!(cols, c)
+        append!(cols, alpha == 1 ? c : [RGBAf(x.r, x.g, x.b, x.alpha * alpha) for x in c])
         for (a, b, d) in t
             push!(tris, (a + offset, b + offset, d + offset))
         end
@@ -101,5 +107,6 @@ include("palette.jl")
 include("plot_polygonparticle.jl")
 include("plot_polyhedronparticle.jl")
 include("plot_patchyparticle.jl")
+include("plot_metaparticle.jl")
 
 end # module

@@ -8,7 +8,9 @@ makedocs(
         "Home" => "index.md",
         "Workflow" => "workflow.md",
         "Custom particle species" => "custom_species.md",
-        "Orientation and registrations" => "orientation.md",
+        "Orientation and twists" => "orientation.md",
+        "Bounded and unbounded rules" => "growth.md",
+        "Saving and loading" => "io.md",
         "API reference" => "api.md",
     ],
     format = Documenter.HTML(

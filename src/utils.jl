@@ -44,8 +44,7 @@ overlap, and it is enough to test a finite candidate set. In 2D the edge normals
 In 3D it takes both solids' face normals and the cross products of their edge directions,
 which catch the edge-on-edge configurations no face normal separates.
 
-Axes need not be normalized or even nonzero: each is scaled here, and a degenerate one (from
-parallel edges, say) carries no information and is skipped.
+Axes need not be normalized: each axis is scaled, and degenerate ones (e.g. from parallel edges) are skipped.
 """
 function sat_overlap(axes, corners1, pose1, corners2, pose2, skin::Real)
     for axis in axes
@@ -65,12 +64,11 @@ end
 The normals of a 2D polygon's edges, in world coordinates: candidate separating
 axes for [`sat_overlap`](@ref). Only the direction matters, so the sign is not fixed.
 """
-edgenormals(corners, pose) = (
-    let e = pose.psi * (corners[mod1(i + 1, length(corners))] - corners[i])
+function edgenormals(corners, pose)
+    (let e = pose.psi * (corners[mod1(i + 1, length(corners))] - corners[i])
         SVector(-e[2], e[1])
-    end
-    for i in eachindex(corners)
-)
+    end for i in eachindex(corners))
+end
 
 """
     is_cutset(g, vs[; target, dist, queue])
@@ -79,11 +77,13 @@ Return `true` if removing vertices `vs` from `g` disconnects the graph.
 
 `target`, `dist`, and `queue` are buffer arrays of length `nv(g)`, which will be modified.
 """
-function is_cutset(g::AbstractNautyGraph, vs::AbstractVector{<:Integer};
+function is_cutset(
+    g::AbstractNautyGraph,
+    vs::AbstractVector{<:Integer};
     target::AbstractVector{Bool}=zeros(Bool, nv(g)),
     dist::AbstractVector{<:Integer}=zeros(Int, nv(g)),
-    queue::AbstractVector{<:Integer}=zeros(Int, nv(g)))
-
+    queue::AbstractVector{<:Integer}=zeros(Int, nv(g)),
+)
     fill!(target, false)
     fill!(dist, -1)
     for v in vs
@@ -113,4 +113,21 @@ function blockdiag!(g::AbstractNautyGraph, h::AbstractNautyGraph)
         add_edge!(g, e.src+ng, e.dst+ng)
     end
     return g
+end
+
+# Use ReverseSearch to implement a basic backtrack search. Assumes that adj! already doesnt not lead to duplicates.
+function _backtrack(f, adj!, v₀; aux=nothing, kwargs...)
+    rsys = RSSystem((k, _) -> k, adj!, v₀; compare=Returns(true), aux)
+    return reversesearch(f, rsys; cache=CacheAll(), kwargs...)
+end
+
+"""
+    _twistangle(R0, R)
+
+Return the angle about the local x axis that turns frame `R0` into frame `R`, for two frames that
+share that axis.
+"""
+function _twistangle(R0, R)
+    M = R0' * R
+    return atan(M[3, 2], M[2, 2])
 end
