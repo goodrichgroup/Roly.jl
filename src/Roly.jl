@@ -47,8 +47,7 @@ export tofile, fromfile
 public todict, fromdict
 
 # Environments
-export Environment, ParticleEnvironment, BondEnvironment
-export particleenvironments, bondenvironments, crop, rootenvironment
+export ParticleEnvironment, particleenvironments, rootbonds, crop
 export tilings, isunitcell, tilelatticevectors, cantile
 
 # Enumeration

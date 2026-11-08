@@ -80,50 +80,40 @@
     @test length(batch) == 3
     @test all(batch[p] == ParticleEnvironment(trimer, p; depth=1) for p in 1:3)
 
-    # bond environments: reversal is an involution, distinct bonds give distinct classes
-    bes = bondenvironments(envmid)
-    @test length(bes) == 2
-    @test all(reverse(reverse(b)) == b for b in bes)
-    @test bes[1] != bes[2]   # the two chain bonds join different species pairs
-
-    # crop of the full cluster agrees with the crop of the containing particle environment
-    b = first(Iterators.filter(b -> mid in (b.first.particle, b.second.particle), bonds(trimer)))
-    direct = BondEnvironment(trimer, b; depth=0)
-    @test direct in bes || reverse(direct) in bes
+    # root bonds: one per bond at the root; a chain bond looks different from its two ends, and
+    # the end particle's only bond is the middle particle's bond seen from the other side
+    rb = rootbonds(envmid, chainrules, 1)
+    @test length(rb) == 2
+    @test all(b.view != b.reversed for b in rb)
+    @test rb[1].view != rb[2].view   # the two chain bonds join different species pairs
+    rbend = rootbonds(envend, chainrules, 1)
+    @test length(rbend) == 1
+    partner = findfirst(b -> b.view == rbend[1].reversed, rb)
+    @test partner !== nothing
+    @test rb[partner].sites == reverse(rbend[1].sites)
 
     # a bond between two copies of the same species is symmetric
     selfdimer = polygen(selfrules; maxsize=2)[end]
     @test nparticles(selfdimer) == 2
-    se = BondEnvironment(selfdimer, first(bonds(selfdimer)); depth=1)
-    @test reverse(se) == se
+    se = rootbonds(ParticleEnvironment(selfdimer, 1; depth=1), selfrules, 1)
+    @test length(se) == 1 && se[1].view == se[1].reversed
 
-    @test_throws ArgumentError bondenvironments(ParticleEnvironment(trimer, mid; depth=0))
+    @test_throws ArgumentError rootbonds(envmid, chainrules, 0)
 
     # hierarchy closure: every cluster of the dimer system has radius <= 1, so depth 2 adds nothing
     e1 = Set(particleenvironments(dimerrules; depth=1))
     e2 = particleenvironments(dimerrules; depth=2)
     @test length(e2) == 4
-    @test Set(Environment(e.graph, e.rootvertices, 1, e.rules) for e in e2) == e1
+    @test Set(e2) == e1
 
     # crop reproduces direct extraction at the smaller radius, on every root of every cluster
     for s in polygen(chainrules; maxsize=5), p in 1:nparticles(s)
         env2 = ParticleEnvironment(s, p; depth=2)
         @test crop(env2, 1) == ParticleEnvironment(s, p; depth=1)
-        @test crop(env2, 2) === env2
+        @test crop(env2, 2) == env2
         @test nv(crop(env2, 0).graph) == nv(graphrep(Roly.species(chainrules, 1)))
     end
     # enumerated depth-2 classes crop onto valid depth-1 classes
     e1chain = Set(particleenvironments(chainrules; depth=1))
     @test all(crop(e, 1) in e1chain for e in particleenvironments(chainrules; depth=2))
-    @test_throws ArgumentError crop(first(e1chain), 2)
-
-    # bond-environment crops and root extraction agree with direct computation on every bond
-    for s in polygen(chainrules; maxsize=5), b in bonds(s)
-        be = BondEnvironment(s, b; depth=1)
-        @test crop(be, 0) == BondEnvironment(s, b; depth=0)
-        @test crop(be, 1) === be
-        @test rootenvironment(be, 1, 1) == ParticleEnvironment(s, b.first.particle; depth=1)
-        @test rootenvironment(be, 2, 1) == ParticleEnvironment(s, b.second.particle; depth=1)
-        @test rootenvironment(be, 1, 0) == ParticleEnvironment(s, b.first.particle; depth=0)
-    end
 end
