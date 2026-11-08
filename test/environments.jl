@@ -82,11 +82,11 @@
 
     # root bonds: one per bond at the root; a chain bond looks different from its two ends, and
     # the end particle's only bond is the middle particle's bond seen from the other side
-    rb = rootbonds(envmid, chainrules, 1)
+    rb = rootbonds(envmid, 1)
     @test length(rb) == 2
     @test all(b.view != b.reversed for b in rb)
     @test rb[1].view != rb[2].view   # the two chain bonds join different species pairs
-    rbend = rootbonds(envend, chainrules, 1)
+    rbend = rootbonds(envend, 1)
     @test length(rbend) == 1
     partner = findfirst(b -> b.view == rbend[1].reversed, rb)
     @test partner !== nothing
@@ -95,10 +95,10 @@
     # a bond between two copies of the same species is symmetric
     selfdimer = polygen(selfrules; maxsize=2)[end]
     @test nparticles(selfdimer) == 2
-    se = rootbonds(ParticleEnvironment(selfdimer, 1; depth=1), selfrules, 1)
+    se = rootbonds(ParticleEnvironment(selfdimer, 1; depth=1), 1)
     @test length(se) == 1 && se[1].view == se[1].reversed
 
-    @test_throws ArgumentError rootbonds(envmid, chainrules, 0)
+    @test_throws ArgumentError rootbonds(envmid, 0)
 
     # hierarchy closure: every cluster of the dimer system has radius <= 1, so depth 2 adds nothing
     e1 = Set(particleenvironments(dimerrules; depth=1))

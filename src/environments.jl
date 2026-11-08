@@ -7,17 +7,19 @@ isomorphism class of the bond graph with the root particle marked.
   - `graph`: canonized graph representation, with the labels of the root's vertices offset so the
     root is distinguished
   - `rootvertex`: canonical index of one of the root's site vertices
+  - `rules`: the `BindingRules` the labels refer to
 
-Identity (`hash`/`==`) is the graph alone; the radius is a property of the extraction or
-enumeration that produced the environment. Every environment is itself a valid polyform.
+Identity (`hash`/`==`) is the graph; the radius is a property of the extraction or enumeration
+that produced the environment. Every environment is itself a valid polyform.
 """
-struct ParticleEnvironment{G<:AbstractNautyGraph}
+struct ParticleEnvironment{G<:AbstractNautyGraph,S<:BindingRules}
     graph::G
     rootvertex::Int
+    rules::S
 end
 
 Base.hash(e::ParticleEnvironment, h::UInt) = hash(e.graph, h)
-Base.:(==)(a::ParticleEnvironment, b::ParticleEnvironment) = a.graph == b.graph
+Base.:(==)(a::ParticleEnvironment, b::ParticleEnvironment) = a.rules === b.rules && a.graph == b.graph
 Base.show(io::Core.IO, e::ParticleEnvironment) = print(io, "ParticleEnvironment[nv=$(nv(e.graph))]")
 
 # Root marks are added in multiples of this, so marked labels never collide with site labels.
@@ -112,7 +114,7 @@ function ParticleEnvironment(poly::Polyform, root::Integer; depth::Integer, bufs
     h = graphrep(poly)[verts]
     rootgroup = offsets[root]:(offsets[root] + nsites(particles(poly, root), rules) - 1)
     hm, old2new = _canonmarked(h, (rootgroup,), _markoffset(rules))
-    return ParticleEnvironment(hm, old2new[offsets[root]])
+    return ParticleEnvironment(hm, old2new[offsets[root]], rules)
 end
 
 """
@@ -250,7 +252,7 @@ function particleenvironments(f, rules::BindingRules; depth::Integer, maxsize=In
     rsys = RSSystem((w, v) -> _lsenv!(w, v, lsbufs), _adjenv!, v₀;
                     compare=(a, b) -> a.key == b.key, aux)
 
-    frs = (s, _) -> f(ParticleEnvironment(copy(s.key), s.rootvertex), nparticles(s.poly))
+    frs = (s, _) -> f(ParticleEnvironment(copy(s.key), s.rootvertex, rules), nparticles(s.poly))
     return reversesearch(frs, rsys; maxdepth=maxsize, maxverts=maxstrs + 1, kwargs...)
 end
 
@@ -261,7 +263,7 @@ Return all particle environments of `rules` at radius `depth`.
 """
 function particleenvironments(rules::BindingRules; depth::Integer, kwargs...)
     G = typeof(graphrep(Polyform(rules)))
-    envs = ParticleEnvironment{G}[]
+    envs = ParticleEnvironment{G,typeof(rules)}[]
     particleenvironments((e, _) -> (push!(envs, e); ACCEPT), rules; depth, kwargs...)
     return envs
 end
@@ -342,7 +344,7 @@ function _markedcrop(g, verts, comp, offset, first, second)
 end
 
 """
-    rootbonds(env::ParticleEnvironment, rules::BindingRules, depth)
+    rootbonds(env::ParticleEnvironment, depth)
 
 Return one entry per bond of the root of `env`, as a named tuple `(view, reversed, sites)`.
 
@@ -356,10 +358,10 @@ structure exactly when the `view` of one equals the `reversed` of the other. The
 ball equals the crop within any structure containing it, since every path of length at most
 `depth - 1` from a root neighbor stays inside the ball.
 """
-function rootbonds(env::ParticleEnvironment, rules::BindingRules, depth::Integer)
+function rootbonds(env::ParticleEnvironment, depth::Integer)
     depth >= 1 || throw(ArgumentError("root bonds need `depth >= 1`"))
     g = env.graph
-    offset = _markoffset(rules)
+    offset = _markoffset(env.rules)
     comp, compverts = _components(g)
     adj = _componentadjacency(g, comp, length(compverts))
     rootcomp = comp[env.rootvertex]
@@ -404,5 +406,5 @@ function crop(env::ParticleEnvironment, depth::Integer)
     # the root's mark survives the crop unchanged, so no relabeling is needed
     h = g[verts]
     old2new = invperm(collect(Int, canonize!(h)))
-    return ParticleEnvironment(h, old2new[pos[env.rootvertex]])
+    return ParticleEnvironment(h, old2new[pos[env.rootvertex]], env.rules)
 end
