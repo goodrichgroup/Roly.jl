@@ -106,9 +106,11 @@ function _tilings!(record!::F, state, poly, sys, vecs, siteof, nreps, maxvecs, f
     return
 end
 
-# Place every copy whose coefficient on the newest vector is positive (earlier-vector shells were
-# placed by earlier stages). Returns the newly consumed site ranges, or `nothing` on an overlap,
-# an invalid or bound-site contact, or a doubly-consumed site — with all bookkeeping undone.
+# Place every copy whose coefficient on the newest vector is positive, with coefficients of either
+# sign on the earlier vectors (copies with a zero newest coefficient were placed by earlier stages,
+# and the negated translations are the mirror images of the placed ones). Returns the newly
+# consumed site ranges, or `nothing` on an overlap, an invalid or bound-site contact, or a
+# doubly-consumed site — with all bookkeeping undone.
 function _placeshell!(state, poly, sys, vecs, siteof, nreps)
     k = length(state.chosen)
     n0 = length(state.contacts)
@@ -120,7 +122,7 @@ function _placeshell!(state, poly, sys, vecs, siteof, nreps)
         return nothing
     end
 
-    for m in Iterators.product(ntuple(_ -> 0:nreps, k - 1)..., 1:nreps)
+    for m in Iterators.product(ntuple(_ -> (-nreps):nreps, k - 1)..., 1:nreps)
         t = sum(m[i] * vecs[state.chosen[i]] for i in 1:k)
         for part in poly.particles
             sp = translate(part, t)

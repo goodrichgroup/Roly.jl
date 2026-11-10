@@ -24,6 +24,21 @@
     @test !isunitcell(dimer)
     @test isempty(tilings(dimer))
 
+    # the bonds of a tiling depend on its lattice, not on the basis: copies at v1 - v2 must be
+    # placed too, or bases with an obtuse angle miss the contacts across that neighbor
+    tworules = BindingRules([1 2 1 4; 1 3 1 1; 1 2 2 4; 1 3 2 1; 2 2 1 4; 2 3 1 1; 2 2 2 4; 2 3 2 1],
+                            UnitSquare)
+    samelattice(a, b) = begin
+        A, B = hcat(a...), hcat(b...)
+        X = A \ B
+        abs(det(A)) ≈ abs(det(B)) && all(x -> abs(x - round(x)) < 1e-9, X)
+    end
+    for s in polygen(tworules; maxsize=2)
+        planar = [t for t in tilings(s) if length(t.vectors) == 2]
+        @test all(length(t.bondtypes) == length(u.bondtypes) && t.complete == u.complete
+                  for t in planar for u in planar if samelattice(t.vectors, u.vectors))
+    end
+
     # cantile finds a unit cell among the chain structures, and none in a closing system
     @test cantile(chainlike; maxtilesize=2) !== nothing
     @test cantile(dimerrules; maxtilesize=3) === nothing
