@@ -8,7 +8,7 @@ using TOML
 
 # Geometry primitives
 export Pose, dimension, translate, translate!
-public numtype, posetype, sitetype, particletype
+public numtype, posetype, rotationtype, sitetype, particletype
 export Rotation, Angle2d, RotXYZ, RotMatrix3, rotation_angle, rotation_axis, SVector
 
 # Binding sites
@@ -50,6 +50,7 @@ public todict, fromdict
 export ACCEPT, REJECT, BREAK
 export EnumerationStatus, Complete, MaxSizeReached, MaxPolysReached, Interrupted
 export polyenum, polygen, polycount, PolyformCount, isbounded
+export SnakeGraph, isacyclic, isconfined
 
 # Species
 export PolygonParticleSpecies, UnitNgon, UnitTriangle, UnitSquare, UnitHexagon
@@ -77,7 +78,7 @@ public rotationgroup, faceorbits, facesym, siteorbits, stabilizerorders, sitelab
 public permutationgroup, check_encoding
 
 # What a bond fixes about relative orientation
-public contact_pairing, standard_twist, twistfreedom, twist, Contact
+public contact_pairing, standard_twist, twistfreedom, twist, Contact, BondTwist, bondtwists, distinctbondtwists
 
 # The `ParticleSpecies` interface, implemented rather than called
 public isconvex, bounding_radius, could_contact, overlap
@@ -93,6 +94,7 @@ include("bindingrules.jl")
 include("particle.jl")
 include("polyform.jl")
 include("enumeration.jl")
+include("snakes.jl")
 
 include("species/polygonparticlespecies.jl")
 include("species/polyhedronparticlespecies.jl")

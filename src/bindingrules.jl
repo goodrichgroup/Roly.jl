@@ -219,6 +219,7 @@ Return the spatial dimension of the particles of the assembly system `rules`.
 
 @inline numtype(::BindingRules{D,PS}) where {D,PS} = numtype(PS)
 @inline posetype(::BindingRules{D,PS}) where {D,PS} = posetype(PS)
+@inline rotationtype(::BindingRules{D,PS}) where {D,PS} = rotationtype(PS)
 @inline speciestype(::BindingRules{D,PS}) where {D,PS} = PS
 
 """

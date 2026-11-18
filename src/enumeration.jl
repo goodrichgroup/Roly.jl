@@ -1,6 +1,6 @@
 mutable struct PolyformAux{BS<:BindingSite}
     seen::Set{NautyDiGraph}
-    attachments::Vector{Tuple{BS,SpeciesSiteLoc,Int}}
+    attachments::Vector{Tuple{BS,SpeciesSiteLoc,BondTwist}}
 end
 Base.copy(polyaux::PolyformAux) = typeof(polyaux)(copy(polyaux.seen), copy(polyaux.attachments))
 
@@ -18,9 +18,9 @@ function adj!(u::Polyform, v::Polyform, j::Integer, aux::PolyformAux)
     j == 1 && collect_attachments!(aux.attachments, v)
     j > length(aux.attachments) && return nothing
 
-    site, loc, t = aux.attachments[j]
+    site, loc, tw = aux.attachments[j]
     copy!(u, v)
-    out = raise!(u, site, loc, t)
+    out = raise!(u, site, loc, tw)
     (ismissing(out) || isnothing(out)) && return out
 
     if graphrep(out) ∈ aux.seen
@@ -113,8 +113,8 @@ To ensure well-defined behavior, the function `f` may not accept the offspring o
 that it rejects.
 
 `checkbounded` refuses a rule set that admits arbitrarily large polyforms, see
-[`isbounded`](@ref), by throwing an `ArgumentError`. It defaults to `true` when neither `maxsize`
-nor `maxpolys` caps the enumeration.
+[`isbounded`](@ref), by throwing an `ArgumentError`, and warns if that cannot be decided. It defaults
+to `true` when neither `maxsize` nor `maxpolys` caps the enumeration.
 
 All other keyword arguments are passed to the underlying `reversesearch` routine.
 
@@ -126,7 +126,7 @@ function polyenum(f, rules::BindingRules; maxsize=Inf, maxpolys=Inf,
     checkbounded && _checkbounded(rules)
     v₀ = Polyform(rules)
     BS = sitetype(rules)
-    aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,SpeciesSiteLoc,Int}[])
+    aux = PolyformAux{BS}(Set{NautyDiGraph}(), Tuple{BS,SpeciesSiteLoc,BondTwist}[])
     rsys = RSSystem(ls!, adj!, v₀; aux)
 
     frs = isnothing(f) ? nothing : (v, _) -> f(v, nparticles(v))
@@ -222,7 +222,7 @@ polyform there is.
 - `maxsamples=10^6`: how many polyforms a single trial may generate beyond the exact budget.
 - `rng=Random.default_rng()`: generator used for the subsampling.
 - `checkbounded=isinf(maxsize)`: refuse a rule set that admits arbitrarily large polyforms, see
-  [`isbounded`](@ref), rather than count until the budget runs out.
+  [`isbounded`](@ref), rather than count until the budget runs out, and warn if that cannot be decided.
 
 References:
 
@@ -288,170 +288,20 @@ function polycount(
     return PolyformCount(samples, largest, isfinite(maxsize) ? MaxSizeReached : Complete)
 end
 
-# Throws if `rules` is unbounded. Runs before any enumeration without a cap.
+# Throws if `rules` is unbounded, and warns if it cannot be shown to be bounded. Runs before any
+# enumeration without a cap.
 function _checkbounded(rules::BindingRules)
-    isbounded(rules) && return nothing
+    bounded = isbounded(rules)
+    bounded === true && return nothing
+    if ismissing(bounded)
+        @warn "Could not decide whether `rules` allows finitely many polyforms, so the enumeration may not " *
+              "terminate. Pass `maxsize` or `maxpolys` to enumerate up to a bound or set `checkbounded=false to disable this warning.`."
+        return nothing
+    end
     throw(
         ArgumentError(
             "`rules` allows infinitely many polyforms and cannot be enumerated completely. " *
             "Pass `maxsize` or `maxpolys` to enumerate up to a bound, or set `checkbounded=false` to disable this error.",
         ),
     )
-end
-
-"""
-    isbounded(rules::BindingRules [; maxchainlength])
-
-Return `true` if `rules` admits finitely many polyforms and `false` otherwise.
-
-The answer is computed by enumerating one-dimensional chains and checking if any chain can repeat indefinitely.
-`maxchainlength` sets the length of the longest chain tested. Decreasing `maxchainlength` from its default can 
-introduce false positive results.
-"""
-function isbounded(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
-    return isnothing(_escapingrepeat(rules; maxchainlength))
-end
-
-# Returns a rigid motion `g` and a polyform `C` such that `C, g(C), g²(C), …` is an infinite valid
-# structure, as `(g, C)`, or `nothing` if no chain of up to `maxchainlength` particles repeats a
-# state that way.
-function _escapingrepeat(rules::BindingRules; maxchainlength::Integer=_nchainstates(rules) + 2)
-    for i in 1:nspecies(rules)
-        w = _walkchains(_Chain(Polyform(rules, i)), maxchainlength)
-        w === nothing || return w
-    end
-    return nothing
-end
-
-# Returns the number of states a chain of `rules` can be in (state = species at its end + site + twist)
-# A chain longer than that must repeat a state.
-function _nchainstates(rules::BindingRules)
-    total = 0
-    for i in 1:nspecies(rules)
-        ps = species(rules, i)
-        for k in 1:nsites(ps)
-            site = bindingsite(ps, k)
-            phases = 0
-            for loc in compatible_speciessitelocs(rules, color(site))
-                mate = bindingsite(rules, loc)
-                phases = max(phases, _ndistincttwists(mate, site))
-            end
-            total += phases
-        end
-    end
-    return total
-end
-
-# A chain: its polyform, and per particle the state `(species, incoming site, twist)` it was added
-# in.
-mutable struct _Chain{P<:Polyform}
-    poly::P
-    states::Vector{NTuple{3,Int}}
-end
-_Chain(poly::Polyform) = _Chain(poly, [(speciesindex(poly.particles[1]), 0, 0)]) # Starts a chain from one particle, which has no incoming bond.
-Base.copy(c::_Chain) = _Chain(copy(c.poly), copy(c.states))
-function Base.copy!(dst::_Chain, src::_Chain)
-    copy!(dst.poly, src.poly)
-    copy!(dst.states, src.states)
-    return dst
-end
-
-mutable struct _ChainAux{BS}
-    attachments::Vector{Tuple{BS,SpeciesSiteLoc,Int}}
-end
-Base.copy(a::_ChainAux) = _ChainAux(copy(a.attachments))
-
-# Collects into `out` every extension of `c` at its newest particle: open site, mating site, twist.
-function _chainextensions!(out, c::_Chain)
-    poly = c.poly
-    rules = bindingrules(poly)
-    part = poly.particles[end]
-    empty!(out)
-    for k in 1:nsites(part, rules)
-        site = bindingsite(part, rules, k)
-        _isbound_vertex(poly, part, first(site.vertices); canonidxs=false) && continue
-        isinert(rules, color(site)) && continue
-        for loc in compatible_speciessitelocs(rules, color(site))
-            mate = bindingsite(rules, loc)
-            for r in 0:(_ndistincttwists(site, mate) - 1)
-                push!(out, (site, loc, r))
-            end
-        end
-    end
-    return out
-end
-
-# Writes the `j`-th extension of `v` into `u`, forming every contact the new particle makes, so a
-# chain may cross-link onto itself. Returns `missing` if it does not fit and `nothing` past the
-# last. Canonizes nothing, since no graph is compared.
-function _extendchain!(u::_Chain, v::_Chain, j::Integer, aux::_ChainAux)
-    j == 1 && _chainextensions!(aux.attachments, v)
-    j > length(aux.attachments) && return nothing
-    site, loc, r = aux.attachments[j]
-    copy!(u.poly, v.poly)
-    ismissing(add_particle!(u.poly, site, loc, r; canonize=false)) && return missing
-    copy!(u.states, v.states)
-    push!(u.states, (loc.species, loc.site, r))
-    return u
-end
-
-# Searches depth-first over the chains of up to `maxchainlength` particles grown from `root`, and
-# returns the first repeated state whose motion escapes, or `nothing`.
-function _walkchains(root::_Chain, maxchainlength)
-    rules = bindingrules(root.poly)
-    aux = _ChainAux(Tuple{sitetype(rules),SpeciesSiteLoc,Int}[])
-    witness = Ref{Union{Nothing,Tuple{posetype(rules),Vector{particletype(rules)}}}}(nothing)
-    _backtrack(_extendchain!, root; aux, maxdepth=maxchainlength - 1) do c, _
-        n = nparticles(c.poly)
-        j = findlast(==(c.states[end]), view(c.states, 1:(n - 1)))
-        isnothing(j) && return ACCEPT
-        w = _screwescape(c, j, n)
-        isnothing(w) && return ACCEPT
-        witness[] = w
-        return BREAK
-    end
-    return witness[]
-end
-
-# Returns the stretch `i:(j - 1)` of `c` with the motion carrying it onto its next copy, if applying
-# that motion forever collides with nothing, else `nothing`. Only copies within the stretch's own
-# extent along the axis can collide, so finitely many are checked.
-function _screwescape(c::_Chain, i::Integer, j::Integer)
-    rules = bindingrules(c.poly)
-    C = c.poly.particles[i:(j - 1)]
-    g = c.poly.particles[j].pose * inv(c.poly.particles[i].pose)
-
-    axis, h = _screwclimb(g)
-    isnothing(h) && return nothing               # a pure rotation cannot escape its own annulus
-
-    us = (dot(p.pose.x, axis) for p in C)
-    rmax = maximum(bounding_radius(species(rules, speciesindex(p))) for p in C)
-    extent = maximum(us) - minimum(us) + 2 * rmax
-    gm = g
-    for _ in 1:ceil(Int, extent / abs(h))
-        for p in C
-            moved = gm * p
-            _overlap_and_contacts(C, moved, rules)[1] && return nothing
-        end
-        gm = gm * g
-    end
-    return (g, C)
-end
-
-# Returns `(axis, climb)` of a rigid motion. Any rigid motion can be viewed as screw along `axis`,
-# where `climb` is the distance along the axis the body is translated by. (The normal distance from the axis
-# is not returned by this function.)
-function _screwclimb(g::Pose{D,F}) where {D,F}
-    tol = sqrt(eps(F))
-    turning = abs(rem(rotation_angle(g.psi), 2 * F(π), RoundNearest)) > tol
-    if !turning
-        # with no turn there is no rotation axis, so the axis is just the direction of translation
-        n = norm(g.x)
-        n > tol || return nothing, nothing        # the identity: no repeat at all
-        return g.x / n, n
-    end
-    D == 3 || return nothing, nothing
-    axis = rotation_axis(g.psi)
-    climb = dot(g.x, axis)
-    return axis, abs(climb) > tol ? climb : nothing
 end

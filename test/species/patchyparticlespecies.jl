@@ -231,7 +231,7 @@ using LinearAlgebra: normalize, dot, det, norm
         for (site, loc, r) in collect_attachments(poly)
             trial = copy(poly)
             ismissing(raise!(trial, site, loc, r)) && continue
-            @test r == 0                      # sitesym 1 on both sides, so one twist
+            @test r == Roly.BondTwist(0, 1)   # sitesym 1 on both sides, so one twist
             return trial.particles[2].pose
         end
         return nothing

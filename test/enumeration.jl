@@ -348,7 +348,10 @@
         end
         # an unbounded one does not finish, and its witness lays down copies that neither collide
         # nor circle: ten of them, judged by geometry alone
-        function escapes((g, C), rules; copies=10)
+        # the periodic snake the search finds first, searching as far as `isbounded` does
+        witness(rules) = Roly._periodicsnake(rules; maxlength=4 * nv(SnakeGraph(rules)))
+        function escapes(w, rules; copies=10)
+            g, C = w.motion, w.particles
             parts = copy(C)
             gm = g
             for _ in 1:copies
@@ -364,7 +367,7 @@
         end
         for r in unbounded
             @test polyenum(r; maxpolys=20, checkbounded=false).status == MaxPolysReached
-            w = Roly._escapingrepeat(r)
+            w = witness(r)
             @test w !== nothing && escapes(w, r)
         end
 
@@ -379,26 +382,53 @@
         @test length(polygen(ring)) == 4
 
         # the motion behind the answer
-        @test length(last(Roly._escapingrepeat(chainlike))) == 1
-        @test Roly._escapingrepeat(ring) === nothing
+        @test length(witness(chainlike).particles) == 1
+        @test witness(ring) === nothing
         # two quarter turns compose to a translation over two particles; the motion accumulates a
         # full 2pi, which has to be wrapped before it is judged to be turning at all
-        gt, Ct = Roly._escapingrepeat(turnrules)
-        @test length(Ct) == 2
+        wt = witness(turnrules)
+        gt = wt.motion
+        @test length(wt.particles) == 2
         @test isapprox(rem(rotation_angle(gt.psi), 2pi, RoundNearest), 0; atol=1e-8)
         @test norm(gt.x) ≈ 2
         # the helix repeats under a screw whose turn is irrational, so it never closes, and whose
         # climb is what escapes
-        gh, _ = Roly._escapingrepeat(helix)
+        gh = witness(helix).motion
         @test isapprox(rotation_angle(gh.psi), acos(-2 / 3); atol=1e-6)
         @test abs(dot(gh.x, rotation_axis(gh.psi))) > 0.1
 
-        # the chain length is derived from the states a chain can be in, counting only the sites
-        # a bond can reach: three species of squares with four bondable sites between them
-        @test Roly._nchainstates(BindingRules([1 1 2 1; 2 2 3 1], UnitSquare)) == 4
-        # below the default, `true` is a budget running out: this repeat needs two particles
-        @test isbounded(turnrules; maxchainlength=1)
-        @test !isbounded(turnrules; maxchainlength=4)
+        # the snake graph has an out-node per bondable site and an in-node per site and twist it
+        # can be entered in: three species of squares with four bondable sites between them
+        abc = BindingRules([1 1 2 1; 2 2 3 1], UnitSquare)
+        @test nv(SnakeGraph(abc)) == 8
+        @test count(SnakeGraph(abc).incoming) == 4
+        # a snake through it cannot come back to a site, so every polyform is a finite tree
+        @test isacyclic(abc) && isacyclic(dimerrules)
+        @test !isacyclic(ring) && !isacyclic(chainlike)
+        # the ring of four closes under quarter turns about one centre, which the holonomy of its
+        # snake graph fixes, so it is bounded before any snake is grown
+        @test isconfined(ring) && isconfined(dimerrules)
+        @test !isconfined(chainlike)
+        # a left and a right quarter turn, each closing on its own, compose to a staircase
+        leftright = BindingRules([1 3 2 1; 1 3 3 1; 2 2 1 1; 3 4 1 1], [UnitSquare, UnitSquare, UnitSquare])
+        @test !isbounded(leftright)
+        @test escapes(witness(leftright), leftright)
+        # disks whose two patches are 40 degrees apart can turn either way, so left and right turns
+        # compose to translations and the holonomy leaves the answer to the search; but a third disk
+        # would overlap the first, so every snake ends at two, which the search shows by running out
+        narrow = BindingRules([1 1 1 1], PatchyDisk([0.0, deg2rad(40)], 0.5; colors=[1, 1]))
+        @test !isconfined(narrow)
+        @test isbounded(narrow)
+        @test polyenum(narrow; checkbounded=false).status == Complete
+        # 70 degrees apart, the same zigzag escapes
+        wide = BindingRules([1 1 1 1], PatchyDisk([0.0, deg2rad(70)], 0.5; colors=[1, 1]))
+        @test !isbounded(wide)
+        @test escapes(witness(wide), wide)
+
+        # the search is cut off at `maxlength`, which leaves the answer open rather than claiming one:
+        # this repeat needs two particles
+        @test ismissing(isbounded(turnrules; maxlength=1))
+        @test !isbounded(turnrules; maxlength=4)
         # with no bond at all there is nothing to grow, and one particle is the whole system
         inert = BindingRules(falses(4, 4), UnitSquare)
         @test isbounded(inert) && length(polygen(inert)) == 1
