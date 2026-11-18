@@ -34,9 +34,13 @@ end
 """
     EnumerationStatus
 
-Why an enumeration stopped: `Complete` when it ran out of polyforms, `MaxSizeReached` or
-`MaxPolysReached` when it reached the `maxsize` or `maxpolys` cap, and `Interrupted` when the
-callback returned `BREAK`.
+Status code representing the cause for termination of a polyform enumeration or count.
+    
+ - `Complete`: enumeration finished normally, all valid polyforms were visited.
+ - `MaxSizeReached`: enumeration reached all polyforms up to the maximal imposed size and then terminated, 
+    leaving larger polyforms unvisited.
+ - `MaxPolysReached`: enumeration terminated after reaching the maximal allowed number of polyforms, leaving
+    all remaining polyforms unvisited.
 """
 @enum EnumerationStatus Complete MaxSizeReached MaxPolysReached Interrupted
 
@@ -59,8 +63,8 @@ The number of polyforms a set of binding rules allows, counted or estimated, as 
 - `err`: the standard error of the estimate, `0` if exact.
 - `maxsize`: the size of the largest polyform counted, which is the `maxsize` cap whenever the
   enumeration reached it. If estimated, a lower bound.
-- `status`: why the enumeration stopped, an [`EnumerationStatus`](@ref).
-- `trials`: the individual estimates `n` averages, empty if exact.
+- `status`: [`EnumerationStatus`](@ref) containing the cause for termination.
+- `trials`: the individual estimates for `n`. Empty if the count is exact.
 """
 struct PolyformCount{T<:Real}
     n::T
@@ -103,7 +107,7 @@ Polyforms are generated up to size `maxsize`, and the enumeration terminates aft
 polyforms have been generated. Use the function `f` to process generated polyforms and impose
 constraints.
 
-`f(p)` must take a polyforms `p` and return one of three signals:
+`f(p)` must take a polyform `p` and return one of three signals:
 
 - `ACCEPT` (or `true`): enumeration continues as normal.
 - `REJECT` (or `false`): the offspring of the current polyform will not be generated.
@@ -112,14 +116,12 @@ constraints.
 To ensure well-defined behavior, the function `f` may not accept the offspring of polyforms
 that it rejects.
 
-`checkbounded` refuses a rule set that admits arbitrarily large polyforms, see
-[`isbounded`](@ref), or one whose boundedness cannot be decided, by throwing an `ArgumentError`. It
-defaults to `true` when neither `maxsize` nor `maxpolys` caps the enumeration.
+If, `checkbounded==true` refuse binding rules that admit infintely many polyforms by throwing and error,
+see [`isbounded`](@ref). `checkbounded` defaults to `true` when neither `maxsize` nor `maxpolys` are imposed.
 
 All other keyword arguments are passed to the underlying `reversesearch` routine.
 
-Returns a [`PolyformCount`](@ref) of what was enumerated: `n` polyforms, the largest of `maxsize`
-particles, and the [`EnumerationStatus`](@ref) the run stopped with.
+Returns a [`PolyformCount`](@ref) containing information about the enumeration run.
 """
 function polyenum(f, rules::BindingRules; maxsize=Inf, maxpolys=Inf,
                   checkbounded::Bool=isinf(maxsize) && isinf(maxpolys), kwargs...)
@@ -139,7 +141,11 @@ polyenum(rules::BindingRules; kwargs...) = polyenum(nothing, rules; kwargs...)
     polygen(rules::BindingRules; kwargs...)
 
 Return a list of all polyforms allowed by `rules`, sorted by number
-of particles. Keyword arguments are forwarded to [`polyenum`](@ref).
+of particles. 
+
+Keyword arguments are forwarded to [`polyenum`](@ref).
+
+See also [`polyenum`](@ref), [`polycount`](@ref).
 """
 function polygen(rules; kwargs...)
     v₀ = Polyform(rules)
@@ -221,9 +227,8 @@ polyform there is.
   of the exact part and refined on pilot runs unless given.
 - `maxsamples=10^6`: how many polyforms a single trial may generate beyond the exact budget.
 - `rng=Random.default_rng()`: generator used for the subsampling.
-- `checkbounded=isinf(maxsize)`: refuse a rule set that admits arbitrarily large polyforms, see
-  [`isbounded`](@ref), or one whose boundedness cannot be decided, rather than count until the budget
-  runs out.
+- `checkbounded=isinf(maxsize)`: refuse a rule set that admits arbitrarily large polyforms, 
+   or one whose boundedness cannot be decided, see [`isbounded`](@ref).
 
 References:
 
