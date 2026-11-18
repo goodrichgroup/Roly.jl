@@ -113,8 +113,8 @@ To ensure well-defined behavior, the function `f` may not accept the offspring o
 that it rejects.
 
 `checkbounded` refuses a rule set that admits arbitrarily large polyforms, see
-[`isbounded`](@ref), by throwing an `ArgumentError`, and warns if that cannot be decided. It defaults
-to `true` when neither `maxsize` nor `maxpolys` caps the enumeration.
+[`isbounded`](@ref), or one whose boundedness cannot be decided, by throwing an `ArgumentError`. It
+defaults to `true` when neither `maxsize` nor `maxpolys` caps the enumeration.
 
 All other keyword arguments are passed to the underlying `reversesearch` routine.
 
@@ -222,7 +222,8 @@ polyform there is.
 - `maxsamples=10^6`: how many polyforms a single trial may generate beyond the exact budget.
 - `rng=Random.default_rng()`: generator used for the subsampling.
 - `checkbounded=isinf(maxsize)`: refuse a rule set that admits arbitrarily large polyforms, see
-  [`isbounded`](@ref), rather than count until the budget runs out, and warn if that cannot be decided.
+  [`isbounded`](@ref), or one whose boundedness cannot be decided, rather than count until the budget
+  runs out.
 
 References:
 
@@ -288,16 +289,18 @@ function polycount(
     return PolyformCount(samples, largest, isfinite(maxsize) ? MaxSizeReached : Complete)
 end
 
-# Throws if `rules` is unbounded, and warns if it cannot be shown to be bounded. Runs before any
-# enumeration without a cap.
+# Throws if `rules` is unbounded, or cannot be shown to be bounded. Runs before any enumeration
+# without a cap.
 function _checkbounded(rules::BindingRules)
     bounded = isbounded(rules)
     bounded === true && return nothing
-    if ismissing(bounded)
-        @warn "Could not decide whether `rules` allows finitely many polyforms, so the enumeration may not " *
-              "terminate. Pass `maxsize` or `maxpolys` to enumerate up to a bound or set `checkbounded=false to disable this warning.`."
-        return nothing
-    end
+    ismissing(bounded) && throw(
+        ArgumentError(
+            "Could not decide whether `rules` allows finitely many polyforms, so the enumeration may not " *
+            "terminate. Pass `maxsize` or `maxpolys` to enumerate up to a bound or set `checkbounded=false` " *
+            "to disable this error.",
+        ),
+    )
     throw(
         ArgumentError(
             "`rules` allows infinitely many polyforms and cannot be enumerated completely. " *
