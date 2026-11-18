@@ -1,5 +1,9 @@
 # Roly.jl
 
+<p align="center">
+  <img src="docs/src/assets/banner.svg" alt="Roly.jl banner" width="100%">
+</p>
+
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://goodrichgroup.github.io/Roly.jl/stable/)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://goodrichgroup.github.io/Roly.jl/dev/)
 [![Build Status](https://github.com/goodrichgroup/Roly.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/goodrichgroup/Roly.jl/actions/workflows/CI.yml?query=branch%3Amain)
