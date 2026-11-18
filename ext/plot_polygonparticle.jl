@@ -3,7 +3,7 @@ function plot_particlespecies!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=P
                                cornerradius=nothing, thickness=nothing, strokewidth=3, alpha=1,
                                strokecolor=(:black, alpha), kwargs...) where {F}
     isnothing(cornerradius) && (cornerradius = 0.3spcs.rmin)
-    isnothing(thickness) && (thickness = 0.12_extent(spcs.corners))
+    isnothing(thickness) && (thickness = 0.12_diameter(spcs.corners))
     thickness = min(thickness, spcs.rmin - cornerradius)     # the inner rounding has to fit
 
     _, _, colors, _ = _resolve_colors(spcs, speciesindex, rules, sitecolor)
@@ -11,8 +11,8 @@ function plot_particlespecies!(ax, spcs::PolygonParticleSpecies{F}, pose::Pose=P
                           cornerradius, thickness, color=colors, strokewidth, strokecolor, alpha, kwargs...)
 end
 
-# The larger side of the bounding box of `corners`.
-_extent(corners) = maximum(d -> maximum(c[d] for c in corners) - minimum(c[d] for c in corners), 1:2)
+# The largest distance between two corners.
+_diameter(corners) = maximum(norm(a - b) for a in corners, b in corners)
 
 # Half the angle the boundary turns through at each corner, which is π/n at every corner of a
 # regular n-gon.
