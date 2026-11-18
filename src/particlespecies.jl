@@ -40,6 +40,14 @@ posetype(::ParticleSpecies{D,B}) where {D,B} = posetype(B)
 posetype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = posetype(B)
 
 """
+    rotationtype(::ParticleSpecies)
+
+Return the concrete `Rotation` type of the poses used by the particle species.
+"""
+rotationtype(::ParticleSpecies{D,B}) where {D,B} = rotationtype(posetype(B))
+rotationtype(::Type{<:ParticleSpecies{D,B}}) where {D,B} = rotationtype(posetype(B))
+
+"""
     bindingsite(p::ParticleSpecies, i::Integer)
 
 Return the `i`th binding site of particle species `p`.

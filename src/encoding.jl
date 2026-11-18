@@ -997,7 +997,7 @@ The counterpart of [`permutationgroup`](@ref), which returns the same group as s
 permutations.
 """
 function rotationgroup(ps::ParticleSpecies)
-    rots = _rotationtype(posetype(ps))[]
+    rots = rotationtype(ps)[]
     _eachsitesymmetry((Q, _) -> push!(rots, Q), _sitegeometry(ps)...; group=_rotationcandidates(ps))
     return rots
 end
@@ -1013,8 +1013,6 @@ species whose sites do not determine it overrides this, see the warning on
 [`_eachsitesymmetry`](@ref).
 """
 _rotationcandidates(::ParticleSpecies) = nothing
-
-_rotationtype(::Type{<:Pose{D,F,R}}) where {D,F,R} = R
 
 # Poses, site symmetries and the label each site is matched by. The group functions match on the
 # graph's labels, since they ask what the graph claims; `siteorbits` matches on colors, since it

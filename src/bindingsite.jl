@@ -70,14 +70,32 @@ translate(site::BindingSite, v) = BindingSite(site; pose=translate(site.pose, v)
 @inline setstab(site::BindingSite, s::Integer) = BindingSite(site, stab=s)
 posetype(::BindingSite{P}) where {P} = P
 posetype(::Type{<:BindingSite{P}}) where {P} = P
+rotationtype(::BindingSite{P}) where {P} = rotationtype(P)
+rotationtype(::Type{<:BindingSite{P}}) where {P} = rotationtype(P)
+
+"""
+    BondTwist(t, n)
+
+Twist `t` of the `n` twists a bond admits about its axis: the partner is turned by `2πt/n`, with
+`0 <= t < n`. See [`standard_twist`](@ref) and [`bondtwists`](@ref).
+"""
+struct BondTwist
+    t::Int
+    n::Int
+end
+
+Base.show(io::Core.IO, tw::BondTwist) = print(io, "BondTwist(", tw.t, "/", tw.n, ")")
 
 @inline standard_rotation(::Type{F}, ::Val{2}, args...) where {F} = Angle2d{F}(π)
 @inline standard_rotation(::Type{F}, ::Val{3}, t::Integer=0, ntwists::Integer=1) where {F} =
     RotXYZ{F}(2F(π) * t / ntwists, 0, π)
+@inline standard_rotation(::Type{F}, ::Val{3}, tw::BondTwist) where {F} = standard_rotation(F, Val(3), tw.t, tw.n)
 
 """
     standard_twist(b::BindingSite, t=0, ntwists=1)
     standard_twist(p::Pose, t=0, ntwists=1)
+    standard_twist(b::BindingSite, tw::BondTwist)
+    standard_twist(p::Pose, tw::BondTwist)
 
 Return the pose a partner of binding site `b` takes when the bond is in twist `t` of `ntwists`.
 
@@ -94,6 +112,8 @@ is valid, and `t` indexes them from 0.
     b.pose * standard_rotation(F, Val(D), t, ntwists)
 @inline standard_twist(p::Pose{D,F}, t::Integer=0, ntwists::Integer=1) where {D,F} =
     p * standard_rotation(F, Val(D), t, ntwists)
+@inline standard_twist(b::BindingSite, tw::BondTwist) = standard_twist(b, tw.t, tw.n)
+@inline standard_twist(p::Pose, tw::BondTwist) = standard_twist(p, tw.t, tw.n)
 
 """
     twistfreedom(b::BindingSite)
@@ -127,23 +147,42 @@ and need to be caught through canonization.
 @inline _ndistincttwists(bbody::BindingSite, battach::BindingSite) = twistfreedom(bbody, battach) ÷ battach.stab
 
 """
-    Contact(vs1, vs2, twist, ntwists)
+    bondtwists(b1::BindingSite, b2::BindingSite)
+
+Return an iterator over the [`BondTwist`](@ref)s a bond between `b1` and `b2` admits.
+"""
+@inline bondtwists(b1::BindingSite, b2::BindingSite) = (n = twistfreedom(b1, b2); (BondTwist(t, n) for t in 0:(n - 1)))
+
+"""
+    distinctbondtwists(bbody::BindingSite, battach::BindingSite)
+
+Return an iterator over the [`BondTwist`](@ref)s that give distinct structures when binding site
+`battach` is attached to `bbody`, the first `n ÷ battach.stab` of the `n` twists the bond admits.
+"""
+@inline function distinctbondtwists(bbody::BindingSite, battach::BindingSite)
+    n = twistfreedom(bbody, battach)
+    return (BondTwist(t, n) for t in 0:(_ndistincttwists(bbody, battach) - 1))
+end
+
+"""
+    Contact(vs1, vs2, twist::BondTwist)
 
 Two binding sites found in contact, and how they meet.
 
-`vs1` and `vs2` are the [`graphrep`](@ref) vertex ranges the two sites occupy. `twist` is which of the `ntwists`
-twists the bond admits they are in. See also [`contact_pairing`](@ref),
+`vs1` and `vs2` are the [`graphrep`](@ref) vertex ranges the two sites occupy, and `twist` is the
+[`BondTwist`](@ref) they meet in. See also [`contact_pairing`](@ref).
 """
 struct Contact
     vs1::UnitRange{Int}
     vs2::UnitRange{Int}
-    twist::Int
-    ntwists::Int
+    twist::BondTwist
 end
 
-Base.show(io::Core.IO, c::Contact) = print(io, "Contact[", c.vs1, "-", c.vs2, ", twist ", c.twist, "/", c.ntwists, "]")
+Base.show(io::Core.IO, c::Contact) = print(io, "Contact[", c.vs1, "-", c.vs2, ", twist ", c.twist.t, "/", c.twist.n, "]")
 
 """
+    contact_pairing(c::Contact)
+    contact_pairing(vs1::UnitRange, vs2::UnitRange, tw::BondTwist)
     contact_pairing(vs1::UnitRange, vs2::UnitRange, t=0, ntwists=1)
 
 Return the pairs of graph vertices that should be joined when two bonding binding sites occupying the vertex
@@ -162,7 +201,9 @@ the solutions of
 `gcd(k₁, k₂)` solutions for every `m`, and distinct twists give disjoint solution sets, so the
 pairing count never depends on the twist, and the graph records which twist a bond is in.
 """
-@inline contact_pairing(c::Contact) = contact_pairing(c.vs1, c.vs2, c.twist, c.ntwists)
+@inline contact_pairing(c::Contact) = contact_pairing(c.vs1, c.vs2, c.twist)
+@inline contact_pairing(vs1::UnitRange{<:Integer}, vs2::UnitRange{<:Integer}, tw::BondTwist) =
+    contact_pairing(vs1, vs2, tw.t, tw.n)
 
 @inline function contact_pairing(vs1::UnitRange{<:Integer}, vs2::UnitRange{<:Integer}, t::Integer=0, ntwists::Integer=1)
     k1, k2 = length(vs1), length(vs2)
@@ -214,16 +255,15 @@ end
 """
     twist(b1::BindingSite, b2::BindingSite)
 
-Return which of the bond's twists the two sites are in, or `nothing` if their
-orientations are not related by any of them.
+Return the [`BondTwist`](@ref) the two sites are in, or `nothing` if their orientations are not
+related by any twist the bond admits.
 
 This function is symmetric in its arguments.
 """
 function twist(b1::BindingSite, b2::BindingSite)
     atol = b1.alignment_tolerance + b2.alignment_tolerance
-    ntwists = twistfreedom(b1, b2)
-    for t in 0:(ntwists - 1)
-        isapprox(b1.pose.psi, standard_twist(b2, t, ntwists).psi; atol, rtol=0) && return t
+    for tw in bondtwists(b1, b2)
+        isapprox(b1.pose.psi, standard_twist(b2, tw).psi; atol, rtol=0) && return tw
     end
     return nothing
 end

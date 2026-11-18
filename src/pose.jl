@@ -91,6 +91,14 @@ Base.eltype(::Type{<:Pose{D,F}}) where {D,F} = F
 dimension(::Pose{D}) where {D} = D
 dimension(::Type{<:Pose{D}}) where {D} = D
 
+"""
+    rotationtype(::Pose)
+
+Return the concrete `Rotation` type of the orientation of the pose.
+"""
+rotationtype(::Type{<:Pose{D,F,R}}) where {D,F,R} = R
+rotationtype(p::Pose) = rotationtype(typeof(p))
+
 function Base.show(io::Core.IO, p::Pose{D,F,R}) where {D,F,R}
     if D == 2
         print(io, "[x: $(p.x); ψ: $(rotation_angle(p.psi) / π)π]")

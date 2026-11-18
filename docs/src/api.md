@@ -11,6 +11,7 @@ Pose
 dimension
 numtype
 posetype
+rotationtype
 sitetype
 particletype
 ```
@@ -32,6 +33,9 @@ twistfreedom(::BindingSite)
 twistfreedom(::BindingSite, ::BindingSite)
 twist
 standard_twist
+BondTwist
+bondtwists
+distinctbondtwists
 Contact
 contact_pairing
 ```
@@ -196,6 +200,9 @@ exterior_edges
 
 ```@docs
 isbounded
+isacyclic
+isconfined
+SnakeGraph
 polyenum
 polygen
 polycount

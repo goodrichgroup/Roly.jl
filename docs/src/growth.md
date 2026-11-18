@@ -13,7 +13,7 @@ CairoMakie.activate!(type = "png")
 
 ## A bounded system runs out
 
-Squares whose site 1 binds site 2 can only turn the same way at every bond, so a chain of them folds back on itself.
+Squares whose site 1 binds site 2 can only turn the same way at every bond, so a snake of them, a chain of particles each bonded to the one before, folds back on itself.
 
 ```@example growth
 ring = BindingRules([1 1 1 2], UnitSquare)
@@ -21,10 +21,10 @@ isbounded(ring)
 ```
 
 `true` here is a proof rather than a search giving up.
-Any connected part of a valid structure is valid, and an infinite structure contains an infinite chain, so it is enough to grow chains one particle at a time.
-A chain long enough must repeat one of finitely many states, and the rigid motion between the two repeats can then be applied forever.
-Here that motion is a quarter turn, and every copy of a pure rotation stays the same distance from its axis, so infinitely many of them cannot fit.
+An infinite structure contains an infinite snake, and every snake is a walk in one finite graph, the [`SnakeGraph`](@ref) of the rules, whose edges carry the rigid motions between bonded binding sites.
+Here every closed walk of that graph moves a snake by quarter turns about one common centre, so every snake stays within a bounded distance of it, where only finitely many squares fit.
 The whole system is therefore finite and [`polycount`](@ref) counts it exactly.
+When the closed walks have no common centre, snakes are grown one particle at a time until one repeats under a motion that escapes, or until every snake has ended.
 
 ```@example growth
 polycount(ring)
@@ -86,11 +86,11 @@ helixrules = BindingRules([1 1 1 1], tetrahedra)
 isbounded(helixrules)
 ```
 
-Copies far enough apart along the axis can never touch, which is what makes the growth infinite, and no multiple of the angle is ever a full turn, so the chain never closes.
+Copies far enough apart along the axis can never touch, which is what makes the growth infinite, and no multiple of the angle is ever a full turn, so the snake never closes.
 This is why [`isbounded`](@ref) looks at the repeating motion itself rather than for a periodic structure.
 
 The helix is visible in the structures.
-Among the chains of eight tetrahedra, the longest reaches well short of eight straight steps, because it is curling.
+Among the snakes of eight tetrahedra, the longest reaches well short of eight straight steps, because it is curling.
 
 ```@example growth
 function ischain(p)

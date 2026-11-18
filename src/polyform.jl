@@ -137,6 +137,8 @@ Return the symmetry number of `p`, i.e. the size of its automorphism group.
 @inline posetype(p::AbstractPolyform) = posetype(bindingrules(p))
 @inline posetype(::Type{<:Polyform{D,<:Particle{<:P}}}) where {D,P} = P
 @inline numtype(p::AbstractPolyform) = eltype(posetype(p))
+@inline rotationtype(p::AbstractPolyform) = rotationtype(posetype(p))
+@inline rotationtype(::Type{<:Polyform{D,<:Particle{<:P}}}) where {D,P} = rotationtype(P)
 
 """
     particletype(p::AbstractPolyform)
@@ -421,7 +423,7 @@ The counterpart of [`permutationgroup(::Polyform)`](@ref), which returns the sam
 particle permutations.
 """
 function rotationgroup(p::Polyform)
-    rots = _rotationtype(posetype(p))[]
+    rots = rotationtype(p)[]
     _eachpolyformsymmetry((Q, _) -> push!(rots, Q), p)
     return rots
 end
@@ -443,7 +445,7 @@ function _eachpolyformsymmetry(f, p::Polyform)
     n = nparticles(p)
     # An empty polyform constrains nothing; report the identity, so the count still matches the
     # symmetry number its graph carries.
-    n == 0 && (f(one(_rotationtype(posetype(p))), Int[]); return 1)
+    n == 0 && (f(one(rotationtype(p)), Int[]); return 1)
 
     rules = bindingrules(p)
     poses = [pt.pose for pt in p.particles]
@@ -567,26 +569,32 @@ function composition(p::AbstractPolyform)
 end
 
 """
+    raise!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, tw::BondTwist)
     raise!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, t=0)
 
 Attach a new particle to `poly` at the open binding site `site`, with the species and site index given by `loc`,
-in twist `t` of the bond (see [`standard_twist`](@ref)).
+in the twist `tw` of the bond, or in its `t`-th twist (see [`standard_twist`](@ref)).
 
 Returns `poly` on success, or `missing` if the attachment is geometrically forbidden (overlap or misaligned contact).
 """
+function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, tw::BondTwist; kwargs...)
+    return add_particle!(poly, site, loc, tw; canonize=true, kwargs...)
+end
+
 function raise!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, t::Integer=0; kwargs...)
-    return add_particle!(poly, site, loc, t; canonize=true, kwargs...)
+    tw = BondTwist(t, twistfreedom(site, bindingsite(bindingrules(poly), loc)))
+    return raise!(poly, site, loc, tw; kwargs...)
 end
 
 # Attach a particle and record its bonds, and canonize the graph afterwards unless told not to. A
 # caller that reads only the geometry and the bonds skips the canonization, and with it the `sigma`
 # it would have computed, which is then stale.
-function add_particle!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, t::Integer; canonize::Bool, kwargs...)
+function add_particle!(poly::Polyform, site::BindingSite, loc::SpeciesSiteLoc, tw::BondTwist; canonize::Bool, kwargs...)
     rules = bindingrules(poly)
     particle_species = species(rules, loc.species)
     leadingvertex = nv(graphrep(poly)) + 1
     mate = bindingsite(particle_species, loc.site)
-    particle_pose = standard_twist(site, t, twistfreedom(site, mate)) * inv(mate.pose)
+    particle_pose = standard_twist(site, tw) * inv(mate.pose)
     attached_particle = Particle(particle_pose, leadingvertex, loc.species)
 
     overlap, contacts = overlap_and_contacts(poly, attached_particle; kwargs...)
@@ -876,7 +884,7 @@ function _overlap_and_contacts(
             !allow_noninteracting && !interacting && return true, nothing
             twst = twist(b1, b2)
             !allow_misaligned && isnothing(twst) && return true, nothing
-            push!(contacts, Contact(b1.vertices, b2.vertices, something(twst, 0), twistfreedom(b1, b2)))
+            push!(contacts, Contact(b1.vertices, b2.vertices, something(twst, BondTwist(0, twistfreedom(b1, b2)))))
         end
     end
     return false, contacts
@@ -982,9 +990,8 @@ function cangrow(poly::Polyform; kwargs...)
             end
             for loc in sitesofcolor(rules, partner)
                 mate = bindingsite(species(rules, loc.species), loc.site)
-                ntwists = twistfreedom(site, mate)
-                for t in 0:(ntwists - 1)
-                    pose = standard_twist(site, t, ntwists) * inv(mate.pose)
+                for tw in bondtwists(site, mate)
+                    pose = standard_twist(site, tw) * inv(mate.pose)
                     part = Particle(pose, leading, loc.species)
                     first(overlap_and_contacts(poly, part; kwargs...)) || return true
                 end
@@ -1078,8 +1085,8 @@ function collect_attachments!(attachments, poly::Polyform)
                 # unless a higher one survives.
                 loc.species < deletable && continue
                 mate = bindingsite(rules, loc)
-                for t in 0:(_ndistincttwists(site, mate) - 1)
-                    push!(attachments, (site, loc, t))
+                for tw in distinctbondtwists(site, mate)
+                    push!(attachments, (site, loc, tw))
                 end
             end
         end
@@ -1096,7 +1103,7 @@ See [`collect_attachments!`](@ref).
 function collect_attachments(poly::Polyform)
     rules = bindingrules(poly)
     BS = sitetype(rules)
-    return collect_attachments!(Tuple{BS,SpeciesSiteLoc,Int}[], poly)
+    return collect_attachments!(Tuple{BS,SpeciesSiteLoc,BondTwist}[], poly)
 end
 
 """
@@ -1107,7 +1114,7 @@ Serialize `p` into a `Dict{String,Any}` that can be deserialized again with `fro
 With `rules=true`, the binding rules of `p` are included as well.
 """
 function todict(p::Polyform; rules::Bool=true)
-    rows = sort!([[a.particle, a.site, b.particle, b.site, twist(bindingsite(p, a), bindingsite(p, b))]
+    rows = sort!([[a.particle, a.site, b.particle, b.site, twist(bindingsite(p, a), bindingsite(p, b)).t]
                   for (a, b) in bonds(p)])
     d = Dict{String,Any}("species" => [part.speciesindex for part in p.particles], "bonds" => rows)
     rules && (d["rules"] = todict(bindingrules(p)))

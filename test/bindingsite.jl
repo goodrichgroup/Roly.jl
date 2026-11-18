@@ -1,6 +1,6 @@
 using Roly: BindingSite, shift_vertices, shift_color, isaligned, istouching, isincontact, color,
             standard_twist, contact_pairing
-using Roly: BindingSite, twistfreedom, _ndistincttwists, twist,
+using Roly: BindingSite, twistfreedom, _ndistincttwists, twist, BondTwist, bondtwists, distinctbondtwists,
             standard_twist, isaligned
 using Graphs, NautyGraphs
 
@@ -169,11 +169,18 @@ using Graphs, NautyGraphs
         b1 = site(ntwists, ntwists, true)
         for t in 0:(ntwists - 1)
             b2 = BindingSite(standard_twist(b1, t, ntwists), 1, 1:ntwists, 1e-8, 1e-8, ntwists, ntwists, true)
-            @test twist(b1, b2) == t
-            @test twist(b2, b1) == t
+            @test twist(b1, b2) == BondTwist(t, ntwists)
+            @test twist(b2, b1) == BondTwist(t, ntwists)
             @test isaligned(b1, b2)
         end
     end
+
+    # a bond's twists are its n turns, of which those a symmetry of the attached particle carries
+    # onto each other give the same structure
+    @test collect(bondtwists(site(4, 4, true), site(4, 4, true))) == BondTwist.(0:3, 4)
+    @test collect(distinctbondtwists(site(4, 4, true), site(4, 2, true))) == BondTwist.(0:1, 4)
+    @test collect(distinctbondtwists(site(4, 2, true), site(4, 4, true))) == [BondTwist(0, 4)]
+    @test standard_twist(site(4, 4, true), BondTwist(1, 4)) == standard_twist(site(4, 4, true), 1, 4)
 
     # An orientation in no twist at all is not a bond.
     b = site(2, 2, true)
