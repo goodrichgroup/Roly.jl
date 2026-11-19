@@ -9,7 +9,7 @@
   <img src="docs/src/assets/banner.svg" alt="Roly.jl banner" width="100%">
 </p>
 
-Roly.jl (_<ins>R</ins>everse-Search P<ins>oly</ins>form Enumerator_) is a Julia package for the enumeration of arbitrary polyforms via [reverse search](https://en.wikipedia.org/wiki/Reverse-search_algorithm). It makes it possible to exhaustively enumerate polyforms (aggregates formed by gluing together arbitrary shaped building blocks) in 2D or 3D and provides an interface to define your own building block geometries and binding rules. Roly.jl is under active development, and breaking changes can occur at any time. Because of its dependencies, Roly.jl currently does not work on Windows.
+Roly.jl (_<ins>R</ins>everse Search P<ins>oly</ins>form Enumerator_) is a Julia package for the enumeration of polyforms via [reverse search](https://en.wikipedia.org/wiki/Reverse-search_algorithm). It can generate, count, and iterate over any type of polyform (an aggregate formed by gluing together arbitrary shaped building blocks) in 2D or 3D and provides an interface to define your own building block geometries and binding rules. Roly.jl is under active development, and breaking changes can occur at any time. Because of its dependencies, Roly.jl currently does not work on Windows.
 
 ## Installation
 To install Roly.jl directly from your Julia REPL, first press `]` to enter Pkg mode, and then run
